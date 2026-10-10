@@ -6,28 +6,28 @@ import SwiftUI
     private(set) var statusItem: NSStatusItem?
     private(set) var window: NSWindow?
     private(set) var menu: NSMenu?
-    var presentMenu: (NSMenu,NSEvent,NSView) -> Void = { NSMenu.popUpContextMenu($0,with:$1,for:$2) }
+    var presentMenu: (NSMenu, NSEvent, NSView) -> Void = { NSMenu.popUpContextMenu($0, with: $1, for: $2) }
     private weak var previousDelegate: NSWindowDelegate?
     private weak var model: AppModel?
 
     func install() {
         guard statusItem == nil else { return }
-        let item = NSStatusBar.system.statusItem(withLength:NSStatusItem.squareLength)
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         item.button?.image = Self.icon()
         item.button?.toolTip = "Mochi"
         item.button?.setAccessibilityLabel("Mochi")
         let menu = NSMenu()
-        let show = menu.addItem(withTitle:"Open Mochi",action:#selector(showWindow),keyEquivalent:"")
+        let show = menu.addItem(withTitle: "Open Mochi", action: #selector(showWindow), keyEquivalent: "")
         show.target = self
         menu.addItem(.separator())
-        let quit = menu.addItem(withTitle:"Quit Mochi Completely",action:#selector(quitApp),keyEquivalent:"")
+        let quit = menu.addItem(withTitle: "Quit Mochi Completely", action: #selector(quitApp), keyEquivalent: "")
         quit.target = self
         self.menu = menu
         item.button?.target = self
         item.button?.action = #selector(clicked)
-        item.button?.sendAction(on:[.leftMouseUp,.rightMouseUp])
+        item.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
         statusItem = item
-        presentMenu = { [weak item] menu,_,_ in
+        presentMenu = { [weak item] menu, _, _ in
             guard let item else { return }
             item.menu = menu
             defer { item.menu = nil }
@@ -43,8 +43,10 @@ import SwiftUI
     func handleClick(_ event: NSEvent) {
         if event.type == .rightMouseUp || (event.type == .leftMouseUp && event.modifierFlags.contains(.control)) {
             guard let menu, let button = statusItem?.button else { return }
-            presentMenu(menu,event,button)
-        } else if event.type == .leftMouseUp { showWindow() }
+            presentMenu(menu, event, button)
+        } else if event.type == .leftMouseUp {
+            showWindow()
+        }
     }
 
     func attach(_ window: NSWindow, model: AppModel) {
@@ -77,29 +79,33 @@ import SwiftUI
         NSApp.unhide(nil)
         if window.isMiniaturized { window.deminiaturize(nil) }
         window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps:true)
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     @objc func quitApp() { NSApp.terminate(nil) }
 
     // Preserve SwiftUI's other window delegate callbacks.
     override func responds(to selector: Selector!) -> Bool {
-        super.responds(to:selector) || (previousDelegate?.responds(to:selector) ?? false)
+        super.responds(to: selector) || (previousDelegate?.responds(to: selector) ?? false)
     }
     override func forwardingTarget(for selector: Selector!) -> Any? {
-        if previousDelegate?.responds(to:selector) == true { return previousDelegate }
-        return super.forwardingTarget(for:selector)
+        if previousDelegate?.responds(to: selector) == true { return previousDelegate }
+        return super.forwardingTarget(for: selector)
     }
 
     /// Mochi contour only, drawn as a template so macOS supplies the menu-bar color.
     static func icon() -> NSImage {
-        let image = NSImage(size:NSSize(width:20,height:18),flipped:true) { _ in
+        let image = NSImage(size: NSSize(width: 20, height: 18), flipped: true) { _ in
             let body = NSBezierPath()
-            body.move(to:NSPoint(x:1,y:12))
-            body.curve(to:NSPoint(x:10,y:2),controlPoint1:NSPoint(x:1,y:7),controlPoint2:NSPoint(x:5.5,y:2))
-            body.curve(to:NSPoint(x:19,y:12),controlPoint1:NSPoint(x:14.5,y:2),controlPoint2:NSPoint(x:19,y:7))
-            body.curve(to:NSPoint(x:10,y:16),controlPoint1:NSPoint(x:19,y:15),controlPoint2:NSPoint(x:16,y:16))
-            body.curve(to:NSPoint(x:1,y:12),controlPoint1:NSPoint(x:4,y:16),controlPoint2:NSPoint(x:1,y:15))
+            body.move(to: NSPoint(x: 1, y: 12))
+            body.curve(
+                to: NSPoint(x: 10, y: 2), controlPoint1: NSPoint(x: 1, y: 7), controlPoint2: NSPoint(x: 5.5, y: 2))
+            body.curve(
+                to: NSPoint(x: 19, y: 12), controlPoint1: NSPoint(x: 14.5, y: 2), controlPoint2: NSPoint(x: 19, y: 7))
+            body.curve(
+                to: NSPoint(x: 10, y: 16), controlPoint1: NSPoint(x: 19, y: 15), controlPoint2: NSPoint(x: 16, y: 16))
+            body.curve(
+                to: NSPoint(x: 1, y: 12), controlPoint1: NSPoint(x: 4, y: 16), controlPoint2: NSPoint(x: 1, y: 15))
             body.close()
             body.lineWidth = 1.5
             body.lineJoinStyle = .round

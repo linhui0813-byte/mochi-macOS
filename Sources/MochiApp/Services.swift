@@ -1,6 +1,6 @@
 import Foundation
-import MochiKernel
 import MochiCore
+import MochiKernel
 
 /// True inside an XCTest process. Live services must never run there: a test that forgets a fake
 /// would otherwise reach the network or the microphone silently.
@@ -26,11 +26,15 @@ struct SpeechServices {
         TestEnvironment.assertNotUnderTest("SpeechServices.live")
         return SpeechServices(
             conversationReply: { service, request, callbacks in
-                _ = try await service.reply(request,onResponse:callbacks.response,onTranscription:callbacks.transcription,onTool:callbacks.tool)
+                _ = try await service.reply(
+                    request, onResponse: callbacks.response, onTranscription: callbacks.transcription,
+                    onTool: callbacks.tool)
             },
             textReply: { service, request in try await service.reply(request).text },
-            referenceAudio: { text, service, root, force in try await service.referenceAudio(text:text,root:root,force:force) },
-            transcribe: { url, model in try await RealtimeService(model:model).transcribe(AudioFile.pcm(url)) })
+            referenceAudio: { text, service, root, force in
+                try await service.referenceAudio(text: text, root: root, force: force)
+            },
+            transcribe: { url, model in try await RealtimeService(model: model).transcribe(AudioFile.pcm(url)) })
     }
 }
 
@@ -45,16 +49,17 @@ struct MediaServices {
 
     @MainActor static func live(_ audio: AudioController) -> MediaServices {
         TestEnvironment.assertNotUnderTest("MediaServices.live")
-        return MediaServices(permission: { await audio.permission() },
-                             record: { try audio.record(to:$0) },
-                             stopRecording: { audio.stopRecording() },
-                             meter: { audio.meter },
-                             recordingActive: { audio.isRecording })
+        return MediaServices(
+            permission: { await audio.permission() },
+            record: { try audio.record(to: $0) },
+            stopRecording: { audio.stopRecording() },
+            meter: { audio.meter },
+            recordingActive: { audio.isRecording })
     }
 }
 
 struct ReplyCallbacks {
     let response: @MainActor (RealtimeAccumulator) throws -> Void
     let transcription: @MainActor (RealtimeAccumulator) -> Void
-    let tool: @MainActor (String,[String:Any],String) throws -> [String:Any]
+    let tool: @MainActor (String, [String: Any], String) throws -> [String: Any]
 }

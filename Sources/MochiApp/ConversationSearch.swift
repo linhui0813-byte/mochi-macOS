@@ -1,25 +1,38 @@
-import SwiftUI
 import AppKit
+import SwiftUI
 
 struct ConversationSearchControl: View {
     @Bindable var app: AppModel
     var body: some View {
         if app.conversationSearchOpen {
-            HStack(spacing:6) {
-                ConversationSearchField(app:app).frame(width:180)
-                if !app.conversationQuery.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty {
-                    Text(app.conversationMatchIDs.isEmpty ? "No matches" : "\(min(app.conversationMatchIndex+1,app.conversationMatchIDs.count))/\(app.conversationMatchIDs.count)")
-                        .font(.caption.monospacedDigit()).foregroundStyle(.secondary).fixedSize()
-                    Button { app.moveConversationMatch(-1) } label: { Image(systemName:"chevron.up") }
-                        .help("Previous Match (⇧⌘G)").accessibilityLabel("Previous Match").disabled(app.conversationMatchIDs.isEmpty)
-                    Button { app.moveConversationMatch(1) } label: { Image(systemName:"chevron.down") }
-                        .help("Next Match (⌘G)").accessibilityLabel("Next Match").disabled(app.conversationMatchIDs.isEmpty)
+            HStack(spacing: 6) {
+                ConversationSearchField(app: app).frame(width: 180)
+                if !app.conversationQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text(
+                        app.conversationMatchIDs.isEmpty
+                            ? "No matches"
+                            : "\(min(app.conversationMatchIndex+1,app.conversationMatchIDs.count))/\(app.conversationMatchIDs.count)"
+                    )
+                    .font(.caption.monospacedDigit()).foregroundStyle(.secondary).fixedSize()
+                    Button {
+                        app.moveConversationMatch(-1)
+                    } label: {
+                        Image(systemName: "chevron.up")
+                    }
+                    .help("Previous Match (⇧⌘G)").accessibilityLabel("Previous Match").disabled(
+                        app.conversationMatchIDs.isEmpty)
+                    Button {
+                        app.moveConversationMatch(1)
+                    } label: {
+                        Image(systemName: "chevron.down")
+                    }
+                    .help("Next Match (⌘G)").accessibilityLabel("Next Match").disabled(app.conversationMatchIDs.isEmpty)
                 }
-                Button(action:app.closeConversationSearch) { Image(systemName:"xmark") }
+                Button(action: app.closeConversationSearch) { Image(systemName: "xmark") }
                     .help("Close Search (Escape)").accessibilityLabel("Close conversation search")
             }
         } else {
-            Button(action:app.openConversationSearch) { Label("Find in Conversation",systemImage:"magnifyingglass") }
+            Button(action: app.openConversationSearch) { Label("Find in Conversation", systemImage: "magnifyingglass") }
                 .labelStyle(.iconOnly).help("Find in Conversation (⌘F)")
         }
     }
@@ -27,7 +40,7 @@ struct ConversationSearchControl: View {
 
 private struct ConversationSearchField: NSViewRepresentable {
     @Bindable var app: AppModel
-    func makeCoordinator() -> Coordinator { Coordinator(app:app) }
+    func makeCoordinator() -> Coordinator { Coordinator(app: app) }
     func makeNSView(context: Context) -> FocusableSearchField {
         let field = FocusableSearchField()
         field.placeholderString = "Search this conversation"
@@ -49,10 +62,14 @@ private struct ConversationSearchField: NSViewRepresentable {
     }
     final class FocusableSearchField: NSSearchField {
         var wantsFocus = false
-        override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); focusIfNeeded() }
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            focusIfNeeded()
+        }
         func focusIfNeeded() {
             guard wantsFocus, let window else { return }
-            wantsFocus = false; window.makeFirstResponder(self)
+            wantsFocus = false
+            window.makeFirstResponder(self)
         }
     }
     @MainActor final class Coordinator: NSObject, NSSearchFieldDelegate {
@@ -67,7 +84,10 @@ private struct ConversationSearchField: NSViewRepresentable {
             app.conversationQuery = field.stringValue
         }
         func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
-            if commandSelector == #selector(NSResponder.cancelOperation(_:)) { app.closeConversationSearch(); return true }
+            if commandSelector == #selector(NSResponder.cancelOperation(_:)) {
+                app.closeConversationSearch()
+                return true
+            }
             if commandSelector == #selector(NSResponder.insertNewline(_:)) {
                 app.moveConversationMatch(NSApp.currentEvent?.modifierFlags.contains(.shift) == true ? -1 : 1)
                 return true

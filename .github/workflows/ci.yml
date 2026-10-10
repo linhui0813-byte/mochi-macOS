@@ -30,6 +30,8 @@ jobs:
       - run: swift test --parallel
       - name: Release tooling
         run: python3 -m unittest discover -s scripts/tests
+      - name: Formatting
+        run: swift format lint --strict --recursive --parallel Sources Tests Package.swift
 
   release-configuration:
     name: Tests (release configuration)

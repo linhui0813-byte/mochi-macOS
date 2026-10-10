@@ -1,5 +1,7 @@
 import XCTest
+
 @testable import MochiCore
+
 final class PitchTests: XCTestCase {
     func testSilenceHasNoPitch() {
         let points = PitchAnalyzer.analyze(samples: Array(repeating: 0, count: 24000), sampleRate: 24000)
