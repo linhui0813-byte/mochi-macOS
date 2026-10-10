@@ -1,5 +1,7 @@
 import Foundation
 import MochiCore
+import MochiKernel
+import MochiAutomation
 
 extension AppModel {
     var controlSocketPath: String { LocalControl.path(forLibraryRoot:store.root) }
@@ -12,45 +14,18 @@ extension AppModel {
     var mcpConfiguration: String { (try? MochiTools.encode(["mcpServers":["mochi":["command":mcpExecutablePath,"env":["MOCHI_CONTROL_SOCKET":controlSocketPath]]]])) ?? "" }
     func configureAutomation() {
         InstanceEvidence.record("automation-configured")
-        guard externalControlEnabled && (!demo || allowDemoAutomation) else {
-            controlHealthTask?.cancel(); controlHealthTask = nil
-            controlServer?.stop(); controlServer = nil; toolResultCache = [:]; toolResultOrder = []; automationStatus = "Disabled"; return
-        }
-        if controlHealthTask == nil {
-            controlHealthTask = Task { [weak self] in
-                while !Task.isCancelled {
-                    do { try await Task.sleep(nanoseconds:30_000_000_000) } catch { return }
-                    guard let self, self.externalControlEnabled else { return }
-                    self.configureAutomation()
-                }
-            }
-        }
-        if let server = controlServer {
-            if server.endpointAvailable { return }
-            server.stop(); controlServer = nil
-        }
-        let server = LocalControlServer()
-        do {
-            try server.start(path:controlSocketPath) { [weak self] data in
-                guard let self else { return Data() }
-                return self.handleControlRequest(data)
-            }
-            controlServer = server; automationStatus = "Available locally"
-        } catch { automationStatus = (error as? AppFailure)?.message ?? "Could not start external control." }
-    }
-    func cacheVoiceTool(_ key: String, result: [String:Any]) {
-        if voiceToolResults[key] == nil { voiceToolOrder.append(key) }
-        voiceToolResults[key] = result
-        if voiceToolOrder.count > 128 { voiceToolResults.removeValue(forKey:voiceToolOrder.removeFirst()) }
+        automation.configure(enabled:externalControlEnabled && (!demo || allowDemoAutomation),path:controlSocketPath,
+                             recheck: { [weak self] in self?.configureAutomation() },
+                             handler: { [weak self] data in self?.handleControlRequest(data) ?? Data() })
     }
     func executeVoiceTool(_ name: String, arguments: [String:Any], operationID: UUID) throws -> [String:Any] {
         let tool = try MochiTools.validate(name:name,arguments:arguments,origin:.voice)
         if tool.readOnly { return try executeTool(name,arguments:arguments,origin:.voice) }
         let key = operationID.uuidString + ":" + (try MochiTools.signature(name:name,arguments:arguments))
-        if var result = voiceToolResults[key] { result["status"] = "previously_completed"; result["revision"] = controlRevision; return result }
-        voiceToolKey = key; defer { voiceToolKey = nil }
+        if var result = automation.voiceResults[key] { result["status"] = "previously_completed"; result["revision"] = controlRevision; return result }
+        automation.voiceToolKey = key; defer { automation.voiceToolKey = nil }
         let result = try executeTool(name,arguments:arguments,origin:.voice)
-        if result["status"] as? String != "scheduled_after_reply" { cacheVoiceTool(key,result:result) }
+        if result["status"] as? String != "scheduled_after_reply" { automation.voiceResults.insert(result,for:key) }
         return result
     }
     func handleControlRequest(_ data: Data) -> Data {
@@ -62,18 +37,20 @@ extension AppModel {
                   let name = object["name"] as? String, let arguments = object["arguments"] as? [String:Any],
                   let requestID = object["request_id"] as? String, !requestID.isEmpty, requestID.count <= 300 else { throw AppFailure("Invalid control request.") }
             let signature = try MochiTools.encode(["name":name,"arguments":arguments])
-            if let cached = toolResultCache[requestID] {
-                guard cached.0 == signature else { throw AppFailure("A request ID was reused with different arguments.") }
-                return cached.1
+            if let cached = automation.externalResults[requestID] {
+                guard cached.signature == signature else { throw AppFailure("A request ID was reused with different arguments.") }
+                return cached.response
             }
             do { result = try executeTool(name,arguments:arguments,origin:.external) }
-            catch { result = MochiTools.error((error as? AppFailure)?.message ?? "The app action failed.") }
+            catch {
+                MochiLog.failure(MochiLog.automation,"External tool \(name)",error,level:.info)
+                result = MochiTools.error(AppFailure.message(for:error,fallback:"The app action failed."))
+            }
             var response = try JSONSerialization.data(withJSONObject:result)
             if response.count > 120000 { response = try JSONSerialization.data(withJSONObject:MochiTools.error("Result is too large. Request fewer items.")) }
-            toolResultCache[requestID] = (signature,response); toolResultOrder.append(requestID)
-            if toolResultOrder.count > 128 { toolResultCache.removeValue(forKey:toolResultOrder.removeFirst()) }
+            automation.externalResults.insert((signature,response),for:requestID)
             return response
-        } catch { result = MochiTools.error((error as? AppFailure)?.message ?? "Invalid control request.") }
+        } catch { result = MochiTools.error(AppFailure.message(for:error,fallback:"Invalid control request.")) }
         return (try? JSONSerialization.data(withJSONObject:result)) ?? Data()
     }
 
@@ -91,59 +68,43 @@ extension AppModel {
     @discardableResult func setConversationInstructions(_ id: UUID, instructions: String, preferences: ConversationPreferences) -> Bool {
         setConversationInstructions(id,instructions:instructions,preferences:preferences,characterName:library.conversations.first(where:{ $0.id == id })?.characterName)
     }
+    /// The settings sheet's save. Oversized legacy instructions are kept unless the user edits them.
     @discardableResult func setConversationInstructions(_ id: UUID, instructions: String, preferences: ConversationPreferences, characterName: String?) -> Bool {
         do {
-            let characterName = characterName?.trimmingCharacters(in:.whitespacesAndNewlines)
-            try preferences.validate(); try ConversationTemplate.validateName(characterName)
-            guard !busy, !practice, !managerOpen, renameID == nil, permanentDeleteIDs.isEmpty, let index = library.conversations.firstIndex(where:{ $0.id == id && !$0.archived && !$0.isDeleted }) else { throw AppFailure("This conversation cannot be edited right now.") }
-            var candidate = library
-            if instructions != candidate.conversations[index].instructions {
-                try MochiTools.validateInstructions(instructions)
-                candidate.conversations[index].instructions = instructions.trimmingCharacters(in:.whitespacesAndNewlines)
-            }
-            candidate.conversations[index].preferences = preferences
-            candidate.conversations[index].characterName = characterName
-            return commitHistory(candidate)
-        } catch { self.error = (error as? AppFailure)?.message ?? "Could not save conversation instructions."; return false }
+            guard !busy, !practice, !managerOpen, renameID == nil, permanentDeleteIDs.isEmpty,
+                  let current = library.conversations.first(where:{ $0.id == id && !$0.archived && !$0.isDeleted }) else { throw AppFailure("This conversation cannot be edited right now.") }
+            let patch = ConversationSettingsPatch(instructions:instructions == current.instructions ? nil : instructions,
+                                                  characterName:characterName.map { .set($0) } ?? .clear,
+                                                  speed:preferences.speed.map { .set($0) } ?? .clear,
+                                                  coaching:preferences.coaching)
+            try updateConversationSettings(id,patch); error = nil
+            return true
+        } catch { self.error = AppFailure.message(for:error,fallback:"Could not save conversation instructions."); return false }
+    }
+    /// The one path that changes a conversation's settings. Callers decide whether a change is allowed now.
+    func updateConversationSettings(_ id: UUID, _ patch: ConversationSettingsPatch) throws {
+        guard let index = library.conversations.firstIndex(where:{ $0.id == id && !$0.archived && !$0.isDeleted }) else { throw AppFailure("An active conversation is required.") }
+        var candidate = library
+        try patch.apply(to:&candidate.conversations[index])
+        do { try commitLibraryCandidate(candidate) }
+        catch {
+            throw AppFailure(persistenceMessage(error,action:"Save conversation settings",fallback:"The settings could not be saved. Nothing was changed.",
+                                                diskFull:"The settings could not be saved because the disk is full. Nothing was changed."),underlying:error)
+        }
     }
     func executeTool(_ name: String, arguments: [String:Any], origin: ToolOrigin) throws -> [String:Any] {
         let tool = try MochiTools.validate(name:name,arguments:arguments,origin:origin)
         if origin == .external && !externalControlEnabled { throw AppFailure("External control is disabled in Mochi Settings.") }
-        if name.contains("conversation_template") { return try executeTemplateTool(name,arguments:arguments) }
-        if origin == .voice, turn.activity == .generating, deferredToolAction != nil, ["prepare_expression","start_practice","play_audio","seek_audio"].contains(name) {
+        if origin == .voice, turn.activity == .generating, deferredToolAction != nil, tool.deferredDuringVoiceReply {
             throw AppFailure("A view or playback action is already scheduled for this reply.")
         }
         let requestedID = (arguments["conversation_id"] as? String).flatMap(UUID.init(uuidString:))
         let limit = (arguments["limit"] as? NSNumber)?.intValue ?? 30
-        if name == "get_session" {
-            var result: [String:Any] = ["ok":true,"revision":controlRevision,"activity":turn.activity.rawValue,"mode":practice ? "practice" : "conversation","modal":automationModal,"paused":audio.paused,"playback_seconds":audio.position,"playback_duration":audio.duration]
-            if let chat = conversation {
-                result["conversation_id"] = chat.id.uuidString; result["title"] = chat.title
-                result["writable"] = !chat.archived && !chat.isDeleted
-                if !chat.archived && !chat.isDeleted {
-                    let preview = MochiTools.boundedText(chat.instructions,characters:origin == .voice ? 1000 : 8000,bytes:origin == .voice ? 6000 : 12000)
-                    result["instructions"] = preview; result["instructions_truncated"] = preview != chat.instructions; result["coaching"] = chat.preferences.coaching.rawValue
-                    result["character_name"] = chat.characterName.map { MochiTools.boundedText($0,characters:80,bytes:1024) } as Any? ?? NSNull()
-                    result["character_name_needs_review"] = chat.characterNameNeedsReview
-                    result["character_name_truncated"] = chat.characterName.map { MochiTools.boundedText($0,characters:80,bytes:1024) != $0 } ?? false
-                    result["display_character_name"] = chat.displayCharacterName
-                    if let source = chat.sourceTemplateID { result["source_template_id"] = source.uuidString; result["source_template_revision"] = chat.sourceTemplateRevision }
-                    result["speed"] = chat.preferences.speed ?? conversationVoiceOptions.speed
-                    result["audio_message_ids"] = chat.messages.filter { $0.audio != nil }.suffix(origin == .voice ? 20 : 100).map { $0.id.uuidString }
-                    result["expression_ids"] = library.expressions.filter { $0.conversationID == chat.id }.sorted { $0.date > $1.date }.prefix(origin == .voice ? 20 : 100).map { $0.id.uuidString }
-                }
-            }
-            if let expression { result["selected_expression_id"] = expression.id.uuidString }
-            return result
-        }
-        if name == "list_conversations" {
-            return ["ok":true,"revision":controlRevision,"conversations":library.history(in:.active).prefix(limit).map { ["id":$0.id.uuidString,"title":$0.title] }]
-        }
-        if name != "create_conversation" {
+        if tool.scope == .conversation {
             guard let requestedID, let chat = library.conversations.first(where: { $0.id == requestedID }), !chat.archived, !chat.isDeleted else { throw AppFailure("An active conversation is required.") }
-            if name != "open_conversation", requestedID != selectedID { throw AppFailure("That conversation is not currently open. Read get_session again.") }
+            if tool.name != .openConversation, requestedID != selectedID { throw AppFailure("That conversation is not currently open. Read get_session again.") }
         }
-        if !tool.readOnly {
+        if !tool.readOnly && tool.scope != .catalog {
             if origin == .external {
                 guard arguments["expected_revision"] as? String == controlRevision else { throw AppFailure("Mochi's state changed. Read get_session and retry with the new revision.") }
                 guard !automationModal else { throw AppFailure("Finish or close the current conversation editing or practice panel, then retry.") }
@@ -152,30 +113,62 @@ extension AppModel {
                 guard !automationModal, turn.mode == .conversation, !busy || turn.activity == .generating || turn.activity == .playing else { throw AppFailure("This action is unavailable during the current activity.") }
             }
         }
+        func conversationID() throws -> UUID {
+            guard let requestedID else { throw AppFailure("An active conversation is required.") }
+            return requestedID
+        }
         func success(_ fields: [String:Any] = [:]) -> [String:Any] { var result = fields; result["ok"] = true; result["revision"] = controlRevision; return result }
         func persist(_ candidate: Library) throws { guard commitHistory(candidate) else { throw AppFailure("The app action could not be saved; nothing was changed.") } }
         let scheduledConversationID = selectedID
         func schedule(_ action: @escaping () throws -> Void) throws -> [String:Any] {
             if origin == .voice && turn.activity == .generating {
                 guard deferredToolAction == nil else { throw AppFailure("A view or playback action is already scheduled for this reply.") }
-                let key = voiceToolKey
+                let key = automation.voiceToolKey
                 deferredToolAction = { [weak self] in
                     do {
                         guard let self else { return }
                         guard self.selectedID == scheduledConversationID, self.writableConversation, !self.automationModal, !self.busy else { throw AppFailure("The conversation or activity changed; the scheduled action was cancelled.") }
                         try action()
-                        if let key { self.cacheVoiceTool(key,result:["ok":true,"status":"completed","revision":self.controlRevision]) }
-                    } catch { self?.error = (error as? AppFailure)?.message ?? "The scheduled action could not complete." }
+                        if let key { self.automation.voiceResults.insert(["ok":true,"status":"completed","revision":self.controlRevision],for:key) }
+                    } catch {
+                        MochiLog.failure(MochiLog.automation,"Scheduled voice action",error,level:.info)
+                        self?.error = AppFailure.message(for:error,fallback:"The scheduled action could not complete.")
+                    }
                 }
                 return success(["status":"scheduled_after_reply"])
             }
-            if origin == .external && ["prepare_expression","start_practice"].contains(name) { revealWorkspace?() }
+            if origin == .external && [.prepareExpression,.startPractice].contains(tool.name) { revealWorkspace?() }
             // Existing playback is allowed for an immediate external seek/replay.
             guard selectedID == scheduledConversationID, writableConversation, !automationModal else { throw AppFailure("The conversation changed; the action was cancelled.") }
             try action(); return success(["status":"completed"])
         }
-        switch name {
-        case "get_messages":
+        switch tool.name {
+        case .getSession:
+            var result: [String:Any] = ["ok":true,"revision":controlRevision,"activity":turn.activity.rawValue,"mode":practice ? "practice" : "conversation","modal":automationModal,"paused":audio.paused,"playback_seconds":audio.position,"playback_duration":audio.duration]
+            if let chat = conversation {
+                result["conversation_id"] = chat.id.uuidString; result["title"] = chat.title
+                result["writable"] = !chat.archived && !chat.isDeleted
+                var untrusted = ["title"]
+                if !chat.archived && !chat.isDeleted {
+                    let preview = MochiTools.boundedText(chat.instructions,characters:origin == .voice ? 1000 : 8000,bytes:origin == .voice ? 6000 : 12000)
+                    result["instructions"] = preview; result["instructions_truncated"] = preview != chat.instructions; result["coaching"] = chat.preferences.coaching.rawValue
+                    result["character_name"] = chat.characterName.map { MochiTools.boundedText($0,characters:80,bytes:1024) } as Any? ?? NSNull()
+                    result["character_name_needs_review"] = chat.characterNameNeedsReview
+                    result["character_name_truncated"] = chat.characterName.map { MochiTools.boundedText($0,characters:80,bytes:1024) != $0 } ?? false
+                    result["display_character_name"] = chat.displayCharacterName
+                    if let source = chat.sourceTemplateID { result["source_template_id"] = source.uuidString; result["source_template_revision"] = chat.sourceTemplateRevision }
+                    result["speed"] = chat.preferences.speed ?? settings.conversationVoiceOptions.speed
+                    result["audio_message_ids"] = chat.messages.filter { $0.audio != nil }.suffix(origin == .voice ? 20 : 100).map { $0.id.uuidString }
+                    result["expression_ids"] = library.expressions.filter { $0.conversationID == chat.id }.sorted { $0.date > $1.date }.prefix(origin == .voice ? 20 : 100).map { $0.id.uuidString }
+                    untrusted += ["instructions","character_name","display_character_name"]
+                }
+                result["untrusted_fields"] = untrusted
+            }
+            if let expression { result["selected_expression_id"] = expression.id.uuidString }
+            return result
+        case .listConversations:
+            return ["ok":true,"revision":controlRevision,"conversations":library.history(in:.active).prefix(limit).map { ["id":$0.id.uuidString,"title":$0.title] },"untrusted_fields":["conversations.title"]]
+        case .getMessages:
             let source = Array(conversation?.messages.suffix(origin == .voice ? min(limit,10) : limit) ?? [])
             var messages: [[String:Any]] = [], size = 0
             for message in source.reversed() {
@@ -185,38 +178,31 @@ extension AppModel {
                 size += try JSONSerialization.data(withJSONObject:item).count
                 if size > (origin == .voice ? 6000 : 110000) { break }; messages.append(item)
             }
-            return success(["messages":Array(messages.reversed()),"has_more":(conversation?.messages.count ?? 0) > messages.count])
-        case "search_expressions":
-            let query = arguments["query"] as! String
-            let found = library.expressions.filter { $0.conversationID == selectedID && (query.isEmpty || $0.english.localizedCaseInsensitiveContains(query) || $0.meaning.localizedCaseInsensitiveContains(query)) }
+            return success(["messages":Array(messages.reversed()),"has_more":(conversation?.messages.count ?? 0) > messages.count,"untrusted_fields":["messages.text"]])
+        case .searchExpressions:
+            let search = try MochiTools.decode(SearchArguments.self,from:arguments)
+            let found = library.expressions.filter { $0.conversationID == selectedID && (search.query.isEmpty || $0.english.localizedCaseInsensitiveContains(search.query) || $0.meaning.localizedCaseInsensitiveContains(search.query)) }
             var expressions: [[String:Any]] = [], size = 0
             for item in found.sorted(by:{ $0.date > $1.date }).prefix(origin == .voice ? min(limit,10) : limit) {
                 let value: [String:Any] = ["id":item.id.uuidString,"english":String(item.english.prefix(1000)),"meaning":String(item.meaning.prefix(1000)),"text_truncated":item.english.count > 1000 || item.meaning.count > 1000,"has_reference":item.reference != nil,"attempt_count":item.attempts.count]
                 size += try JSONSerialization.data(withJSONObject:value).count
                 if size > (origin == .voice ? 6000 : 110000) { break }; expressions.append(value)
             }
-            return success(["expressions":expressions,"has_more":found.count > expressions.count])
-        case "create_conversation":
+            return success(["expressions":expressions,"has_more":found.count > expressions.count,"untrusted_fields":["expressions.english","expressions.meaning"]])
+        case .createConversation:
+            let create = try MochiTools.decode(CreateConversationArguments.self,from:arguments)
+            let patch = ConversationSettingsPatch(try MochiTools.decode(ConversationSettingsArguments.self,from:arguments))
             var chat: Conversation
-            if let text = arguments["template_id"] as? String, let id = UUID(uuidString:text) {
-                var source = try template(id:id)
-                if let expected = arguments["expected_template_revision"] as? String, expected != source.revision { throw AppFailure("Template changed. Read it again before starting.") }
-                if let value = arguments["instructions"] as? String { source.instructions = value.trimmingCharacters(in:.whitespacesAndNewlines) }
-                if let name = arguments["character_name"] as? String { source.characterName = name.trimmingCharacters(in:.whitespacesAndNewlines) }
-                if arguments["clear_character_name"] as? Bool == true { source.characterName = nil }
-                if let speed = arguments["speed"] as? NSNumber { source.preferences.speed = speed.doubleValue }
-                if let style = arguments["coaching"] as? String { source.preferences.coaching = CoachingStyle(rawValue:style)! }
-                chat = try source.conversation(title:arguments["title"] as? String)
-            } else { chat = Conversation() }
-            if let title = arguments["title"] as? String, !title.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty { chat.title = title.trimmingCharacters(in:.whitespacesAndNewlines); chat.customTitle = true }
-            if let instructions = arguments["instructions"] as? String { chat.instructions = instructions.trimmingCharacters(in:.whitespacesAndNewlines) }
-            if let name = arguments["character_name"] as? String { chat.characterName = name.trimmingCharacters(in:.whitespacesAndNewlines) }
-            if arguments["clear_character_name"] as? Bool == true { chat.characterName = nil }
-            if let speed = arguments["speed"] as? NSNumber { chat.preferences.speed = speed.doubleValue }
-            if let style = arguments["coaching"] as? String { chat.preferences.coaching = CoachingStyle(rawValue:style)! }
-            try ConversationTemplate.validateName(chat.characterName); try chat.preferences.validate()
+            if let templateID = create.templateID {
+                // Overrides apply to the template snapshot first, so a replaced invalid field never blocks the start.
+                var source = try template(id:templateID)
+                if let expected = create.expectedTemplateRevision, expected != source.revision { throw AppFailure("Template changed. Read it again before starting.") }
+                try patch.apply(to:&source)
+                chat = try source.conversation(title:create.title)
+            } else { chat = Conversation(); try patch.apply(to:&chat) }
+            if let title = create.title?.trimmingCharacters(in:.whitespacesAndNewlines), !title.isEmpty { chat.title = title; chat.customTitle = true }
             var candidate = library
-            if arguments["template_id"] == nil, let current = conversation, !current.archived, !current.isDeleted, current.isPristine,
+            if create.templateID == nil, let current = conversation, !current.archived, !current.isDeleted, current.isPristine,
                let index = candidate.conversations.firstIndex(where:{ $0.id == current.id }) {
                 var reused = current
                 reused.title = chat.title; reused.customTitle = chat.customTitle; reused.instructions = chat.instructions
@@ -226,22 +212,18 @@ extension AppModel {
             candidate.selectedConversationID = chat.id
             try persist(candidate); select(chat.id); historyScope = .active; revealWorkspace?()
             return success(["conversation_id":chat.id.uuidString])
-        case "open_conversation":
-            select(requestedID!); historyScope = .active; revealWorkspace?(); return success(["conversation_id":requestedID!.uuidString])
-        case "set_conversation_instructions", "set_conversation_preferences":
-            guard let index = library.conversations.firstIndex(where:{ $0.id == requestedID }) else { throw AppFailure("Conversation not found.") }
+        case .openConversation:
+            let id = try conversationID()
+            select(id); historyScope = .active; revealWorkspace?(); return success(["conversation_id":id.uuidString])
+        case .setConversationInstructions, .setConversationPreferences:
+            try updateConversationSettings(try conversationID(),ConversationSettingsPatch(try MochiTools.decode(ConversationSettingsArguments.self,from:arguments)))
+            return success()
+        case .saveExpression, .prepareExpression:
+            let input = try MochiTools.decode(ExpressionArguments.self,from:arguments), chatID = try conversationID()
+            let english = input.english.trimmingCharacters(in:.whitespacesAndNewlines), meaning = input.meaning ?? ""
             var candidate = library
-            if let instructions = arguments["instructions"] as? String { candidate.conversations[index].instructions = instructions.trimmingCharacters(in:.whitespacesAndNewlines) }
-            if let character = arguments["character_name"] as? String { candidate.conversations[index].characterName = character.trimmingCharacters(in:.whitespacesAndNewlines); try ConversationTemplate.validateName(candidate.conversations[index].characterName) }
-            if arguments["clear_character_name"] as? Bool == true { candidate.conversations[index].characterName = nil }
-            if let speed = arguments["speed"] as? NSNumber { candidate.conversations[index].preferences.speed = speed.doubleValue }
-            if let coaching = arguments["coaching"] as? String { candidate.conversations[index].preferences.coaching = CoachingStyle(rawValue:coaching)! }
-            try candidate.conversations[index].preferences.validate(); try persist(candidate); return success()
-        case "save_expression", "prepare_expression":
-            let english = (arguments["english"] as! String).trimmingCharacters(in:.whitespacesAndNewlines), meaning = arguments["meaning"] as? String ?? ""
-            var candidate = library
-            if name == "save_expression" {
-                let item = candidate.expressions.first { $0.conversationID == requestedID && $0.english == english && $0.meaning == meaning } ?? PracticeExpression(conversationID:requestedID!,meaning:meaning,english:english)
+            if tool.name == .saveExpression {
+                let item = candidate.expressions.first { $0.conversationID == chatID && $0.english == english && $0.meaning == meaning } ?? PracticeExpression(conversationID:chatID,meaning:meaning,english:english)
                 if !candidate.expressions.contains(where:{ $0.id == item.id }) { candidate.expressions.insert(item,at:0); try persist(candidate) }
                 return success(["expression_id":item.id.uuidString])
             }
@@ -250,38 +232,41 @@ extension AppModel {
                 return !draft.meaning.isEmpty || !draft.english.isEmpty || draft.recording != nil || draft.transcriptReview != nil || draft.expressionID != nil || draft.clarification != nil
             }
             guard let chat = conversation, !hasDraft(chat) else { throw AppFailure("This conversation already has a Help draft. Finish or discard it before preparing another expression.") }
-            let chatID = chat.id
+            let openID = chat.id
             return try schedule { [weak self] in
-                guard let self, self.selectedID == chatID, self.writableConversation, !self.automationModal,
-                      let ci = self.library.conversations.firstIndex(where:{ $0.id == chatID }), !hasDraft(self.library.conversations[ci]) else { throw AppFailure("The conversation changed; your existing Help draft was kept.") }
+                guard let self, self.selectedID == openID, self.writableConversation, !self.automationModal,
+                      let ci = self.library.conversations.firstIndex(where:{ $0.id == openID }), !hasDraft(self.library.conversations[ci]) else { throw AppFailure("The conversation changed; your existing Help draft was kept.") }
                 var next = self.library
                 next.conversations[ci].helpDraft = HelpDraft(meaning:meaning,english:english)
                 guard self.commitHistory(next) else { throw AppFailure("The expression could not be prepared; your draft was kept.") }
                 self.startHelp()
             }
-        case "start_practice":
-            guard let id = (arguments["expression_id"] as? String).flatMap(UUID.init(uuidString:)), let item = library.expressions.first(where:{ $0.id == id && $0.conversationID == selectedID }) else { throw AppFailure("Expression not found in this conversation.") }
+        case .startPractice:
+            let id = try MochiTools.decode(ExpressionReferenceArguments.self,from:arguments).expressionID
+            guard let item = library.expressions.first(where:{ $0.id == id && $0.conversationID == selectedID }) else { throw AppFailure("Expression not found in this conversation.") }
             return try schedule { [weak self] in
                 guard let self, let current = self.library.expressions.first(where:{ $0.id == item.id && $0.conversationID == self.selectedID }) else { throw AppFailure("The expression is no longer available in this conversation.") }
                 self.openExpression(current)
             }
-        case "pause_audio", "resume_audio":
+        case .pauseAudio, .resumeAudio:
             guard playbackFile != nil else { throw AppFailure("No audio is playing.") }
-            if (name == "pause_audio" && !audio.paused) || (name == "resume_audio" && audio.paused) { audio.togglePause(); objectWillChange.send() }
+            if (tool.name == .pauseAudio && !audio.paused) || (tool.name == .resumeAudio && audio.paused) { audio.togglePause() }
             return success()
-        case "play_audio", "seek_audio":
+        case .playAudio, .seekAudio:
+            let input = try MochiTools.decode(AudioArguments.self,from:arguments)
             var file: String?, mochi = false
-            if let id = (arguments["message_id"] as? String).flatMap(UUID.init(uuidString:)), let message = conversation?.messages.first(where: { $0.id == id }) { file = message.audio; mochi = message.role == "assistant" }
-            if let id = (arguments["expression_id"] as? String).flatMap(UUID.init(uuidString:)) { file = library.expressions.first(where:{ $0.id == id && $0.conversationID == selectedID })?.reference }
+            if let id = input.messageID, let message = conversation?.messages.first(where: { $0.id == id }) { file = message.audio; mochi = message.role == "assistant" }
+            if let id = input.expressionID { file = library.expressions.first(where:{ $0.id == id && $0.conversationID == selectedID })?.reference }
             guard let file, file == URL(fileURLWithPath:file).lastPathComponent, FileManager.default.fileExists(atPath:store.root.appendingPathComponent(file).path) else { throw AppFailure("Audio is unavailable for that item.") }
-            let seconds = (arguments["seconds"] as? NSNumber)?.doubleValue
+            let seconds = input.seconds
             return try schedule { [weak self] in
                 guard let self else { return }
                 if let seconds { self.seekPlayback(file,to:seconds,mochi:mochi) }
                 else { self.play(file,mochi:mochi) }
                 guard self.playbackFile == file else { throw AppFailure("This recording could not be played.") }
             }
-        default: throw AppFailure("Unsupported Mochi action.")
+        case .listConversationTemplates, .getConversationTemplate, .createConversationTemplate, .updateConversationTemplate, .deleteConversationTemplate:
+            return try executeTemplateTool(tool.name,arguments:arguments)
         }
     }
 }

@@ -1,6 +1,7 @@
 import AppKit
 import Darwin
 import MochiCore
+import MochiKernel
 
 /// Never unlink a held lock: another inode could acquire a second owner.
 final class ProcessInstanceLock {
@@ -68,6 +69,13 @@ struct LegacyInstance {
     private var scope: String { String(getuid()) + (fixtureID.map { "." + $0 } ?? "") }
     deinit { if let observer { DistributedNotificationCenter.default().removeObserver(observer) } }
 
+    /// True when this process holds the instance lock and no Mochi build is running beside it.
+    /// Builds before the lock existed can still be running, so every identifier is checked.
+    var ownsLibrary: Bool {
+        guard lock != nil else { return false }
+        let identifiers = [AppIdentity.bundleIdentifier] + AppIdentity.legacyBundleIdentifiers
+        return !identifiers.contains { NSRunningApplication.runningApplications(withBundleIdentifier:$0).contains { $0.processIdentifier != getpid() } }
+    }
     func receiveReopen() {
         if let revealWorkspace { revealWorkspace() } else { pendingReopen = true }
     }

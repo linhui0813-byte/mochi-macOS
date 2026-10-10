@@ -1,5 +1,6 @@
 import XCTest
 @testable import MochiCore
+import MochiKernel
 final class BrandingTests: XCTestCase {
     func testPreviousMochiPreferencesSurviveIdentityChangeWithoutOverwritingNewValues() {
         let name = "mochi-identity-test-\(UUID())"

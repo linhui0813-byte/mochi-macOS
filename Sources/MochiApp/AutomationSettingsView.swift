@@ -2,13 +2,13 @@ import SwiftUI
 import MochiCore
 
 struct AutomationSettingsView: View {
-    @ObservedObject var app: AppModel
+    @Bindable var app: AppModel
     @State private var copied = false
     var body: some View {
         Form {
             Section("External Assistants") {
                 Toggle("Allow external assistants to control Mochi",isOn:$app.externalControlEnabled)
-                LabeledContent("Status",value:app.automationStatus)
+                LabeledContent("Status",value:app.automation.status)
                 Text("A connected assistant can read active conversations, configure a conversation, save expressions, open practice, and control playback. Recording always starts with you. The connection stays on this Mac and is available only to your macOS user.")
                     .font(.callout).foregroundStyle(.secondary)
             }

@@ -1,8 +1,9 @@
 import XCTest
 import MochiCore
 @testable import MochiApp
+import MochiAutomation
 final class AuditRemediationTests: XCTestCase {
-    @MainActor private func app() -> AppModel { AppModel(libraryRoot:URL(fileURLWithPath:"/tmp/mochi-audit-\(UUID())"),preferences:UserDefaults(suiteName:"mochi-audit-\(UUID())")!) }
+    @MainActor private func app() -> AppModel { makeApp(root:URL(fileURLWithPath:"/tmp/mochi-audit-\(UUID())"),preferences:makePreferences()) }
     @MainActor func testDraftProtectedAndCancelledPreparationNeverWrites() throws {
         let app = app(); defer { app.stop(); try? FileManager.default.removeItem(at:app.store.root) }
         let id = try XCTUnwrap(app.selectedID), args: [String:Any] = ["conversation_id":id.uuidString,"english":"New sentence"]
@@ -26,13 +27,13 @@ final class AuditRemediationTests: XCTestCase {
     @MainActor func testProductionControlAndReplayCacheBound() async throws {
         let app = app(); defer { app.externalControlEnabled = false; app.stop(); try? FileManager.default.removeItem(at:app.store.root) }
         app.externalControlEnabled = true
-        XCTAssertNotNil(app.controlServer)
+        XCTAssertNotNil(app.automation.server)
         let request = try JSONSerialization.data(withJSONObject:["name":"get_session","arguments":[:],"request_id":"ipc"])
         let path = app.controlSocketPath
         let result = try await Task.detached { try LocalControl.request(request,path:path) }.value
         XCTAssertEqual((try JSONSerialization.jsonObject(with:result) as! [String:Any])["ok"] as? Bool,true)
         for i in 0..<140 { _ = app.handleControlRequest(try JSONSerialization.data(withJSONObject:["name":"get_session","arguments":[:],"request_id":"r\(i)"])) }
-        XCTAssertEqual(app.toolResultCache.count,128); XCTAssertNil(app.toolResultCache["r0"])
+        XCTAssertEqual(app.automation.externalResults.count,128); XCTAssertNil(app.automation.externalResults["r0"])
         app.externalControlEnabled = false; XCTAssertFalse(FileManager.default.fileExists(atPath:path))
     }
 }
@@ -66,18 +67,18 @@ extension AuditRemediationTests {
         XCTAssertTrue(app.practice); XCTAssertEqual(app.conversation?.helpDraft?.english,"Let me think.")
         app.leavePractice()
         for _ in 0..<140 { _ = try app.executeVoiceTool("set_conversation_preferences",arguments:args,operationID:UUID()) }
-        XCTAssertEqual(app.voiceToolResults.count,128)
+        XCTAssertEqual(app.automation.voiceResults.count,128)
     }
     @MainActor func testFailedAcknowledgmentStillOpensPreparedExpression() async throws {
         let app = app(); defer { app.stop(); try? FileManager.default.removeItem(at:app.store.root) }
         let id = try XCTUnwrap(app.selectedID), player = AuditPlayer(); app.audio.makePlayer = { _ in player }
-        app.conversationReply = { _,callbacks in
+        app.speech.conversationReply = { _,_,callbacks in
             _ = try app.executeTool("prepare_expression",arguments:["conversation_id":id.uuidString,"english":"A sentence."],origin:.voice)
             var reply = RealtimeAccumulator(); reply.text = "Ready."; reply.audio = Data(repeating:0,count:4800)
             try callbacks.response(reply)
         }
         app.draft = "Prepare a sentence"; app.send()
-        for _ in 0..<100 { if app.turn.activity != .generating { break }; await Task.yield() }
+        await waitUntil { app.turn.activity != .generating }
         XCTAssertEqual(app.turn.activity,.playing); XCTAssertFalse(app.practice)
         app.audio.finishPlayback(player,successfully:false)
         XCTAssertTrue(app.practice); XCTAssertEqual(app.conversation?.helpDraft?.english,"A sentence.")
@@ -120,7 +121,7 @@ extension AuditRemediationTests {
             _ = try app.executeVoiceTool(name,arguments:args,operationID:UUID())
             let action = app.deferredToolAction; app.deferredToolAction = nil; _ = app.turn.finish(token)
             app.managerOpen = true; action?()
-            XCTAssertFalse(app.practice); XCTAssertNil(app.playbackFile); XCTAssertNotNil(app.error); XCTAssertTrue(app.voiceToolResults.isEmpty)
+            XCTAssertFalse(app.practice); XCTAssertNil(app.playbackFile); XCTAssertNotNil(app.error); XCTAssertTrue(app.automation.voiceResults.isEmpty)
         }
     }
 }
@@ -134,9 +135,9 @@ extension AuditRemediationTests {
         let session = try app.executeTool("get_session",arguments:[:],origin:.voice)
         XCTAssertEqual((session["instructions"] as? String)?.count,1000); XCTAssertEqual(session["instructions_truncated"] as? Bool,true)
         var captured: ConversationRequest?
-        app.conversationReply = { request,callbacks in captured = request; var reply = RealtimeAccumulator(); reply.text = "Hello."; try callbacks.response(reply) }
+        app.speech.conversationReply = { _,request,callbacks in captured = request; var reply = RealtimeAccumulator(); reply.text = "Hello."; try callbacks.response(reply) }
         app.draft = "Hello"; app.send()
-        for _ in 0..<100 { if captured != nil { break }; await Task.yield() }
+        await waitUntil { captured != nil }
         XCTAssertEqual(captured?.instructions.count,8000)
         XCTAssertEqual(app.conversation?.instructions,original)
     }
@@ -145,15 +146,15 @@ extension AuditRemediationTests {
     @MainActor func testLostSocketRebindsWithoutDroppingReplayCache() async throws {
         let app = app(); defer { app.externalControlEnabled = false; app.stop(); try? FileManager.default.removeItem(at:app.store.root) }
         app.externalControlEnabled = true
-        let old = try XCTUnwrap(app.controlServer), path = app.controlSocketPath
+        let old = try XCTUnwrap(app.automation.server), path = app.controlSocketPath
         let request = try JSONSerialization.data(withJSONObject:["name":"get_session","arguments":[:],"request_id":"retained"])
         _ = app.handleControlRequest(request)
         try FileManager.default.removeItem(atPath:path)
         XCTAssertFalse(old.endpointAvailable)
         app.configureAutomation()
-        XCTAssertTrue(app.controlServer?.endpointAvailable == true); XCTAssertFalse(app.controlServer === old); XCTAssertNotNil(app.toolResultCache["retained"])
+        XCTAssertTrue(app.automation.server?.endpointAvailable == true); XCTAssertFalse(app.automation.server === old); XCTAssertNotNil(app.automation.externalResults["retained"])
         let reply = try await Task.detached { try LocalControl.request(request,path:path) }.value
         XCTAssertEqual((try JSONSerialization.jsonObject(with:reply) as? [String:Any])?["ok"] as? Bool,true)
-        app.externalControlEnabled = false; XCTAssertNil(app.controlHealthTask)
+        app.externalControlEnabled = false; XCTAssertNil(app.automation.healthTask)
     }
 }

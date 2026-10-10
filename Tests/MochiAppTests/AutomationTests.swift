@@ -1,6 +1,8 @@
 import XCTest
 import MochiCore
 @testable import MochiApp
+import MochiKernel
+import MochiAutomation
 private final class AutomationPlayer: PlaybackPlayer {
     var duration: TimeInterval = 5
     var currentTime: TimeInterval = 0
@@ -13,19 +15,19 @@ private final class AutomationPlayer: PlaybackPlayer {
 final class AutomationTests: XCTestCase {
     @MainActor func testConversationSettingsPersistAndRejectArchivedChanges() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString); defer { try? FileManager.default.removeItem(at:root) }
-        let app = AppModel(libraryRoot:root,preferences:UserDefaults(suiteName:"automation-tests-" + root.lastPathComponent)!), id = try XCTUnwrap(app.selectedID)
+        let app = makeApp(root:root,preferences:makePreferences(named:"automation-tests-" + root.lastPathComponent)), id = try XCTUnwrap(app.selectedID)
         var preferences = ConversationPreferences(); preferences.speed = 0.7
         XCTAssertTrue(app.setConversationInstructions(id,instructions:"Interview me",preferences:preferences))
-        XCTAssertEqual(AppModel(libraryRoot:root,preferences:UserDefaults(suiteName:"automation-tests-" + root.lastPathComponent)!).conversation?.instructions,"Interview me")
+        XCTAssertEqual(makeApp(root:root,preferences:makePreferences(named:"automation-tests-" + root.lastPathComponent)).conversation?.instructions,"Interview me")
         app.archiveChats([id]); XCTAssertFalse(app.setConversationInstructions(id,instructions:"No",preferences:preferences))
     }
     @MainActor func testRevisionAndScopeGuardAndExpressionPersistence() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString); defer { try? FileManager.default.removeItem(at:root) }
-        let app = AppModel(libraryRoot:root,preferences:UserDefaults(suiteName:"automation-tests-" + root.lastPathComponent)!), id = try XCTUnwrap(app.selectedID)
+        let app = makeApp(root:root,preferences:makePreferences(named:"automation-tests-" + root.lastPathComponent)), id = try XCTUnwrap(app.selectedID)
         app.externalControlEnabled = true
         let args: [String:Any] = ["conversation_id":id.uuidString,"expected_revision":app.controlRevision,"english":"Could you give me a moment?"]
         let result = try app.executeTool("save_expression",arguments:args,origin:.external)
-        XCTAssertEqual(result["ok"] as? Bool,true); XCTAssertEqual(AppModel(libraryRoot:root,preferences:UserDefaults(suiteName:"automation-tests-" + root.lastPathComponent)!).library.expressions.count,1)
+        XCTAssertEqual(result["ok"] as? Bool,true); XCTAssertEqual(makeApp(root:root,preferences:makePreferences(named:"automation-tests-" + root.lastPathComponent)).library.expressions.count,1)
         XCTAssertThrowsError(try app.executeTool("save_expression",arguments:args,origin:.external))
         XCTAssertThrowsError(try app.executeTool("set_conversation_instructions",arguments:["conversation_id":id.uuidString,"instructions":"No","expected_revision":app.controlRevision],origin:.voice))
         app.externalControlEnabled = false
@@ -33,7 +35,7 @@ final class AutomationTests: XCTestCase {
     }
     @MainActor func testVoiceNavigationIsDeferredAndCancelledWithTurn() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString); defer { try? FileManager.default.removeItem(at:root) }
-        let app = AppModel(libraryRoot:root,preferences:UserDefaults(suiteName:"automation-tests-" + root.lastPathComponent)!), id = try XCTUnwrap(app.selectedID)
+        let app = makeApp(root:root,preferences:makePreferences(named:"automation-tests-" + root.lastPathComponent)), id = try XCTUnwrap(app.selectedID)
         _ = app.turn.begin(.generating)
         _ = try app.executeTool("prepare_expression",arguments:["conversation_id":id.uuidString,"english":"Let me think."],origin:.voice)
         XCTAssertFalse(app.practice); XCTAssertNotNil(app.deferredToolAction)
@@ -43,7 +45,7 @@ final class AutomationTests: XCTestCase {
     }
     @MainActor func testAtomicFailureDoesNotChangeInstructionsOrExpressions() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString); defer { try? FileManager.default.removeItem(at:root) }
-        let app = AppModel(libraryRoot:root,preferences:UserDefaults(suiteName:"automation-tests-" + root.lastPathComponent)!), id = try XCTUnwrap(app.selectedID)
+        let app = makeApp(root:root,preferences:makePreferences(named:"automation-tests-" + root.lastPathComponent)), id = try XCTUnwrap(app.selectedID)
         try Data("broken".utf8).write(to:app.store.file)
         XCTAssertFalse(app.setConversationInstructions(id,instructions:"New",preferences:ConversationPreferences()))
         XCTAssertEqual(app.conversation?.instructions,"")
@@ -52,18 +54,18 @@ final class AutomationTests: XCTestCase {
     }
     @MainActor func testRequestUsesConversationInstructionsAndCustomizedEmptyChatIsNotReused() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString); defer { try? FileManager.default.removeItem(at:root) }
-        let app = AppModel(libraryRoot:root,preferences:UserDefaults(suiteName:"automation-"+UUID().uuidString)!)
+        let app = makeApp(root:root,preferences:makePreferences())
         let id = try XCTUnwrap(app.selectedID)
         var prefs = ConversationPreferences(); prefs.coaching = .direct; prefs.speed = 0.8
         XCTAssertTrue(app.setConversationInstructions(id,instructions:"Interview me",preferences:prefs))
         var captured: ConversationRequest?
-        app.conversationReply = { request,callbacks in
+        app.speech.conversationReply = { _,request,callbacks in
             captured = request
             var reply = RealtimeAccumulator(); reply.text = "Hello."
             try callbacks.response(reply)
         }
         app.draft = "Hello"; app.send()
-        for _ in 0..<100 { if captured != nil { break }; await Task.yield() }
+        await waitUntil { captured != nil }
         XCTAssertEqual(captured?.instructions,"Interview me"); XCTAssertEqual(captured?.preferences.speed,0.8)
         app.newChat(); let second = try XCTUnwrap(app.selectedID)
         XCTAssertNotEqual(second,id); XCTAssertEqual(app.conversation?.instructions,"")
@@ -73,7 +75,7 @@ final class AutomationTests: XCTestCase {
     }
     @MainActor func testExternalBusyAndModalWritesAreRejected() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString); defer { try? FileManager.default.removeItem(at:root) }
-        let app = AppModel(libraryRoot:root,preferences:UserDefaults(suiteName:"automation-"+UUID().uuidString)!)
+        let app = makeApp(root:root,preferences:makePreferences())
         app.externalControlEnabled = true
         let id = try XCTUnwrap(app.selectedID)
         for activity in [Activity.recording,.requestingPermission,.generating] {
@@ -89,7 +91,7 @@ final class AutomationTests: XCTestCase {
     }
     @MainActor func testControlReplayCacheAndChangedArguments() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString); defer { try? FileManager.default.removeItem(at:root) }
-        let app = AppModel(libraryRoot:root,preferences:UserDefaults(suiteName:"automation-"+UUID().uuidString)!)
+        let app = makeApp(root:root,preferences:makePreferences())
         app.externalControlEnabled = true
         var revealed = 0; app.revealWorkspace = { revealed += 1 }
         var payload: [String:Any] = ["name":"create_conversation","arguments":["title":"Practice","expected_revision":app.controlRevision],"request_id":"same"]
@@ -105,7 +107,7 @@ final class AutomationTests: XCTestCase {
     }
     @MainActor func testReadsAreBoundedAndWrongConversationCannotBeRead() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString); defer { try? FileManager.default.removeItem(at:root) }
-        let app = AppModel(libraryRoot:root,preferences:UserDefaults(suiteName:"automation-"+UUID().uuidString)!), id = try XCTUnwrap(app.selectedID)
+        let app = makeApp(root:root,preferences:makePreferences()), id = try XCTUnwrap(app.selectedID)
         var chat = app.conversation!
         chat.messages = (0..<110).map { _ in Message(role:"user",text:String(repeating:"x",count:10000)) }
         app.library.conversations = [chat,Conversation()]
@@ -118,7 +120,7 @@ final class AutomationTests: XCTestCase {
     }
     @MainActor func testDeferredPracticeOnlyRunsAfterReplyAndRejectsSecondNavigation() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString); defer { try? FileManager.default.removeItem(at:root) }
-        let app = AppModel(libraryRoot:root,preferences:UserDefaults(suiteName:"automation-"+UUID().uuidString)!), id = try XCTUnwrap(app.selectedID)
+        let app = makeApp(root:root,preferences:makePreferences()), id = try XCTUnwrap(app.selectedID)
         let saved = try app.executeTool("save_expression",arguments:["conversation_id":id.uuidString,"english":"Let me think."],origin:.voice)
         let token = app.turn.begin(.generating)
         let args: [String:Any] = ["conversation_id":id.uuidString,"expression_id":saved["expression_id"]!]
@@ -132,15 +134,15 @@ final class AutomationTests: XCTestCase {
     @MainActor func testVoiceAcknowledgmentPlaysBeforePracticeAndStopCancelsNavigation() async throws {
         for cancel in [false,true] {
             let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString); defer { try? FileManager.default.removeItem(at:root) }
-            let app = AppModel(libraryRoot:root,preferences:UserDefaults(suiteName:"automation-"+UUID().uuidString)!), id = try XCTUnwrap(app.selectedID)
+            let app = makeApp(root:root,preferences:makePreferences()), id = try XCTUnwrap(app.selectedID)
             let player = AutomationPlayer(); app.audio.makePlayer = { _ in player }
-            app.conversationReply = { _,callbacks in
+            app.speech.conversationReply = { _,_,callbacks in
                 _ = try app.executeTool("prepare_expression",arguments:["conversation_id":id.uuidString,"english":"Let me think."],origin:.voice)
                 var response = RealtimeAccumulator(); response.text = "Let's practise."; response.audio = Data(repeating:0,count:4800)
                 try callbacks.response(response)
             }
             app.draft = "Let's practise"; app.send()
-            for _ in 0..<100 { if app.turn.activity != .generating { break }; await Task.yield() }
+            await waitUntil { app.turn.activity != .generating }
             XCTAssertEqual(app.turn.activity,.playing); XCTAssertFalse(app.practice)
             if cancel { app.stop() }
             app.audio.finishPlayback(player,successfully:true)

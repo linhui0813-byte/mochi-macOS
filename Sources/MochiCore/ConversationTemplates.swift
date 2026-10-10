@@ -1,5 +1,6 @@
 import Foundation
 import CryptoKit
+import MochiKernel
 import MochiAutomation
 
 public struct ConversationTemplate: Codable, Identifiable, Equatable {
@@ -24,9 +25,16 @@ public struct ConversationTemplate: Codable, Identifiable, Equatable {
     public static func validateName(_ name: String?) throws {
         guard let name else { return }
         guard !name.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty, name.count <= 80, name.utf8.count <= 1024,
-              !name.unicodeScalars.contains(where:{ CharacterSet.controlCharacters.contains($0) || CharacterSet.newlines.contains($0) }) else {
-            throw AppFailure("Character name must contain 1–80 characters, at most 1 KB, without line breaks or control characters.")
+              !name.unicodeScalars.contains(where:Self.forbiddenInName) else {
+            throw AppFailure("Character name must contain 1–80 characters, at most 1 KB, without line breaks, control characters or text-direction overrides.")
         }
+    }
+    /// Control characters, line breaks and bidirectional overrides are refused. Joiners and the emoji variation
+    /// selector are format characters that real names need (emoji sequences, Persian spelling), so they are allowed.
+    static func forbiddenInName(_ scalar: Unicode.Scalar) -> Bool {
+        if CharacterSet.newlines.contains(scalar) { return true }
+        if scalar.properties.generalCategory == .control { return true }
+        return (0x202A...0x202E).contains(scalar.value) || (0x2066...0x2069).contains(scalar.value)
     }
     public static func validateText(_ value: String, field: String, characters: Int, bytes: Int, required: Bool = false) throws {
         guard value.count <= characters, value.utf8.count <= bytes, !required || !value.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty else {
@@ -48,17 +56,13 @@ public struct ConversationTemplate: Codable, Identifiable, Equatable {
     /// Shared UI/MCP normalization. Only replaced fields are validated; recovery data is retained.
     public func applying(_ fields: [String:Any], creation: Bool = false) throws -> ConversationTemplate {
         let args = creation ? fields : fields.merging(["template_id":id.uuidString,"expected_template_revision":revision]) { _,trusted in trusted }
-        _ = try MochiTools.validate(name:creation ? "create_conversation_template" : "update_conversation_template",arguments:args,origin:.external)
+        _ = try MochiTools.validate(name:creation ? MochiToolName.createConversationTemplate.rawValue : MochiToolName.updateConversationTemplate.rawValue,arguments:args,origin:.external)
+        let metadata = try MochiTools.decode(TemplateArguments.self,from:args)
         var next = self
-        if let value = fields["title"] as? String { next.title = value.trimmingCharacters(in:.whitespacesAndNewlines); try Self.validateText(next.title,field:"Template title",characters:160,bytes:2048,required:true) }
-        if let value = fields["description"] as? String { next.description = value.trimmingCharacters(in:.whitespacesAndNewlines); try Self.validateText(next.description,field:"Description",characters:500,bytes:4096) }
-        if let value = fields["instructions"] as? String { try MochiTools.validateInstructions(value); next.instructions = value.trimmingCharacters(in:.whitespacesAndNewlines) }
-        if let value = fields["character_name"] as? String { next.characterName = value.trimmingCharacters(in:.whitespacesAndNewlines); try Self.validateName(next.characterName) }
-        if fields["clear_character_name"] as? Bool == true { next.characterName = nil }
-        if let value = fields["coaching"] as? String { guard let style = CoachingStyle(rawValue:value) else { throw AppFailure("Invalid coaching style.") }; next.preferences.coaching = style }
-        if let value = fields["speed"] as? NSNumber { next.preferences.speed = value.doubleValue }
-        if fields["clear_speed"] as? Bool == true { next.preferences.speed = nil }
-        try next.preferences.validate(); try next.validateMeaningful()
+        if let value = metadata.title { next.title = value.trimmingCharacters(in:.whitespacesAndNewlines); try Self.validateText(next.title,field:"Template title",characters:160,bytes:2048,required:true) }
+        if let value = metadata.description { next.description = value.trimmingCharacters(in:.whitespacesAndNewlines); try Self.validateText(next.description,field:"Description",characters:500,bytes:4096) }
+        try ConversationSettingsPatch(MochiTools.decode(ConversationSettingsArguments.self,from:args)).apply(to:&next)
+        try next.validateMeaningful()
         if creation { try next.validateForWrite() }
         else if next != self {
             if !needsReview { try next.validateForWrite() }

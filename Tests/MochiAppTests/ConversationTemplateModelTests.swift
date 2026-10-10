@@ -1,12 +1,13 @@
 import XCTest
 import MochiCore
 @testable import MochiApp
+import MochiKernel
 
 final class ConversationTemplateModelTests: XCTestCase {
     @MainActor func testMCPIndependentCatalogAndImmutableSnapshots() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at:root) }
-        let app = AppModel(libraryRoot:root,preferences:UserDefaults(suiteName:UUID().uuidString)!)
+        let app = makeApp(root:root,preferences:makePreferences())
         app.externalControlEnabled = true; app.selectedID = nil
         _ = app.turn.begin(.generating); app.error = "Keep provider error"; app.notice = "Keep notice"
         let created = try app.executeTool("create_conversation_template",arguments:["title":"Loki","character_name":"Loki"],origin:.external)
@@ -25,7 +26,7 @@ final class ConversationTemplateModelTests: XCTestCase {
         XCTAssertTrue(app.library.conversationTemplates.isEmpty)
     }
     @MainActor func testNameOnlyMutationPreservesOversizedInstructionsAndNoOpRevision() throws {
-        let app = AppModel(demo:true); app.resume(); app.externalControlEnabled = true
+        let app = makeApp(demo:true); app.resume(); app.externalControlEnabled = true
         let id = try XCTUnwrap(app.selectedID), index = try XCTUnwrap(app.library.conversations.firstIndex(where:{ $0.id == id }))
         app.library.conversations[index].instructions = String(repeating:"x",count:9000)
         _ = try app.executeTool("set_conversation_instructions",arguments:["conversation_id":id.uuidString,"expected_revision":app.controlRevision,"character_name":"Loki"],origin:.external)
@@ -38,7 +39,7 @@ final class ConversationTemplateModelTests: XCTestCase {
     @MainActor func testFailedTemplateSavePreservesConversationAndDraft() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at:root) }
-        let app = AppModel(libraryRoot:root,preferences:UserDefaults(suiteName:UUID().uuidString)!)
+        let app = makeApp(root:root,preferences:makePreferences())
         app.error = "Existing error"; let before = app.selectedID
         try Data("broken".utf8).write(to:app.store.file)
         XCTAssertThrowsError(try app.createTemplate(fields:["title":"Loki","character_name":"Loki"]))
@@ -49,7 +50,7 @@ final class ConversationTemplateModelTests: XCTestCase {
 
 extension ConversationTemplateModelTests {
     @MainActor func testCatalogPagingAndOpenPickerMutation() throws {
-        let app = AppModel(demo:true); app.resume(); app.externalControlEnabled = true; app.openTemplatePicker()
+        let app = makeApp(demo:true); app.resume(); app.externalControlEnabled = true; app.openTemplatePicker()
         app.library.conversationTemplates = (0..<120).map { ConversationTemplate(title:String(format:"T%03d",$0),instructions:"Discuss topics") }
         var ids: Set<String> = [], offset = 0
         let revision = app.templateCatalogRevision
@@ -66,7 +67,7 @@ extension ConversationTemplateModelTests {
         XCTAssertThrowsError(try app.executeTool("create_conversation",arguments:["expected_revision":app.controlRevision],origin:.external))
     }
     @MainActor func testPreviewSurvivesSourceDeletionAndSaveAsPreservesNilDraft() throws {
-        let app = AppModel(demo:true); app.resume()
+        let app = makeApp(demo:true); app.resume()
         let source = try app.createTemplate(fields:["title":"Scenario","instructions":"Your name is Sam"])
         app.openTemplatePicker()
         let snapshot = source
@@ -80,35 +81,35 @@ extension ConversationTemplateModelTests {
         app.closeTemplateEditor(); XCTAssertEqual(app.retainedInstructionsDraft?.instructions,"Unsaved"); XCTAssertEqual(app.instructionsID,id)
     }
     @MainActor func testReplyUsesCapturedSpeakerAndIdentity() async throws {
-        let app = AppModel(demo:true), gate = TestGate(); app.resume()
+        let app = makeApp(demo:true), gate = TestGate(); app.resume()
         let id = try XCTUnwrap(app.selectedID)
         XCTAssertTrue(app.setConversationInstructions(id,instructions:"Discuss books",preferences:ConversationPreferences(),characterName:"Loki"))
         var started = false
-        app.conversationReply = { request, callbacks in
+        app.speech.conversationReply = { _,request,callbacks in
             XCTAssertEqual(request.characterName,"Loki"); started = true
             await gate.wait()
             var reply = RealtimeAccumulator(); reply.text = "Hello"
             try callbacks.response(reply)
         }
         app.draft = "Hi"; app.send()
-        for _ in 0..<100 { if started { break }; await Task.yield() }
+        await waitUntil { started }
         XCTAssertTrue(started)
         let index = try XCTUnwrap(app.library.conversations.firstIndex(where:{ $0.id == id }))
         app.library.conversations[index].characterName = "Sam"
         await gate.release()
-        for _ in 0..<100 { if app.conversation?.messages.last?.role == "assistant" { break }; await Task.yield() }
+        await waitUntil { app.conversation?.messages.last?.role == "assistant" }
         XCTAssertEqual(app.conversation?.messages.last?.speakerName,"Loki")
         app.stop()
     }
     @MainActor func testTemplateCapAndBuiltInMutationAndNoNetworkOnStart() throws {
-        let app = AppModel(demo:true); app.resume()
+        let app = makeApp(demo:true); app.resume()
         app.library.conversationTemplates = (0..<200).map { ConversationTemplate(title:"T\($0)",instructions:"Discuss") }
         XCTAssertThrowsError(try app.createTemplate(fields:["title":"More","character_name":"Loki"]))
         let builtin = ConversationTemplate.builtins[0]
         XCTAssertThrowsError(try app.updateTemplate(id:builtin.id,revision:builtin.revision,fields:["title":"Overwrite"]))
         XCTAssertThrowsError(try app.deleteTemplate(id:builtin.id,revision:builtin.revision))
-        app.conversationReply = { _,_ in XCTFail("Starting a template must not send a request") }
-        app.microphonePermission = { XCTFail("Starting a template must not request microphone"); return false }
+        app.speech.conversationReply = { _,_,_ in XCTFail("Starting a template must not send a request") }
+        app.media.permission = { XCTFail("Starting a template must not request microphone"); return false }
         let before = app.library.conversations.count
         _ = try app.startTemplateSnapshot(builtin)
         XCTAssertEqual(app.library.conversations.count,before+1); XCTAssertTrue(app.conversation!.messages.isEmpty)
@@ -118,7 +119,7 @@ extension ConversationTemplateModelTests {
 // Audit regressions (2026-10-10).
 extension ConversationTemplateModelTests {
     @MainActor func testEditorTrimsCharacterName() throws {
-        let app = AppModel(demo:true); app.resume()
+        let app = makeApp(demo:true); app.resume()
         let id = try XCTUnwrap(app.selectedID)
         XCTAssertTrue(app.setConversationInstructions(id,instructions:"",preferences:ConversationPreferences(),characterName:"  Loki \n"))
         XCTAssertEqual(app.conversation?.characterName,"Loki")
@@ -126,7 +127,7 @@ extension ConversationTemplateModelTests {
         XCTAssertEqual(app.conversation?.characterName,"Loki")
     }
     @MainActor func testPickerPreviewEditsSurviveDuplicateCancel() {
-        let app = AppModel(demo:true); app.resume(); app.openTemplatePicker()
+        let app = makeApp(demo:true); app.resume(); app.openTemplatePicker()
         var preview = ConversationTemplate.builtins[1]; preview.instructions = "Customized before duplicating"
         app.templateDraft = TemplateEditorDraft(value:preview,editingID:nil,expectedRevision:preview.revision)
         app.editTemplate(preview,duplicate:true)
@@ -139,7 +140,7 @@ extension ConversationTemplateModelTests {
         XCTAssertEqual(app.templatePresentation,.manager); XCTAssertNil(app.templateDraft)
     }
     @MainActor func testTemplateCreationNeverReusesPristineChatButBlankCreationDoes() throws {
-        let app = AppModel(demo:true); app.resume(); app.externalControlEnabled = true
+        let app = makeApp(demo:true); app.resume(); app.externalControlEnabled = true
         app.newChat()
         let pristine = try XCTUnwrap(app.selectedID)
         XCTAssertTrue(app.conversation?.isPristine == true)
@@ -160,7 +161,7 @@ extension ConversationTemplateModelTests {
 
 extension ConversationTemplateModelTests {
     @MainActor func testUIStaleDraftAndSessionMetadataAndOverrideRecovery() throws {
-        let app = AppModel(demo:true); app.resume(); app.externalControlEnabled = true
+        let app = makeApp(demo:true); app.resume(); app.externalControlEnabled = true
         let original = try app.createTemplate(fields:["title":"Loki","character_name":"Loki"])
         app.openTemplateManager(); app.editTemplate(original)
         app.templateDraft?.value.instructions = "Unsaved editor changes"
@@ -178,7 +179,7 @@ extension ConversationTemplateModelTests {
         XCTAssertEqual(app.library.conversationTemplates[i].instructions.count,9000)
     }
     @MainActor func testNameOnlyUIEditPreservesOversizedTextAndOmittedName() throws {
-        let app = AppModel(demo:true); app.resume()
+        let app = makeApp(demo:true); app.resume()
         let id = try XCTUnwrap(app.selectedID), i = app.library.conversations.firstIndex(where:{ $0.id == id })!
         let text = "  " + String(repeating:"x",count:9000) + "  "
         app.library.conversations[i].instructions = text
@@ -188,7 +189,7 @@ extension ConversationTemplateModelTests {
         XCTAssertEqual(app.conversation?.characterName,"Loki")
     }
     @MainActor func testOversizedMetadataPagesStayBoundedAndProgress() throws {
-        let app = AppModel(demo:true); app.resume(); app.externalControlEnabled = true
+        let app = makeApp(demo:true); app.resume(); app.externalControlEnabled = true
         app.library.conversationTemplates = (0..<80).map { _ in
             var t = ConversationTemplate(title:String(repeating:"\u{0001}",count:160),description:String(repeating:"\u{0001}",count:500),characterName:String(repeating:"\u{0001}",count:80),instructions:"Discuss")
             t.description += String(repeating:"z",count:10000)
@@ -204,10 +205,10 @@ extension ConversationTemplateModelTests {
         XCTAssertEqual(seen,80)
     }
     @MainActor func testInvalidRecoveredNameIsFlaggedWithoutSendingOrLosingDraft() throws {
-        let app = AppModel(demo:true); app.resume(); app.externalControlEnabled = true
+        let app = makeApp(demo:true); app.resume(); app.externalControlEnabled = true
         let id = try XCTUnwrap(app.selectedID), i = app.library.conversations.firstIndex(where:{ $0.id == id })!
         app.library.conversations[i].characterName = "\nInvalid"
-        app.conversationReply = { _,_ in XCTFail("Must not send invalid identity") }
+        app.speech.conversationReply = { _,_,_ in XCTFail("Must not send invalid identity") }
         app.draft = "Keep this"; app.send()
         XCTAssertEqual(app.draft,"Keep this"); XCTAssertNotNil(app.error)
         XCTAssertTrue(app.conversation!.characterNameNeedsReview)
@@ -222,18 +223,18 @@ extension ConversationTemplateModelTests {
 // Follow-up audit regressions (2026-10-10).
 extension ConversationTemplateModelTests {
     @MainActor func testRetryRejectsNameNeedingReviewBeforeProvider() throws {
-        let app = AppModel(demo:true); app.resume()
+        let app = makeApp(demo:true); app.resume()
         let id = try XCTUnwrap(app.selectedID), index = try XCTUnwrap(app.library.conversations.firstIndex(where:{ $0.id == id }))
         app.library.conversations[index].messages = [Message(role:"user",text:"Hello")]
         app.library.conversations[index].characterName = "Bad\nName"
-        app.conversationReply = { _,_ in XCTFail("A name needing review must not reach the provider") }
+        app.speech.conversationReply = { _,_,_ in XCTFail("A name needing review must not reach the provider") }
         XCTAssertTrue(app.canRetry)
         app.retryReply()
         XCTAssertEqual(app.turn.activity,.idle); XCTAssertNotNil(app.error)
         XCTAssertEqual(app.conversation?.messages.count,1)
     }
     @MainActor func testPickerValidatesCopiedSettingsWhileEditorRequiresWritableTemplate() {
-        let app = AppModel(demo:true); app.resume(); app.openTemplatePicker()
+        let app = makeApp(demo:true); app.resume(); app.openTemplatePicker()
         var recovered = ConversationTemplate(title:"Recovered",instructions:"Discuss books")
         recovered.description = String(repeating:"d",count:600)
         app.templateDraft = TemplateEditorDraft(value:recovered,editingID:nil,expectedRevision:recovered.revision)

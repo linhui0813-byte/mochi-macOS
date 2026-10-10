@@ -2,7 +2,7 @@ import SwiftUI
 import MochiCore
 
 struct ChatActions: View {
-    @ObservedObject var app: AppModel
+    @Bindable var app: AppModel
     var chat: Conversation
     var body: some View {
         if chat.isDeleted {
@@ -26,7 +26,7 @@ struct ChatActions: View {
 }
 
 struct RenameChatView: View {
-    @ObservedObject var app: AppModel
+    @Bindable var app: AppModel
     var id: UUID
     @State private var title = ""
     @FocusState private var focused: Bool
@@ -50,7 +50,7 @@ struct RenameChatView: View {
 }
 
 struct HistoryManagerView: View {
-    @ObservedObject var app: AppModel
+    @Bindable var app: AppModel
     @State private var scope: HistoryScope = .active
     @State private var query = ""
     @FocusState private var queryFocused: Bool
@@ -142,7 +142,7 @@ struct HistoryManagerView: View {
 }
 
 struct DeleteHistoryConfirmation: View {
-    @ObservedObject var app: AppModel
+    @Bindable var app: AppModel
     var body: some View {
         VStack(alignment:.leading,spacing:16) {
             Label("Delete Permanently",systemImage:"trash").font(.title2).fontWeight(.semibold)

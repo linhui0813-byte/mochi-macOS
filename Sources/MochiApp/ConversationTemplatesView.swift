@@ -1,5 +1,7 @@
 import SwiftUI
 import MochiCore
+import MochiKernel
+import MochiAutomation
 
 struct ConversationSettingsFields: View {
     @Binding var instructions: String
@@ -41,7 +43,7 @@ struct ConversationSettingsFields: View {
 }
 
 struct ConversationTemplatesView: View {
-    @ObservedObject var app: AppModel
+    @Bindable var app: AppModel
     @State private var query = ""
     @State private var selection: UUID?
     @FocusState private var listFocused: Bool

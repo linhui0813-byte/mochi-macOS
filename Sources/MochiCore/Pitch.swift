@@ -1,4 +1,3 @@
-import MochiAutomation
 import Foundation
 public struct PitchPoint: Sendable {
     public var time: Double
@@ -15,7 +14,9 @@ public enum PitchAnalyzer {
         let rate = sampleRate / Double(stride), window = Int(rate * 0.045), hop = Int(rate * 0.015)
         guard signal.count > window else { return [] }
         let low = max(2, Int(rate / 500)), high = min(window / 2, Int(rate / 65))
-        return Swift.stride(from: 0, to: signal.count - window, by: hop).map { start in
+        // Very low sample rates leave no usable lag range or hop; such audio has no measurable speech pitch.
+        guard hop > 0, high > low + 1 else { return [] }
+        func point(at start: Int) -> PitchPoint {
             let segment = Array(signal[start..<start + window])
             let mean = segment.reduce(0, +) / Double(window)
             let x = segment.map { $0 - mean }
@@ -33,6 +34,12 @@ public enum PitchAnalyzer {
             let delta = abs(l - 2 * m + r) > 1e-8 ? 0.5 * (l - r) / (l - 2 * m + r) : 0
             return PitchPoint(time: time, hz: rate / (Double(peak) + delta))
         }
+        var points: [PitchPoint] = []
+        for start in Swift.stride(from: 0, to: signal.count - window, by: hop) {
+            if Task.isCancelled { return [] }
+            points.append(point(at: start))
+        }
+        return points
     }
 }
 public enum PCM {

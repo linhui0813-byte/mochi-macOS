@@ -1,6 +1,8 @@
 #if MOCHI_DEVELOPMENT
 import Foundation
 import MochiCore
+import MochiKernel
+import MochiAutomation
 
 /// Only used by --smoke-test, with a temporary library and socket; no provider traffic.
 enum AutomationSmokeClient {

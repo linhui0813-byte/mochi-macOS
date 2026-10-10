@@ -1,5 +1,6 @@
 import XCTest
 @testable import MochiCore
+import MochiKernel
 final class TranscriptionTests: XCTestCase {
     func testLegacyPlaceholdersDecodeAsMetadataAndNeverContext() throws {
         for text in ["Voice message (transcript unavailable)","Voice message · awaiting transcript"] {

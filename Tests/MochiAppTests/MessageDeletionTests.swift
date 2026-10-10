@@ -7,7 +7,7 @@ final class MessageDeletionTests: XCTestCase {
 
     @MainActor func testDeletePersistsAndRemovesSearchAndContextWithoutDeletingOtherMessages() throws {
         let root = temporary(); defer { try? FileManager.default.removeItem(at:root) }
-        let app = AppModel(libraryRoot:root), id = try XCTUnwrap(app.selectedID)
+        let app = makeApp(root:root), id = try XCTUnwrap(app.selectedID)
         let first = Message(role:"user",text:"Forget this phrase")
         let reply = Message(role:"assistant",text:"A response")
         let last = Message(role:"user",text:"Keep this phrase")
@@ -18,17 +18,17 @@ final class MessageDeletionTests: XCTestCase {
         XCTAssertTrue(app.conversationMatchIDs.isEmpty)
         XCTAssertEqual(app.conversation?.title,"Keep this phrase")
         XCTAssertTrue(app.library.history(in:.active,query:"Forget").isEmpty)
-        let reopened = AppModel(libraryRoot:root)
+        let reopened = makeApp(root:root)
         XCTAssertEqual(reopened.conversation?.messages.map(\.id),[reply.id,last.id])
         app.undoMessageDeletion()
         XCTAssertEqual(app.conversation?.messages.map(\.id),[first.id,reply.id,last.id])
-        XCTAssertEqual(AppModel(libraryRoot:root).conversation?.messages.map(\.id),[first.id,reply.id,last.id])
+        XCTAssertEqual(makeApp(root:root).conversation?.messages.map(\.id),[first.id,reply.id,last.id])
         app.stop()
     }
 
     @MainActor func testUndoRetainsAudioAndDismissalRemovesOnlyUnreferencedAudio() throws {
         let root = temporary(); defer { try? FileManager.default.removeItem(at:root) }
-        let app = AppModel(libraryRoot:root), id = try XCTUnwrap(app.selectedID)
+        let app = makeApp(root:root), id = try XCTUnwrap(app.selectedID)
         let url = root.appendingPathComponent("message.wav")
         try Data([1,2]).write(to:url)
         let message = Message(role:"user",text:"Audio",audio:"message.wav")
@@ -45,7 +45,7 @@ final class MessageDeletionTests: XCTestCase {
 
     @MainActor func testConsecutiveDeletionOfSharedAudioKeepsLatestUndoAndSavedExpressions() throws {
         let root = temporary(); defer { try? FileManager.default.removeItem(at:root) }
-        let app = AppModel(libraryRoot:root), id = try XCTUnwrap(app.selectedID)
+        let app = makeApp(root:root), id = try XCTUnwrap(app.selectedID)
         let url = root.appendingPathComponent("shared.wav")
         try Data([1]).write(to:url)
         let a = Message(role:"user",text:"First",audio:"shared.wav")
@@ -62,7 +62,7 @@ final class MessageDeletionTests: XCTestCase {
 
     @MainActor func testFailedDeletionKeepsMessageRecordingAndActiveTurn() throws {
         let root = temporary(); defer { try? FileManager.default.removeItem(at:root) }
-        let app = AppModel(libraryRoot:root), id = try XCTUnwrap(app.selectedID)
+        let app = makeApp(root:root), id = try XCTUnwrap(app.selectedID)
         let message = Message(role:"user",text:"Keep",audio:"keep.wav")
         try Data([1]).write(to:root.appendingPathComponent("keep.wav"))
         app.append(message,to:id)
@@ -77,7 +77,7 @@ final class MessageDeletionTests: XCTestCase {
     }
 
     @MainActor func testDeleteInvalidatesReplyAndUndoInterruptsPendingTranscript() throws {
-        let app = AppModel(demo:true); app.resume(); app.newChat()
+        let app = makeApp(demo:true); app.resume(); app.newChat()
         let id = try XCTUnwrap(app.selectedID)
         var message = Message(role:"user",text:"",audio:"pending.wav")
         message.transcriptionState = .pending
@@ -98,7 +98,7 @@ final class MessageDeletionTests: XCTestCase {
 
     @MainActor func testExpiryEndsUndoAndCleansTheDeletedRecording() async throws {
         let root = temporary(); defer { try? FileManager.default.removeItem(at:root) }
-        let app = AppModel(libraryRoot:root), id = try XCTUnwrap(app.selectedID)
+        let app = makeApp(root:root), id = try XCTUnwrap(app.selectedID)
         let file = root.appendingPathComponent("expire.wav")
         try Data([1]).write(to:file)
         let message = Message(role:"user",text:"Delete",audio:"expire.wav")
@@ -110,21 +110,21 @@ final class MessageDeletionTests: XCTestCase {
         app.deleteMessage(message.id)
         await fulfillment(of:[scheduled],timeout:2)
         XCTAssertTrue(app.canUndoMessageDeletion)
-        await gate.release()
-        for _ in 0..<100 where app.notice != nil { try await Task.sleep(nanoseconds:1_000_000) }
+        let expiry = try XCTUnwrap(app.pendingNoticeDismissal)
+        await gate.release(); await expiry.value
         XCTAssertNil(app.notice); XCTAssertFalse(app.canUndoMessageDeletion)
         XCTAssertFalse(FileManager.default.fileExists(atPath:file.path))
     }
 
     @MainActor func testLateTranscriptionCannotRewriteAnUndoneDeletion() async throws {
-        let app = AppModel(demo:true); app.resume(); app.newChat()
+        let app = makeApp(demo:true); app.resume(); app.newChat()
         let id = try XCTUnwrap(app.selectedID)
         var message = Message(role:"user",text:"",audio:"late.wav")
         message.transcriptionState = .failed; app.append(message,to:id)
         let gate = TestGate(), started = expectation(description:"Transcription started")
-        app.transcribeRecording = { _,_,_ in started.fulfill(); await gate.wait(); return "Late text" }
+        app.speech.transcribe = { _,_ in started.fulfill(); await gate.wait(); return "Late text" }
         app.retryTranscription(message.id)
-        let job = try XCTUnwrap(app.transcriptTasks[message.id])
+        let job = try XCTUnwrap(app.transcripts.task(for:message.id))
         await fulfillment(of:[started],timeout:2)
         app.deleteMessage(message.id); app.undoMessageDeletion()
         await gate.release(); await job.value
@@ -135,12 +135,12 @@ final class MessageDeletionTests: XCTestCase {
     }
 
     @MainActor func testNextRequestExcludesDeletedMessageAndLateReplyCannotReturn() async throws {
-        let app = AppModel(demo:true); app.resume(); app.newChat()
+        let app = makeApp(demo:true); app.resume(); app.newChat()
         let id = try XCTUnwrap(app.selectedID)
         let removed = Message(role:"user",text:"Remove from context")
         app.append(removed,to:id); app.deleteMessage(removed.id)
         let gate = TestGate(), started = expectation(description:"Reply started"), returned = expectation(description:"Late reply attempted")
-        app.conversationReply = { request,callbacks in
+        app.speech.conversationReply = { _,request,callbacks in
             XCTAssertFalse(request.history.contains { $0.id == removed.id })
             started.fulfill(); await gate.wait()
             var result = RealtimeAccumulator(); result.text = "Late reply"; result.done = true

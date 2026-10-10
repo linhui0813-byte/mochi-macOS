@@ -1,5 +1,6 @@
 import XCTest
 @testable import MochiCore
+import MochiAutomation
 final class ConversationInstructionsTests: XCTestCase {
     func testLegacyDefaultsAndRoundtrip() throws {
         var chat = Conversation(); chat.instructions = "Interview me"; chat.preferences.speed = 0.8; chat.preferences.coaching = .direct
@@ -20,8 +21,8 @@ final class ConversationInstructionsTests: XCTestCase {
         XCTAssertFalse(help.resolvedInstructions.contains("Interview me")); XCTAssertFalse(reference.resolvedInstructions.contains("Interview me"))
     }
     func testCatalogValidatesArgumentsAndRestrictsVoiceTools() throws {
-        XCTAssertFalse(MochiTools.catalog(origin:.voice).contains { $0.name == "set_conversation_instructions" })
-        XCTAssertTrue(MochiTools.catalog(origin:.external).contains { $0.name == "set_conversation_instructions" })
+        XCTAssertFalse(MochiTools.catalog(origin:.voice).contains { $0.name == .setConversationInstructions })
+        XCTAssertTrue(MochiTools.catalog(origin:.external).contains { $0.name == .setConversationInstructions })
         XCTAssertThrowsError(try MochiTools.validate(name:"delete_message",arguments:[:],origin:.external))
         XCTAssertThrowsError(try MochiTools.validate(name:"get_messages",arguments:["conversation_id":"bad"],origin:.external))
         XCTAssertThrowsError(try MochiTools.validate(name:"search_expressions",arguments:["query":"", "limit":101],origin:.voice))
@@ -41,8 +42,8 @@ final class ConversationInstructionsTests: XCTestCase {
 extension ConversationInstructionsTests {
     func testPauseResumeAreExternalOnly() throws {
         for name in ["pause_audio","resume_audio"] {
-            XCTAssertFalse(MochiTools.catalog(origin:.voice).contains { $0.name == name })
-            XCTAssertTrue(MochiTools.catalog(origin:.external).contains { $0.name == name })
+            XCTAssertFalse(MochiTools.catalog(origin:.voice).contains { $0.name.rawValue == name })
+            XCTAssertTrue(MochiTools.catalog(origin:.external).contains { $0.name.rawValue == name })
             XCTAssertThrowsError(try MochiTools.validate(name:name,arguments:["conversation_id":UUID().uuidString],origin:.voice))
         }
     }

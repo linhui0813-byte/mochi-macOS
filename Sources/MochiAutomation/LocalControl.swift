@@ -1,10 +1,17 @@
 import Foundation
 import Darwin
 import CryptoKit
+import MochiKernel
 
+/// Why a frame could not be exchanged. Carried as the cause of the user-facing failure.
+enum FrameError: Error { case ended, timedOut, oversized }
 /// Private, same-user IPC. The MCP process is stdio; this socket is only its app bridge.
 public enum LocalControl {
     public static let maxFrame = 262144
+    /// How long the server waits for a request line, and for the app to start and finish handling it.
+    public static let serverTimeout: TimeInterval = 5
+    /// The client waits longer than the server's whole budget, so a reply is never lost to a race.
+    public static let clientTimeout: TimeInterval = 8
     public static func path(forLibraryRoot root: URL) -> String {
         let digest = SHA256.hash(data:Data(root.standardizedFileURL.path.utf8)).prefix(12).map { String(format:"%02x",$0) }.joined()
         let count = confstr(_CS_DARWIN_USER_TEMP_DIR,nil,0)
@@ -15,7 +22,7 @@ public enum LocalControl {
         return root.appendingPathComponent("mochi-control").appendingPathComponent("\(digest).sock").path
     }
     public static var defaultPath: String {
-        path(forLibraryRoot:FileManager.default.urls(for:.applicationSupportDirectory,in:.userDomainMask)[0].appendingPathComponent("Mochi"))
+        path(forLibraryRoot:FileManager.default.urls(for:.applicationSupportDirectory,in:.userDomainMask)[0].appendingPathComponent(AppIdentity.name))
     }
     static func address(_ path: String) throws -> sockaddr_un {
         let bytes = Array(path.utf8) + [0]
@@ -33,40 +40,40 @@ public enum LocalControl {
     private static func waitReady(_ fd: Int32, event: Int16, deadline: Date) throws {
         while true {
             let remaining = deadline.timeIntervalSinceNow
-            guard remaining > 0 else { throw AppFailure("Local control connection timed out.") }
+            guard remaining > 0 else { throw AppFailure("Local control connection timed out.",underlying:FrameError.timedOut) }
             var item = pollfd(fd:fd,events:event,revents:0)
             let status = poll(&item,1,Int32(min(remaining*1000+1,5000)))
-            if status < 0 && errno == EINTR { continue }
-            guard status > 0, item.revents & Int16(POLLNVAL) == 0 else { throw AppFailure("Local control connection ended or timed out.") }
+            if (status < 0 && errno == EINTR) || status == 0 { continue } // A poll timeout re-checks the deadline.
+            guard status > 0, item.revents & Int16(POLLNVAL) == 0 else { throw AppFailure("Local control connection ended or timed out.",underlying:FrameError.ended) }
             return
         }
     }
-    static func sendFrame(_ data: Data, fd: Int32) throws {
+    static func sendFrame(_ data: Data, fd: Int32, timeout: TimeInterval = serverTimeout) throws {
         guard data.count <= maxFrame else { throw AppFailure("Control response exceeds the size limit.") }
-        let frame = data + Data([10]), deadline = Date().addingTimeInterval(5)
+        let frame = data + Data([10]), deadline = Date().addingTimeInterval(timeout)
         try frame.withUnsafeBytes { buffer in
             var offset = 0
             while offset < buffer.count {
                 try waitReady(fd,event:Int16(POLLOUT),deadline:deadline)
                 let count = Darwin.send(fd,buffer.baseAddress!.advanced(by:offset),min(4096,buffer.count-offset),MSG_DONTWAIT)
                 if count < 0 && [EINTR,EAGAIN,EWOULDBLOCK].contains(errno) { continue }
-                guard count > 0 else { throw AppFailure("Local control connection ended.") }; offset += count
+                guard count > 0 else { throw AppFailure("Local control connection ended.",underlying:FrameError.ended) }; offset += count
             }
         }
     }
-    static func receiveFrame(fd: Int32) throws -> Data {
+    static func receiveFrame(fd: Int32, timeout: TimeInterval = serverTimeout) throws -> Data {
         var data = Data(), buffer = [UInt8](repeating:0,count:4096)
-        let deadline = Date().addingTimeInterval(5)
+        let deadline = Date().addingTimeInterval(timeout)
         while true {
             try waitReady(fd,event:Int16(POLLIN),deadline:deadline)
             let count = recv(fd,&buffer,buffer.count,MSG_DONTWAIT)
             if count < 0 && [EINTR,EAGAIN,EWOULDBLOCK].contains(errno) { continue }
-            guard count > 0 else { throw AppFailure("Local control connection ended.") }
+            guard count > 0 else { throw AppFailure("Local control connection ended.",underlying:FrameError.ended) }
             if let newline = buffer.prefix(count).firstIndex(of:10) {
-                data.append(contentsOf:buffer[..<newline]); guard data.count <= maxFrame else { throw AppFailure("Control request exceeds the size limit.") }; return data
+                data.append(contentsOf:buffer[..<newline]); guard data.count <= maxFrame else { throw AppFailure("Control request exceeds the size limit.",underlying:FrameError.oversized) }; return data
             }
             data.append(contentsOf:buffer.prefix(count))
-            guard data.count <= maxFrame else { throw AppFailure("Control request exceeds the size limit.") }
+            guard data.count <= maxFrame else { throw AppFailure("Control request exceeds the size limit.",underlying:FrameError.oversized) }
         }
     }
     public static func request(_ data: Data, path: String = defaultPath) throws -> Data {
@@ -86,7 +93,7 @@ public enum LocalControl {
         try configure(fd)
         var uid: uid_t = 0, gid: gid_t = 0
         guard getpeereid(fd,&uid,&gid) == 0, uid == getuid() else { throw AppFailure("Local control belongs to another user.") }
-        try sendFrame(data,fd:fd); return try receiveFrame(fd:fd)
+        try sendFrame(data,fd:fd); return try receiveFrame(fd:fd,timeout:clientTimeout)
     }
 }
 public final class LocalControlServer {
@@ -97,7 +104,10 @@ public final class LocalControlServer {
     private var source: DispatchSourceRead?
     private var path: String?
     private var inode: ino_t = 0
-    public init() {}
+    private let timeout: TimeInterval
+    public init(timeout: TimeInterval = LocalControl.serverTimeout) { self.timeout = timeout }
+    /// Connections currently being served; at most eight.
+    public var activeClientCount: Int { lock.lock(); defer { lock.unlock() }; return clients.count }
     public var endpointAvailable: Bool {
         guard let path else { return false }
         var info = stat()
@@ -138,22 +148,45 @@ public final class LocalControlServer {
                 let client = accept(fd,nil,nil); if client < 0 { break }
                 self.lock.lock(); let allowed = self.active && self.clients.count < 8; if allowed { self.clients.insert(client) }; self.lock.unlock()
                 guard allowed else { close(client); continue }
+                let timeout = self.timeout
                 DispatchQueue.global(qos:.utility).async { [weak self] in
                     guard let self else { close(client); return }
                     let activity = ProcessInfo.processInfo.beginActivity(options:[.userInitiated,.latencyCritical],reason:"Handle a local Mochi control request")
                     defer { ProcessInfo.processInfo.endActivity(activity); self.lock.lock(); self.clients.remove(client); self.lock.unlock(); close(client) }
-                    do { try LocalControl.configure(client) } catch { return }
+                    func reply(_ message: String) {
+                        if let data = try? JSONSerialization.data(withJSONObject:MochiTools.error(message)) { try? LocalControl.sendFrame(data,fd:client,timeout:timeout) }
+                    }
+                    do { try LocalControl.configure(client) } catch { MochiLog.failure(MochiLog.automation,"Configure control connection",error,level:.info); return }
                     var uid: uid_t = 0, gid: gid_t = 0
-                    guard getpeereid(client,&uid,&gid) == 0, uid == getuid(), let data = try? LocalControl.receiveFrame(fd:client) else { return }
-                    let deadline = Date().addingTimeInterval(4), complete = DispatchSemaphore(value:0)
+                    guard getpeereid(client,&uid,&gid) == 0, uid == getuid() else { MochiLog.automation.error("Refused a control connection from another macOS user"); return }
+                    let data: Data
+                    do { data = try LocalControl.receiveFrame(fd:client,timeout:timeout) }
+                    catch {
+                        MochiLog.failure(MochiLog.automation,"Read control request",error,level:.info)
+                        // A client that left cannot read a reply; one that is slow or too large is told why.
+                        if (error as? AppFailure)?.underlying as? FrameError != .ended { reply(AppFailure.message(for:error,fallback:"The control request could not be read.")) }
+                        return
+                    }
+                    // The app must start within 80% of the budget; the rest is for finishing and replying.
+                    let deadline = Date().addingTimeInterval(timeout * 0.8), complete = DispatchSemaphore(value:0)
                     let result = ControlReplyBox()
                     Task { @MainActor [weak self] in
                         guard let self else { complete.signal(); return }
-                        let active = self.isActive(generation)
-                        if active && Date() < deadline { result.set(handler(data)) }
+                        if !self.isActive(generation) { result.finish(.inactive) }
+                        else if Date() >= deadline { result.finish(.missedStart) }
+                        else { result.start(); result.finish(.reply(handler(data))) }
                         complete.signal()
                     }
-                    if complete.wait(timeout:.now()+5) == .success, let response = result.get() { try? LocalControl.sendFrame(response,fd:client) }
+                    if complete.wait(timeout:.now() + timeout) == .timedOut {
+                        MochiLog.automation.notice("A control request did not finish within its deadline")
+                        reply(result.started ? "Mochi is still working on this request and may complete it. Read get_session before retrying." : "Mochi was busy and did not start this request. Retry in a moment.")
+                        return
+                    }
+                    switch result.outcome {
+                    case .reply(let response)?: try? LocalControl.sendFrame(response,fd:client,timeout:timeout)
+                    case .inactive?: reply("Mochi stopped accepting external control. Enable it again in Settings → Automation.")
+                    case .missedStart?, nil: reply("Mochi was busy and did not start this request. Retry in a moment.")
+                    }
                 }
             }
         }
@@ -168,8 +201,12 @@ public final class LocalControlServer {
     }
     deinit { stop() }
 }
+/// Shared between the socket thread and the main actor: whether the handler started, and how it ended.
 private final class ControlReplyBox {
-    private let lock = NSLock(); private var value: Data?
-    func set(_ data: Data) { lock.lock(); value = data; lock.unlock() }
-    func get() -> Data? { lock.lock(); defer { lock.unlock() }; return value }
+    enum Outcome { case reply(Data), inactive, missedStart }
+    private let lock = NSLock(); private var began = false, value: Outcome?
+    func start() { lock.lock(); began = true; lock.unlock() }
+    func finish(_ outcome: Outcome) { lock.lock(); value = outcome; lock.unlock() }
+    var started: Bool { lock.lock(); defer { lock.unlock() }; return began }
+    var outcome: Outcome? { lock.lock(); defer { lock.unlock() }; return value }
 }

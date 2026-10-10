@@ -1,4 +1,4 @@
-import MochiAutomation
+import MochiKernel
 import Foundation
 
 public enum TranscriptionState: String, Codable { case pending, completed, failed, timedOut, interrupted }
@@ -84,9 +84,9 @@ struct RealtimeChannel {
             switch message {
             case .data(let data): bytes = data
             case .string(let text): bytes = Data(text.utf8)
-            @unknown default: throw AppFailure("Unexpected transcription response.")
+            @unknown default: throw AppFailure("Unexpected Realtime response.")
             }
-            guard let event = try JSONSerialization.jsonObject(with:bytes) as? [String:Any] else { throw AppFailure("Invalid transcription event.") }
+            guard let event = try JSONSerialization.jsonObject(with:bytes) as? [String:Any] else { throw AppFailure("Invalid Realtime event.") }
             return event
         },close: { socket.cancel(with:.goingAway,reason:nil); session.invalidateAndCancel() })
     }
@@ -118,7 +118,8 @@ extension RealtimeService {
         } catch is CancellationError { throw CancellationError() }
         catch is RealtimeTimeout { throw AppFailure("Transcription timed out. Your recording is saved; retry or add text.") }
         catch let error as AppFailure { throw error }
-        catch { throw AppFailure("The transcription connection ended. Your recording is saved; check your connection and retry, or add text.") }
+        catch let error as URLError { throw AppFailure(ServiceHTTP.transportFailure(error,provider:"OpenAI").message + " Your recording is saved.",underlying:error) }
+        catch { throw AppFailure("The transcription connection ended. Your recording is saved; check your connection and retry, or add text.",underlying:error) }
     }
     private static func validateTranscriptionAudio(_ pcm: Data) throws {
         guard pcm.count >= 4800, pcm.count <= 65*48000, pcm.count.isMultiple(of:2) else {
@@ -140,7 +141,7 @@ extension RealtimeService {
             }
         }
         try await waitFor("session.created")
-        try await send(["type":"session.update","session":["type":"realtime","output_modalities":["text"],"audio":["input":["format":["type":"audio/pcm","rate":24000],"turn_detection":NSNull(),"transcription":["model":"gpt-4o-mini-transcribe"]]]]])
+        try await send(["type":"session.update","session":["type":"realtime","output_modalities":["text"],"audio":["input":["format":["type":"audio/pcm","rate":24000],"turn_detection":NSNull(),"transcription":["model":RealtimeService.transcriptionModel]]]]])
         try await waitFor("session.updated")
         for offset in stride(from:0,to:pcm.count,by:48000) {
             try Task.checkCancellation()

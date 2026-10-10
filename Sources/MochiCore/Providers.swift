@@ -1,30 +1,111 @@
+import MochiKernel
 import MochiAutomation
 import Foundation
 
+/// The ChatGPT access token that Codex keeps in `auth.json`. Mochi has no API-key path by design.
 public enum Credentials {
-    public static func codexToken() throws -> String {
-        let base = ProcessInfo.processInfo.environment["CODEX_HOME"].map { URL(fileURLWithPath: $0) } ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex")
-        let url = base.appendingPathComponent("auth.json")
-        guard let attrs = try? FileManager.default.attributesOfItem(atPath:url.path), (attrs[.size] as? NSNumber)?.intValue ?? Int.max < 65536,
-              let data = try? Data(contentsOf:url), let object = try? JSONSerialization.jsonObject(with:data) as? [String:Any],
-              let tokens = object["tokens"] as? [String:Any], let token = tokens["access_token"] as? String, !token.isEmpty else {
-            throw AppFailure("No readable Codex sign-in. Sign in through Codex and check the connection in Settings.")
+    static let maximumFileSize = 65_536
+    enum SignIn: Error, Equatable {
+        case missing, unreadable, notOwned, unrecognized, apiKeyOnly, expired, untrustedCodexHome
+        var failure: AppFailure {
+            switch self {
+            case .missing: return AppFailure("No Codex sign-in was found on this Mac. Sign in through Codex, then check the connection in Settings.")
+            case .unreadable: return AppFailure("Codex’s sign-in file could not be read. Check its permissions, or sign in through Codex again.")
+            case .notOwned: return AppFailure("Codex’s sign-in file is not a regular file owned by you, so Mochi did not read it. Sign in through Codex again.")
+            case .unrecognized: return AppFailure("Codex’s sign-in file has a format Mochi doesn’t recognize. Update Codex and sign in again.")
+            case .apiKeyOnly: return AppFailure("Codex is signed in with an API key. Mochi uses your ChatGPT sign-in: sign in to Codex with ChatGPT, then retry.")
+            case .expired: return AppFailure("Your Codex sign-in has expired. Use Codex once so it can renew the sign-in, or sign in again, then retry.")
+            case .untrustedCodexHome: return AppFailure("Mochi ignored CODEX_HOME because it is not a folder you own inside your home folder. Unset it or point it at your Codex folder.")
+            }
         }
+    }
+    public static func codexToken() async throws -> String {
+        try await codexToken(environment:ProcessInfo.processInfo.environment,home:FileManager.default.homeDirectoryForCurrentUser,now:Date())
+    }
+    static func codexToken(environment: [String:String], home: URL, now: Date, retryDelay: UInt64 = 50_000_000) async throws -> String {
+        do {
+            let file = try codexFolder(environment:environment,home:home).appendingPathComponent("auth.json")
+            do { return try token(in:file,now:now) }
+            catch SignIn.unrecognized {
+                // Codex may be rewriting the file; one re-read tells a torn write from a real format change.
+                try await Task.sleep(nanoseconds:retryDelay)
+                return try token(in:file,now:now)
+            }
+        } catch let problem as SignIn { throw problem.failure }
+    }
+    /// CODEX_HOME is honoured only when it resolves to a folder the user owns inside their home folder.
+    static func codexFolder(environment: [String:String], home: URL) throws -> URL {
+        guard let value = environment["CODEX_HOME"], !value.isEmpty else { return home.appendingPathComponent(".codex") }
+        let folder = URL(fileURLWithPath:value).standardizedFileURL.resolvingSymlinksInPath()
+        let homePath = home.standardizedFileURL.resolvingSymlinksInPath().path
+        var info = stat()
+        guard folder.path.hasPrefix(homePath + "/"), lstat(folder.path,&info) == 0,
+              info.st_mode & S_IFMT == S_IFDIR, info.st_uid == getuid() else { throw SignIn.untrustedCodexHome }
+        return folder
+    }
+    static func token(in file: URL, now: Date) throws -> String {
+        var info = stat()
+        guard lstat(file.path,&info) == 0 else { throw errno == ENOENT ? SignIn.missing : SignIn.unreadable }
+        guard info.st_mode & S_IFMT == S_IFREG, info.st_uid == getuid() else { throw SignIn.notOwned }
+        guard info.st_size < maximumFileSize, let data = FileManager.default.contents(atPath:file.path) else { throw SignIn.unreadable }
+        guard let object = try? JSONSerialization.jsonObject(with:data) as? [String:Any] else { throw SignIn.unrecognized }
+        guard let tokens = object["tokens"] as? [String:Any] else {
+            if let key = object["OPENAI_API_KEY"] as? String, !key.isEmpty { throw SignIn.apiKeyOnly }
+            throw SignIn.unrecognized
+        }
+        guard let token = tokens["access_token"] as? String, !token.isEmpty else { throw SignIn.unrecognized }
+        if let expiry = expiry(of:token), expiry <= now { throw SignIn.expired }
         return token
+    }
+    /// The `exp` claim of a JWT access token; nil for opaque tokens.
+    static func expiry(of token: String) -> Date? {
+        let parts = token.split(separator:".")
+        guard parts.count == 3 else { return nil }
+        var payload = parts[1].replacingOccurrences(of:"-",with:"+").replacingOccurrences(of:"_",with:"/")
+        payload += String(repeating:"=",count:(4 - payload.count % 4) % 4)
+        guard let data = Data(base64Encoded:payload), let claims = try? JSONSerialization.jsonObject(with:data) as? [String:Any],
+              let exp = (claims["exp"] as? NSNumber)?.doubleValue, exp.isFinite else { return nil }
+        return Date(timeIntervalSince1970:exp)
     }
 }
 public enum ServiceHTTP {
+    /// Only session credentials travel over plain HTTPS; anything larger is a fault.
+    static let maximumResponse = 1_000_000
     public static func failure(status: Int, provider: String) -> AppFailure {
         switch status {
+        case 300..<400: return AppFailure("\(provider) redirected the request, which Mochi refuses for your security. A proxy or captive portal may be interfering.")
         case 401: return AppFailure(provider == "OpenAI" ? "Your Codex sign-in was rejected. Sign in through Codex again, then retry." : "\(provider) credentials were rejected. Update them in Settings.")
         case 403: return AppFailure("This account does not have access to \(provider).")
         case 429: return AppFailure("\(provider) usage limit reached. Retry later.")
         default: return AppFailure("\(provider) request failed (HTTP \(status)). Check Settings and retry.")
         }
     }
-    public static func data(_ request: URLRequest, provider: String) async throws -> Data {
+    /// A user-facing message for a transport failure that tells apart being offline, a timeout and an intercepted connection.
+    public static func transportFailure(_ error: Error, provider: String) -> AppFailure {
+        guard let error = error as? URLError else { return AppFailure("Cannot reach \(provider). Check your connection and retry.",underlying:error) }
+        let message: String
+        switch error.code {
+        case .notConnectedToInternet, .networkConnectionLost, .dataNotAllowed, .internationalRoamingOff:
+            message = "Your Mac is offline or lost its connection. Reconnect, then retry."
+        case .timedOut: message = "\(provider) did not respond in time. Retry in a moment."
+        case .cannotFindHost, .dnsLookupFailed: message = "\(provider)’s server could not be found. Check your network or DNS settings, then retry."
+        case .cannotConnectToHost: message = "\(provider) refused the connection. A firewall or proxy may be blocking it."
+        case .secureConnectionFailed, .serverCertificateUntrusted, .serverCertificateHasBadDate, .serverCertificateNotYetValid,
+             .serverCertificateHasUnknownRoot, .clientCertificateRejected, .clientCertificateRequired:
+            message = "A secure connection to \(provider) could not be established. A proxy, VPN or security tool may be intercepting it."
+        default: message = "Cannot reach \(provider). Check your connection and retry."
+        }
+        return AppFailure(message,underlying:error)
+    }
+    static var configuration: URLSessionConfiguration {
         let config = URLSessionConfiguration.ephemeral; config.timeoutIntervalForRequest = 45; config.timeoutIntervalForResource = 90
-        let session = URLSession(configuration:config, delegate:NoRedirect(), delegateQueue:nil)
+        return config
+    }
+    public static func data(_ request: URLRequest, provider: String) async throws -> Data {
+        try await data(request,provider:provider,configuration:configuration)
+    }
+    static func data(_ request: URLRequest, provider: String, configuration: URLSessionConfiguration) async throws -> Data {
+        let session = URLSession(configuration:configuration, delegate:NoRedirect(), delegateQueue:nil)
         defer { session.invalidateAndCancel() }
         do {
             let (bytes,response) = try await session.bytes(for:request)
@@ -33,12 +114,12 @@ public enum ServiceHTTP {
             var data = Data()
             for try await byte in bytes {
                 data.append(byte)
-                guard data.count <= 16_000_000 else { throw AppFailure("\(provider) response was too large.") }
+                guard data.count <= maximumResponse else { throw AppFailure("\(provider) response was too large.") }
             }
             return data
         } catch let error as AppFailure { throw error }
         catch is CancellationError { throw CancellationError() }
-        catch { throw AppFailure("Cannot reach \(provider). Check your connection and retry.") }
+        catch { throw transportFailure(error,provider:provider) }
     }
 }
 private final class NoRedirect: NSObject, URLSessionTaskDelegate {
@@ -76,10 +157,18 @@ public struct RealtimeAccumulator {
     public var transcriptionState: TranscriptionState = .pending
     public var transcriptionError: String?
     public var inputItemID: String?
+    /// The reply stopped at Mochi's output limit; what streamed before it is kept.
+    public var truncated = false
+    private var separateNextText = false
     public init() {}
+    /// Starts the reply that follows tool results, so its text does not run into the previous round's.
+    public mutating func beginNextRound() { done = false; separateNextText = !(text.last?.isWhitespace ?? true) }
     public mutating func accept(_ event: [String:Any]) throws {
         switch event["type"] as? String {
-        case "response.output_text.delta", "response.text.delta", "response.output_audio_transcript.delta", "response.audio_transcript.delta": text += event["delta"] as? String ?? ""
+        case "response.output_text.delta", "response.text.delta", "response.output_audio_transcript.delta", "response.audio_transcript.delta":
+            let delta = event["delta"] as? String ?? ""
+            if separateNextText && !delta.isEmpty { text += "\n"; separateNextText = false }
+            text += delta
         case "response.output_audio.delta", "response.audio.delta":
             if let encoded = event["delta"] as? String, let chunk = Data(base64Encoded:encoded) { audio.append(chunk) }
             guard audio.count < 16_000_000 else { throw AppFailure("Mochi's response exceeded the audio limit.") }
@@ -97,8 +186,10 @@ public struct RealtimeAccumulator {
                 transcriptionError = error?["code"] as? String == "audio_unintelligible" ? "No clear speech was recognized. Check your microphone level or add text." : "Transcription failed. Your recording is saved; retry transcription or add text."
             }
         case "response.done":
-            let response = event["response"] as? [String:Any]
-            guard response?["status"] as? String == "completed" else { throw AppFailure("Mochi could not complete that response. Please retry.") }
+            let response = event["response"] as? [String:Any], status = response?["status"] as? String
+            let reason = (response?["status_details"] as? [String:Any])?["reason"] as? String
+            if status == "incomplete" && reason == "max_output_tokens" { truncated = true; done = true; return }
+            guard status == "completed" else { throw AppFailure("Mochi could not complete that response. Please retry.") }
             done = true
         case "error": throw RealtimeEvents.failure(event["error"] as? [String:Any])
         default: break
@@ -119,15 +210,27 @@ public struct ConversationRequest {
     public var resolvedInstructions: String { reference ? "Read the user supplied sentence verbatim in natural spoken English. Output only that sentence as audio. Do not add introductions, explanations, corrections, or answers. Preserve every word exactly." : help ? "Help a learner express their intended thought in natural spoken English. Return only valid JSON with exactly two fields: kind (expression or clarification) and text. For expression, text is a concise natural English expression preserving the complete meaning; use more than one sentence when needed. Do not invent details or omit qualifications. If meaning is unclear, use kind clarification and text a brief clarification question. The supplied conversation is context only; never continue it. Do not wrap JSON in Markdown." : VoiceIdentity.conversationInstructions(custom:instructions,preferences:preferences,characterName:characterName) }
 }
 public struct RealtimeService {
+    public static let defaultModel = "gpt-realtime"
+    public static let defaultVoice = RealtimeVoice.marin.rawValue
+    public static let transcriptionModel = "gpt-4o-mini-transcribe"
     public var model: String
     public var voice: String
     public var options: OpenAIVoiceOptions
-    public init(model: String = "gpt-realtime", voice: String = "marin", options: OpenAIVoiceOptions = OpenAIVoiceOptions()) { self.model = model; self.voice = voice; self.options = options }
+    public init(model: String = defaultModel, voice: String = defaultVoice, options: OpenAIVoiceOptions = OpenAIVoiceOptions()) { self.model = model; self.voice = voice; self.options = options }
+    /// Mochi's per-reply output cap; a reply that reaches it is kept and marked `truncated`.
+    static let maximumOutputTokens = 700
     public func referenceAudio(text: String, root: URL, force: Bool = false) async throws -> URL {
+        try await referenceAudio(text:text,root:root,force:force) { try await reply($0) }
+    }
+    func referenceAudio(text: String, root: URL, force: Bool, replying: (ConversationRequest) async throws -> RealtimeAccumulator) async throws -> URL {
         try options.validate()
         let url = root.appendingPathComponent(ReferenceSpeech.cacheName(text:text,model:model,voice:voice,options:options))
-        if !force && FileManager.default.fileExists(atPath:url.path) { return url }
-        let result = try await reply(ConversationRequest(history:[],text:text,spoken:true,reference:true))
+        if !force && FileManager.default.fileExists(atPath:url.path) {
+            // A cache hit counts as use, so the cleanup keeps examples that are still being played.
+            try? FileManager.default.setAttributes([.modificationDate:Date()],ofItemAtPath:url.path)
+            return url
+        }
+        let result = try await replying(ConversationRequest(history:[],text:text,spoken:true,reference:true))
         guard !result.audio.isEmpty, ReferenceSpeech.matches(text,result.text) else {
             throw AppFailure("The example did not match the sentence exactly. Generate it again; your sentence has not been changed.")
         }
@@ -139,18 +242,18 @@ public struct RealtimeService {
         try await Self.sessionToken(model:model)
     }
     static func sessionToken(model: String,
-                             codexToken: () throws -> String = { try Credentials.codexToken() },
+                             codexToken: () async throws -> String = { try await Credentials.codexToken() },
                              transport: (URLRequest) async throws -> Data = { try await ServiceHTTP.data($0,provider:"OpenAI") }) async throws -> String {
 
         var request = URLRequest(url:URL(string:"https://api.openai.com/v1/realtime/client_secrets")!)
-        request.httpMethod = "POST"; request.setValue("Bearer \(try codexToken())", forHTTPHeaderField:"Authorization"); request.setValue("application/json", forHTTPHeaderField:"Content-Type")
+        request.httpMethod = "POST"; request.setValue("Bearer \(try await codexToken())", forHTTPHeaderField:"Authorization"); request.setValue("application/json", forHTTPHeaderField:"Content-Type")
         request.httpBody = try JSONSerialization.data(withJSONObject:["session":["type":"realtime","model":model]])
         let data = try await transport(request)
         guard let object = try? JSONSerialization.jsonObject(with:data) as? [String:Any], let value = object["value"] as? String, !value.isEmpty else { throw AppFailure("OpenAI did not issue a session credential.") }
         return value
     }
     func sessionConfiguration(_ input: ConversationRequest, toolsEnabled: Bool) throws -> [String:Any] {
-        var configuration: [String:Any] = ["type":"realtime","instructions":input.resolvedInstructions,"output_modalities":input.spoken ? ["audio"] : ["text"],"audio":["input":["format":["type":"audio/pcm","rate":24000],"turn_detection":NSNull(),"transcription":["model":"gpt-4o-mini-transcribe"]],"output":try options.output(voice:voice)]]
+        var configuration: [String:Any] = ["type":"realtime","instructions":input.resolvedInstructions,"output_modalities":input.spoken ? ["audio"] : ["text"],"audio":["input":["format":["type":"audio/pcm","rate":24000],"turn_detection":NSNull(),"transcription":["model":Self.transcriptionModel]],"output":try options.output(voice:voice)]]
         if toolsEnabled && !input.help && !input.reference {
             configuration["tools"] = MochiTools.catalog(origin:.voice).map(\.realtime)
             configuration["tool_choice"] = "auto"
@@ -158,38 +261,39 @@ public struct RealtimeService {
         }
         return configuration
     }
+    /// The authenticated WebSocket request for one Realtime session.
+    func realtimeRequest(token: String) -> URLRequest {
+        var components = URLComponents(string:"wss://api.openai.com/v1/realtime")!
+        components.queryItems = [URLQueryItem(name:"model",value:model)]
+        var request = URLRequest(url:components.url!); request.setValue("Bearer \(token)", forHTTPHeaderField:"Authorization")
+        return request
+    }
     public func reply(_ input: ConversationRequest,
                       onResponse: (@MainActor (RealtimeAccumulator) throws -> Void)? = nil,
                       onTranscription: (@MainActor (RealtimeAccumulator) -> Void)? = nil,
                       onTool: (@MainActor (String,[String:Any],String) throws -> [String:Any])? = nil) async throws -> RealtimeAccumulator {
+        try await reply(input,credential: { try await token() },connect:RealtimeChannel.live,onResponse:onResponse,onTranscription:onTranscription,onTool:onTool)
+    }
+    /// Full session lifecycle seam: handshake, history, audio upload, deadlines and cancellation.
+    func reply(_ input: ConversationRequest,
+               credential: () async throws -> String,
+               connect: (URLRequest) -> RealtimeChannel,
+               replyTimeout: UInt64 = 90_000_000_000,
+               onResponse: (@MainActor (RealtimeAccumulator) throws -> Void)? = nil,
+               onTranscription: (@MainActor (RealtimeAccumulator) -> Void)? = nil,
+               onTool: (@MainActor (String,[String:Any],String) throws -> [String:Any])? = nil) async throws -> RealtimeAccumulator {
         guard RealtimeVoice(rawValue:voice) != nil else { throw AppFailure("Choose a supported built-in voice in Settings.") }
         try options.validate()
         try MochiTools.validateInstructions(input.instructions); try input.preferences.validate()
         if !input.help && !input.reference { try ConversationTemplate.validateName(input.characterName) }
-        let token = try await token()
+        let token = try await credential()
         try Task.checkCancellation()
-        var components = URLComponents(string:"wss://api.openai.com/v1/realtime")!
-        components.queryItems = [URLQueryItem(name:"model",value:model)]
-        var request = URLRequest(url:components.url!); request.setValue("Bearer \(token)", forHTTPHeaderField:"Authorization")
-        let config = URLSessionConfiguration.ephemeral; config.timeoutIntervalForRequest = 30
-        let session = URLSession(configuration:config)
-        let socket = session.webSocketTask(with:request); socket.maximumMessageSize = 4_000_000
-        socket.resume()
-        defer { socket.cancel(with:.normalClosure,reason:nil); session.invalidateAndCancel() }
+        let channel = connect(realtimeRequest(token:token))
+        defer { channel.close() }
         return try await withTaskCancellationHandler(operation: {
-            func send(_ object: [String:Any]) async throws {
-                let data = try JSONSerialization.data(withJSONObject:object)
-                try await socket.send(.string(String(decoding:data,as:UTF8.self)))
-            }
-            func receive() async throws -> [String:Any] {
-                let message = try await socket.receive()
-                let data: Data
-                switch message { case .data(let d): data = d; case .string(let s): data = Data(s.utf8); @unknown default: throw AppFailure("Unexpected conversation response.") }
-                guard let event = try JSONSerialization.jsonObject(with:data) as? [String:Any] else { throw AppFailure("Invalid conversation event.") }
-                return event
-            }
+            let send = channel.send, receive = channel.receive
             do {
-                var accumulator = try await RealtimeDeadline.run(nanoseconds:90_000_000_000,close: { socket.cancel(with:.goingAway,reason:nil) }) {
+                var accumulator = try await RealtimeDeadline.run(nanoseconds:replyTimeout,close:channel.close) {
                     var accumulator = RealtimeAccumulator()
                     while true { let event = try await receive(); try accumulator.accept(event); if event["type"] as? String == "session.created" { break } }
                     let configuration = try sessionConfiguration(input,toolsEnabled:onTool != nil)
@@ -205,22 +309,24 @@ public struct RealtimeService {
                     } else {
                         try await send(RealtimeEvents.message(role:"user",text:input.text))
                     }
-                    try await send(["type":"response.create","response":["output_modalities":input.spoken ? ["audio"] : ["text"],"max_output_tokens":700]])
+                    try await send(["type":"response.create","response":["output_modalities":input.spoken ? ["audio"] : ["text"],"max_output_tokens":Self.maximumOutputTokens]])
                     return try await Self.deliverResponse(accumulator,receive:receive,onResponse:onResponse,onTranscription:onTranscription,onTool:input.help || input.reference ? nil : onTool,send:send)
                 }
                 // Reply generation and the subsequent ASR grace period have separate deadlines.
                 if input.pcm != nil && accumulator.transcriptionState == .pending {
-                    accumulator = try await Self.finishTranscription(accumulator,receive:receive,close: { socket.cancel(with:.normalClosure,reason:nil) })
+                    accumulator = try await Self.finishTranscription(accumulator,receive:receive,close:channel.close)
                     if let onTranscription { await onTranscription(accumulator) }
                 }
                 return accumulator
             } catch is CancellationError { throw CancellationError() }
             catch { if Task.isCancelled { throw CancellationError() }; throw Self.replyFailure(error) }
-        }, onCancel: { socket.cancel(with:.goingAway,reason:nil) })
+        }, onCancel:channel.close)
     }
     static func replyFailure(_ error: Error) -> AppFailure {
         if error is RealtimeTimeout { return AppFailure("Mochi’s reply timed out. Your message is saved; retry the reply.") }
-        return (error as? AppFailure) ?? AppFailure("The conversation connection ended. Check your connection and account access, then retry.")
+        if let failure = error as? AppFailure { return failure }
+        if error is URLError { return ServiceHTTP.transportFailure(error,provider:"OpenAI") }
+        return AppFailure("The conversation connection ended. Check your connection and account access, then retry.",underlying:error)
     }
     static func finishTranscription(_ initial: RealtimeAccumulator,
                                     receive: () async throws -> [String:Any],
@@ -299,8 +405,8 @@ public struct RealtimeService {
                         toolBytes += encoded.utf8.count; outputs[id] = encoded
                         try await send(["type":"conversation.item.create","item":["type":"function_call_output","call_id":id,"output":encoded]])
                     }
-                    accumulator.done = false
-                    try await send(["type":"response.create","response":["max_output_tokens":700]])
+                    accumulator.beginNextRound()
+                    try await send(["type":"response.create","response":["max_output_tokens":Self.maximumOutputTokens]])
                 }
             }
         }

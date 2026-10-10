@@ -4,7 +4,7 @@ import MochiCore
 final class HistoryModelTests: XCTestCase {
     @MainActor func testDraftSelectionAndRenameSurviveRelaunch() throws {
         let root = temporary(); defer { try? FileManager.default.removeItem(at:root) }
-        let model = AppModel(libraryRoot:root)
+        let model = makeApp(root:root)
         let first = try XCTUnwrap(model.selectedID)
         model.draft = "An unfinished thought"
         model.renameChat(first,title:" My custom title ")
@@ -17,14 +17,14 @@ final class HistoryModelTests: XCTestCase {
         model.append(Message(role:"user",text:"A first real message"),to:first)
         XCTAssertEqual(model.conversation?.title,"My custom title")
         model.save()
-        let reopened = AppModel(libraryRoot:root)
+        let reopened = makeApp(root:root)
         XCTAssertEqual(reopened.selectedID,first)
         XCTAssertEqual(reopened.draft,"An unfinished thought")
         reopened.select(second)
         XCTAssertEqual(reopened.draft,"Second draft")
     }
     @MainActor func testDeleteCancelsLateReplyAndReadOnlyGuards() throws {
-        let model = AppModel(demo:true)
+        let model = makeApp(demo:true)
         model.resume()
         let id = try XCTUnwrap(model.selectedID)
         let token = model.turn.begin(.generating)
@@ -44,7 +44,7 @@ final class HistoryModelTests: XCTestCase {
     }
     @MainActor func testFailedMutationDoesNotChangeSelectionOrAudio() throws {
         let root = temporary(); defer { try? FileManager.default.removeItem(at:root) }
-        let model = AppModel(libraryRoot:root)
+        let model = makeApp(root:root)
         let id = try XCTUnwrap(model.selectedID)
         model.save()
         let wav = root.appendingPathComponent("test.wav")
@@ -59,7 +59,7 @@ final class HistoryModelTests: XCTestCase {
     }
     @MainActor func testPermanentDeletionKeepsExpressionAudioAndCreatesFreshSource() throws {
         let root = temporary(); defer { try? FileManager.default.removeItem(at:root) }
-        let model = AppModel(libraryRoot:root)
+        let model = makeApp(root:root)
         let id = try XCTUnwrap(model.selectedID)
         var item = PracticeExpression(conversationID:id,meaning:"",english:"A useful sentence")
         item.reference = "shared.wav"
@@ -80,7 +80,7 @@ final class HistoryModelTests: XCTestCase {
         model.stop()
     }
     @MainActor func testEmptyNewChatIsReusedAndArchiveRestoreStopsActivity() throws {
-        let model = AppModel(libraryRoot:temporary())
+        let model = makeApp(root:temporary())
         defer { try? FileManager.default.removeItem(at:model.store.root) }
         let first = model.selectedID
         model.newChat(); model.newChat()
@@ -98,7 +98,7 @@ final class HistoryModelTests: XCTestCase {
         XCTAssertTrue(model.writableConversation)
     }
     @MainActor func testBulkActionsKeepOriginalArchiveStateAndPracticeExpression() throws {
-        let model = AppModel(demo:true)
+        let model = makeApp(demo:true)
         let source = try XCTUnwrap(model.selectedID)
         let ids = Set(model.library.conversations.map(\.id))
         let other = try XCTUnwrap(ids.first(where:{ $0 != source }))

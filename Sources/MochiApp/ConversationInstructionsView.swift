@@ -1,8 +1,10 @@
 import SwiftUI
 import MochiCore
+import MochiKernel
+import MochiAutomation
 
 struct ConversationInstructionsView: View {
-    @ObservedObject var app: AppModel
+    @Bindable var app: AppModel
     let id: UUID
     @State private var saveError: String?
     @State private var instructions = ""

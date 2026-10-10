@@ -2,7 +2,7 @@ import SwiftUI
 import MochiCore
 
 struct PracticePane: View {
-    @ObservedObject var app: AppModel
+    @Bindable var app: AppModel
     @State private var normalized = false
     @State private var directEnglish = ""
     @State private var voiceDetailsOpen = false
@@ -171,12 +171,9 @@ struct PracticePane: View {
         VStack(alignment:.leading,spacing:12) {
             TextField("English sentence",text:Binding(get:{app.english},set:app.editEnglish),axis:.vertical)
                 .font(.system(size:22,weight:.medium)).textFieldStyle(.plain).lineLimit(2...4).disabled(app.busy)
-            DisclosureGroup("Example voice: \(app.practiceVoiceLabel)",isExpanded:$voiceDetailsOpen) {
+            DisclosureGroup("Example voice: \(app.settings.practiceVoiceLabel)",isExpanded:$voiceDetailsOpen) {
                 VStack(alignment:.leading,spacing:10) {
                     PracticeVoiceControls(app:app).disabled(app.busy)
-                    if app.practiceProvider == .elevenLabs {
-                        Button("Connection Settings…") { app.settingsTab = "voices"; app.settingsOpen = true }
-                    }
                 }
             }
             if app.expression?.reference != nil {
@@ -230,7 +227,7 @@ struct PracticePane: View {
 }
 
 struct RecordingFeedback: View {
-    @ObservedObject var app: AppModel
+    @Bindable var app: AppModel
     var body: some View {
         VStack(alignment:.leading,spacing:6) {
             HStack {

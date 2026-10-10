@@ -1,6 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# VERSION is the only place the release number lives; the parser validates it.
+versions=$(python3 scripts/release_support.py version VERSION)
+read -r MOCHI_VERSION MOCHI_BUILD <<< "$versions"
 SDK_VERSION="$(xcrun --sdk macosx --show-sdk-version)"
 if [ "${MOCHI_DISTRIBUTION:-0}" = 1 ]; then
     swift build -c release -Xlinker -platform_version -Xlinker macos -Xlinker 14.0 -Xlinker "$SDK_VERSION"
@@ -35,8 +38,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <key>CFBundleExecutable</key><string>Mochi</string>
 <key>CFBundleIconFile</key><string>AppIcon.icns</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>0.4.0</string>
-<key>CFBundleVersion</key><string>28</string>
+<key>CFBundleShortVersionString</key><string>@VERSION@</string>
+<key>CFBundleVersion</key><string>@BUILD@</string>
 <key>MochiSingleInstanceProtocol</key><true/>
 <key>LSMinimumSystemVersion</key><string>14.0</string>
 <key>NSHighResolutionCapable</key><true/>
@@ -49,6 +52,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <key>NSMicrophoneUsageDescription</key><string>Record a voice message for Mochi or a practice attempt. Practice recordings stay on your Mac.</string>
 </dict></plist>
 PLIST
+/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $MOCHI_VERSION" -c "Set :CFBundleVersion $MOCHI_BUILD" "$APP/Contents/Info.plist"
 if [ "${MOCHI_DISTRIBUTION:-0}" = 1 ]; then
     : "${MOCHI_SIGN_ID:?Distribution requires MOCHI_SIGN_ID}"
     [ "$MOCHI_SIGN_ID" != - ] || { echo "Distribution cannot use ad-hoc signing" >&2; exit 1; }

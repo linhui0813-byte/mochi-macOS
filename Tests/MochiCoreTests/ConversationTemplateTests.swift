@@ -1,5 +1,7 @@
 import XCTest
 @testable import MochiCore
+import MochiKernel
+import MochiAutomation
 
 final class ConversationTemplateTests: XCTestCase {
     func testSnapshotAndIdentityRoundtrip() throws {
@@ -173,12 +175,12 @@ extension ConversationTemplateTests {
     func testTemplateMCPAnnotationsAndDiscoveryInstructions() throws {
         let tools = MochiTools.catalog(origin:.external)
         for name in ["update_conversation_template","delete_conversation_template"] {
-            let value = try XCTUnwrap(tools.first(where:{ $0.name == name }))
+            let value = try XCTUnwrap(tools.first(where:{ $0.name.rawValue == name }))
             let a = value.mcp["annotations"] as! [String:Any]
             XCTAssertEqual(a["destructiveHint"] as? Bool,true); XCTAssertEqual(a["idempotentHint"] as? Bool,false)
         }
         for name in ["list_conversation_templates","get_conversation_template"] {
-            let a = tools.first(where:{ $0.name == name })!.mcp["annotations"] as! [String:Any]
+            let a = tools.first(where:{ $0.name.rawValue == name })!.mcp["annotations"] as! [String:Any]
             XCTAssertEqual(a["readOnlyHint"] as? Bool,true)
         }
     }

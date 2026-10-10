@@ -3,7 +3,7 @@ import AppKit
 import MochiCore
 
 struct VoiceTranscriptControls: View {
-    @ObservedObject var app: AppModel
+    @Bindable var app: AppModel
     let message: Message
     @State private var editing = false
     @State private var text = ""

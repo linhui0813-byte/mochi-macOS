@@ -1,27 +1,24 @@
-import MochiAutomation
+import MochiKernel
 import Foundation
 import Darwin
 
-public enum AppIdentity {
-    public static let name = "Mochi"
-    public static let bundleIdentifier = "com.lixiaolai.mochi-macos"
-    public static let previousBundleIdentifier = "com.xiaolai.mochi-macos"
-    public static let legacyBundleIdentifiers = [previousBundleIdentifier, legacyBundleIdentifier]
-    public static let legacyBundleIdentifier = "com.xiaolai.enjoy-myself"
-    public static let legacyDataDirectory = "Enjoy Myself"
-    public static let backupType = "com.lixiaolai.mochi-macos.library"
-
+public extension AppIdentity {
     /// Copy first, then atomically install the directory; leave original data intact.
-    public static func prepareDataDirectory(in support: URL) throws -> URL {
+    static func prepareDataDirectory(in support: URL) throws -> URL {
         let destination = support.appendingPathComponent(name)
         let legacy = support.appendingPathComponent(legacyDataDirectory)
         let fm = FileManager.default
         if fm.fileExists(atPath:destination.path) {
             try validateDirectory(destination)
             if fm.fileExists(atPath:destination.appendingPathComponent("library.json").path) { return destination }
-            guard try fm.contentsOfDirectory(atPath:destination.path).isEmpty else { throw AppFailure("The Mochi folder contains other data; it has not been changed.") }
         }
+        // Without an older library there is nothing to migrate: caches or Finder files in the folder are harmless.
         guard fm.fileExists(atPath:legacy.path) else { return destination }
+        if fm.fileExists(atPath:destination.path) {
+            guard try fm.contentsOfDirectory(atPath:destination.path).isEmpty else {
+                throw AppFailure("the Mochi folder already contains other files, so your library in the “\(legacyDataDirectory)” folder was not moved. Move those files out of the Mochi folder and reopen Mochi.")
+            }
+        }
         try validateDirectory(legacy)
         _ = try LibraryStore(root:legacy).load() // Corrupt/future data stays untouched.
         let staging = support.appendingPathComponent(".mochi-migration-\(UUID().uuidString)")
@@ -35,7 +32,30 @@ public enum AppIdentity {
         try fm.moveItem(at:staging,to:destination)
         return destination
     }
-    public static func migratePreferences(into defaults: UserDefaults, legacy: [String:Any]) {
+    /// True when an older library must be copied into the Mochi folder before it can open.
+    static func needsMigration(in support: URL) -> Bool {
+        let fm = FileManager.default
+        return fm.fileExists(atPath:support.appendingPathComponent(legacyDataDirectory).path)
+            && !fm.fileExists(atPath:support.appendingPathComponent(name).appendingPathComponent("library.json").path)
+    }
+    /// Removes copies left by a migration that was interrupted, for example by a force quit. The original stays untouched.
+    static func sweepStaleMigrations(in support: URL, olderThan age: TimeInterval = 3600, now: Date = Date()) {
+        let fm = FileManager.default
+        guard let items = try? fm.contentsOfDirectory(at:support,includingPropertiesForKeys:[.contentModificationDateKey,.isDirectoryKey,.isSymbolicLinkKey]) else { return }
+        for url in items where url.lastPathComponent.hasPrefix(".mochi-migration-") {
+            guard let values = try? url.resourceValues(forKeys:[.contentModificationDateKey,.isDirectoryKey,.isSymbolicLinkKey]),
+                  values.isDirectory == true, values.isSymbolicLink != true,
+                  let modified = values.contentModificationDate, now.timeIntervalSince(modified) > age else { continue }
+            do { try fm.removeItem(at:url) } catch { MochiLog.failure(MochiLog.library,"Remove interrupted migration copy",error,level:.info) }
+        }
+    }
+    /// The folder to reveal when preparation fails: the conflicting Mochi folder, else the older library.
+    static func recoveryFolder(in support: URL) -> URL {
+        let fm = FileManager.default, destination = support.appendingPathComponent(name), legacy = support.appendingPathComponent(legacyDataDirectory)
+        if let items = try? fm.contentsOfDirectory(atPath:destination.path), !items.isEmpty { return destination }
+        return fm.fileExists(atPath:legacy.path) ? legacy : support
+    }
+    static func migratePreferences(into defaults: UserDefaults, legacy: [String:Any]) {
         for key in ["auth","model","clone","performer","conversationVoice","builtInPracticeVoice","practiceVoiceMode"] where defaults.object(forKey:key) == nil {
             if let value = legacy[key] as? String { defaults.set(value,forKey:key) }
         }

@@ -4,7 +4,7 @@ import MochiCore
 
 final class ConversationSearchTests: XCTestCase {
     @MainActor func testSearchIsCurrentConversationOnlyAndIndependentOfSidebarFilter() {
-        let app = AppModel(demo:true); app.resume()
+        let app = makeApp(demo:true); app.resume()
         let first = Message(role:"user",text:"The café opens soon")
         let second = Message(role:"assistant",text:"Let's go to the CAFE")
         var unknown = Message(role:"user",text:"",audio:"voice.wav"); unknown.transcriptionState = .failed
@@ -24,7 +24,7 @@ final class ConversationSearchTests: XCTestCase {
         app.stop()
     }
     @MainActor func testMatchNavigationWrapsAndQueryChangesResetPosition() {
-        let app = AppModel(demo:true); app.resume()
+        let app = makeApp(demo:true); app.resume()
         let chat = Conversation(); app.library.conversations = [chat]; app.select(chat.id)
         let messages = [Message(role:"user",text:"one match"),Message(role:"assistant",text:"another match")]
         for message in messages { app.append(message,to:chat.id) }
@@ -40,7 +40,7 @@ final class ConversationSearchTests: XCTestCase {
         app.stop()
     }
     @MainActor func testSearchClosesOnConversationChangeOrExpressionsAndCanReopen() {
-        let app = AppModel(demo:true); app.resume()
+        let app = makeApp(demo:true); app.resume()
         let first = Conversation(), second = Conversation()
         app.library.conversations = [first,second]; app.select(first.id)
         app.openConversationSearch(); app.conversationQuery = "hello"
@@ -58,7 +58,7 @@ final class ConversationSearchTests: XCTestCase {
 
 extension ConversationSearchTests {
     @MainActor func testLateTranscriptKeepsSelectedMessageAndRemovalUsesNearestMatch() {
-        let app = AppModel(demo:true); app.resume()
+        let app = makeApp(demo:true); app.resume()
         let chat = Conversation(); app.library.conversations = [chat]; app.select(chat.id)
         let pending = Message(role:"user",text:"",audio:"pending.wav")
         let first = Message(role:"user",text:"match one"), selected = Message(role:"assistant",text:"match two")
@@ -74,7 +74,7 @@ extension ConversationSearchTests {
         app.stop()
     }
     @MainActor func testManagerFindWithoutSelectionOrConversationView() {
-        let app = AppModel(demo:true); app.resume(); app.selectedID = nil; app.showExpressions = true
+        let app = makeApp(demo:true); app.resume(); app.selectedID = nil; app.showExpressions = true
         XCTAssertFalse(app.canFindInConversation)
         app.managerOpen = true; XCTAssertTrue(app.canFindInConversation)
         let before = app.searchFocusRequest
@@ -84,7 +84,7 @@ extension ConversationSearchTests {
         app.stop()
     }
     @MainActor func testLargeConversationUsesCachedMatchesAcrossReadsAndUpdates() {
-        let app = AppModel(demo:true)
+        let app = makeApp(demo:true)
         var chat = Conversation()
         chat.messages = (0..<1000).map { Message(role:"user",text:$0.isMultiple(of:2) ? "match" : "other") }
         app.library.conversations = [chat]; app.select(chat.id); app.conversationQuery = "match"

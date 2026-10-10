@@ -2,7 +2,7 @@ import SwiftUI
 import AppKit
 
 struct ConversationSearchControl: View {
-    @ObservedObject var app: AppModel
+    @Bindable var app: AppModel
     var body: some View {
         if app.conversationSearchOpen {
             HStack(spacing:6) {
@@ -26,7 +26,7 @@ struct ConversationSearchControl: View {
 }
 
 private struct ConversationSearchField: NSViewRepresentable {
-    @ObservedObject var app: AppModel
+    @Bindable var app: AppModel
     func makeCoordinator() -> Coordinator { Coordinator(app:app) }
     func makeNSView(context: Context) -> FocusableSearchField {
         let field = FocusableSearchField()

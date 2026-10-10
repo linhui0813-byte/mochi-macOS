@@ -1,4 +1,4 @@
-import MochiAutomation
+import MochiKernel
 import Foundation
 
 public enum HistoryScope: String, CaseIterable, Identifiable {
@@ -21,6 +21,16 @@ public extension Conversation {
     func matches(_ query: String) -> Bool { title.range(of:query,options:[.caseInsensitive,.diacriticInsensitive]) != nil || matchingMessage(query) != nil }
 }
 public extension Library {
+    /// The number of conversations `history(in:)` would list, without sorting them.
+    func count(in scope: HistoryScope) -> Int {
+        conversations.reduce(0) { total, c in
+            switch scope {
+            case .active: return total + (!c.isDeleted && !c.archived ? 1 : 0)
+            case .archived: return total + (!c.isDeleted && c.archived ? 1 : 0)
+            case .deleted: return total + (c.isDeleted ? 1 : 0)
+            }
+        }
+    }
     func history(in scope: HistoryScope, query: String = "") -> [Conversation] {
         let term = query.trimmingCharacters(in:.whitespacesAndNewlines)
         return conversations.filter { c in
@@ -69,7 +79,7 @@ public extension Library {
         guard Set(messages.map(\.id)).count == messages.count else { throw AppFailure("The library contains duplicate message IDs.") }
         for chat in conversations { try chat.preferences.validate() }
         for name in referencedAudio {
-            guard !name.isEmpty, name != ".", name != "..", !name.contains("/"), !name.contains("\\"), !name.hasPrefix("."), !name.hasPrefix("library-before-character-templates-v3"), !["library.json","library-v1-backup.json","library-before-help-transcription.json","library-before-conversation-instructions.json"].contains(name) else { throw AppFailure("The library contains an unsafe recording filename.") }
+            guard !name.isEmpty, name != ".", name != "..", !name.contains("/"), !name.contains("\\"), !name.hasPrefix("."), !name.hasPrefix("library-before-character-templates-v3"), !name.hasPrefix("library-unreadable-"), !LibraryStore.reservedNames.contains(name) else { throw AppFailure("The library contains an unsafe recording filename.") }
         }
     }
 }
@@ -109,8 +119,38 @@ public enum LibraryBackup {
         library.version = 3
         return library
     }
+    /// Items to import with their audio already copied under fresh names, ready to merge into the library as it is by then.
+    public struct PreparedImport {
+        public let additions: Library
+        public let copied: [URL]
+    }
     // Only missing IDs are imported; each imported audio name is remapped to avoid collisions.
     public static func merge(_ imported: Library, from package: URL, into local: inout Library, root: URL) throws -> Int {
+        let prepared = try prepareMerge(imported,from:package,into:local,root:root)
+        do { return try apply(prepared,to:&local) } catch { discard(prepared,keeping:local); throw error }
+    }
+    /// Adds the prepared items that are still missing. On a conflict `local` is unchanged.
+    public static func apply(_ prepared: PreparedImport, to local: inout Library) throws -> Int {
+        let chatIDs = Set(local.conversations.map(\.id)), expressionIDs = Set(local.expressions.map(\.id)), templateIDs = Set(local.conversationTemplates.map(\.id))
+        let conversations = prepared.additions.conversations.filter { !chatIDs.contains($0.id) }
+        let localMessageIDs = Set(local.conversations.flatMap(\.messages).map(\.id))
+        guard !conversations.flatMap(\.messages).contains(where:{ localMessageIDs.contains($0.id) }) else { throw AppFailure("Imported message IDs conflict with local history.") }
+        var next = local
+        next.conversations += conversations
+        next.expressions += prepared.additions.expressions.filter { !expressionIDs.contains($0.id) }
+        next.conversationTemplates += prepared.additions.conversationTemplates.filter { !templateIDs.contains($0.id) }
+        next.version = 3
+        try next.validate()
+        local = next
+        return conversations.count
+    }
+    /// Removes copied audio that `library` does not reference, after an import was abandoned.
+    public static func discard(_ prepared: PreparedImport, keeping library: Library) {
+        let referenced = library.referencedAudio
+        for url in prepared.copied where !referenced.contains(url.lastPathComponent) { try? FileManager.default.removeItem(at:url) }
+    }
+    /// Validates a backup against `local` and copies its new audio into `root`. Safe to run off the main thread.
+    public static func prepareMerge(_ imported: Library, from package: URL, into local: Library, root: URL) throws -> PreparedImport {
         try imported.validate()
         for name in imported.referencedAudio { _ = try regularFile(package.appendingPathComponent(name)) }
         let chatIDs = Set(local.conversations.map(\.id)), expressionIDs = Set(local.expressions.map(\.id))
@@ -123,6 +163,10 @@ public enum LibraryBackup {
         guard !additions.conversations.flatMap(\.messages).contains(where:{ localMessageIDs.contains($0.id) }) else { throw AppFailure("Imported message IDs conflict with local history.") }
         try FileManager.default.createDirectory(at:root,withIntermediateDirectories:true,attributes:[.posixPermissions:0o700])
         var mapping: [String:String] = [:], copied: [URL] = []
+        func mapped(_ name: String) throws -> String {
+            guard let replacement = mapping[name] else { throw AppFailure("A backup recording could not be matched to its copy.") }
+            return replacement
+        }
         do {
             for name in additions.referencedAudio {
                 let replacement = "import-\(UUID().uuidString).\(URL(fileURLWithPath:name).pathExtension)"
@@ -131,19 +175,17 @@ public enum LibraryBackup {
                 copied.append(destination); mapping[name] = replacement
             }
             for ci in additions.conversations.indices {
-                if let name = additions.conversations[ci].helpDraft?.recording { additions.conversations[ci].helpDraft?.recording = mapping[name] }
+                if let name = additions.conversations[ci].helpDraft?.recording { additions.conversations[ci].helpDraft?.recording = try mapped(name) }
                 for mi in additions.conversations[ci].messages.indices {
-                    if let name = additions.conversations[ci].messages[mi].audio { additions.conversations[ci].messages[mi].audio = mapping[name] }
+                    if let name = additions.conversations[ci].messages[mi].audio { additions.conversations[ci].messages[mi].audio = try mapped(name) }
                     if additions.conversations[ci].messages[mi].transcriptionState == .pending { additions.conversations[ci].messages[mi].transcriptionState = .interrupted }
                 }
             }
             for i in additions.expressions.indices {
-                if let name = additions.expressions[i].reference { additions.expressions[i].reference = mapping[name] }
-                for ai in additions.expressions[i].attempts.indices { let name = additions.expressions[i].attempts[ai].file; additions.expressions[i].attempts[ai].file = mapping[name]! }
+                if let name = additions.expressions[i].reference { additions.expressions[i].reference = try mapped(name) }
+                for ai in additions.expressions[i].attempts.indices { additions.expressions[i].attempts[ai].file = try mapped(additions.expressions[i].attempts[ai].file) }
             }
-            local.conversations += additions.conversations; local.expressions += additions.expressions; local.conversationTemplates += additions.conversationTemplates
-            local.version = 3
-            return additions.conversations.count
+            return PreparedImport(additions:additions,copied:copied)
         } catch { for url in copied { try? FileManager.default.removeItem(at:url) }; throw error }
     }
     private static func regularFile(_ url: URL) throws -> Bool {

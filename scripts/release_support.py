@@ -10,6 +10,28 @@ import time
 from pathlib import Path
 
 
+VERSION_PATTERN = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+")
+BUILD_PATTERN = re.compile(r"[1-9][0-9]*")
+
+
+def read_version(text):
+    """Parses the repository VERSION file: exactly MOCHI_VERSION=x.y.z and MOCHI_BUILD=n."""
+    values = {}
+    for number, line in enumerate(text.splitlines(), 1):
+        if not line.strip():
+            continue
+        key, separator, value = line.partition("=")
+        if not separator or key not in ("MOCHI_VERSION", "MOCHI_BUILD") or key in values:
+            raise ValueError(f"VERSION line {number} must be MOCHI_VERSION=x.y.z or MOCHI_BUILD=n, once each")
+        values[key] = value.strip()
+    version, build = values.get("MOCHI_VERSION", ""), values.get("MOCHI_BUILD", "")
+    if not VERSION_PATTERN.fullmatch(version):
+        raise ValueError("VERSION needs MOCHI_VERSION=x.y.z")
+    if not BUILD_PATTERN.fullmatch(build):
+        raise ValueError("VERSION needs a positive integer MOCHI_BUILD")
+    return version, build
+
+
 def validate_metadata(info, version, build):
     expected = {"CFBundleShortVersionString":version, "CFBundleVersion":build,
                 "CFBundleIdentifier":"com.lixiaolai.mochi-macos", "LSMinimumSystemVersion":"14.0"}
@@ -49,7 +71,10 @@ def validate_distribution_symbols(app_strings, helper_symbols, app_symbols=""):
     for retired in ("OPENAI_API_KEY",):
         if retired in app_strings or retired in app_symbols:
             raise ValueError("OpenAI API-key fallback cannot ship")
-    for symbol in ("Credentials", "RealtimeService", "VoiceRenderer", "codexToken", "ElevenLabsSpeech", "ElevenLabsCredential"):
+    for retired in ("api.elevenlabs.io", "ELEVENLABS_API_KEY", "ElevenLabs"):
+        if retired in app_strings or retired in app_symbols or retired in helper_symbols:
+            raise ValueError("The retired ElevenLabs provider cannot ship")
+    for symbol in ("Credentials", "RealtimeService", "VoiceRenderer", "codexToken"):
         if symbol in helper_symbols:
             raise ValueError("Provider and credential code cannot ship in the MCP helper")
 
@@ -61,10 +86,14 @@ def check_distribution(app, helper, *, run=subprocess.run):
     validate_distribution_symbols(app_strings, helper_symbols, app_symbols)
 
 
-def render_cask(template, digest):
+def render_cask(template, digest, version):
     if not re.fullmatch(r"[0-9a-f]{64}", digest):
         raise ValueError("A real lowercase SHA-256 is required")
-    return template.replace("@SHA256@", digest)
+    if not VERSION_PATTERN.fullmatch(version):
+        raise ValueError("A release version x.y.z is required")
+    if "@SHA256@" not in template or "@VERSION@" not in template:
+        raise ValueError("The cask template needs @SHA256@ and @VERSION@ placeholders")
+    return template.replace("@SHA256@", digest).replace("@VERSION@", version)
 
 
 def notarize(artifact, profile, *, run=subprocess.run, sleep=time.sleep, attempts=3):
@@ -85,22 +114,33 @@ def notarize(artifact, profile, *, run=subprocess.run, sleep=time.sleep, attempt
             payload = {}
         return result, payload
 
+    def diagnosis(operation, attempt, result):
+        """notarytool explains failures (profile, network, agreements) on stderr; keep the tail of it."""
+        detail = (result.stderr or b"").decode(errors="replace").strip()[-2000:] or "no output"
+        line = f"notarytool {operation} attempt {attempt + 1} failed (exit {result.returncode}): {detail}"
+        print(line, file=sys.stderr, flush=True)
+        return line
+
+    last = ""
     if not submission:
         for attempt in range(attempts):
-            _, payload = command("submit",str(artifact),"--output-format","plist")
+            result, payload = command("submit",str(artifact),"--output-format","plist")
             submission = payload.get("id")
             if submission:
                 record.write_text(json.dumps({"sha256":digest,"id":submission}) + "\n")
                 break
+            last = diagnosis("submit", attempt, result)
             if attempt + 1 < attempts:
                 sleep(5 * (attempt + 1))
         if not submission:
-            raise RuntimeError("Notarization did not return a submission ID")
+            raise RuntimeError(f"Notarization did not return a submission ID. Last error: {last}")
     print(f"Notary submission: {submission}",flush=True)
     status = "no verdict"
     for attempt in range(attempts):
-        _, payload = command("wait",submission,"--timeout","60s","--output-format","plist")
+        result, payload = command("wait",submission,"--timeout","60s","--output-format","plist")
         status = payload.get("status", "no verdict")
+        if "status" not in payload:
+            last = diagnosis("wait", attempt, result)
         if status == "Accepted":
             return submission
         if status in ("Invalid","Rejected"):
@@ -109,7 +149,7 @@ def notarize(artifact, profile, *, run=subprocess.run, sleep=time.sleep, attempt
             raise RuntimeError(f"Notarization {status}; see artifact rejection log")
         if attempt + 1 < attempts:
             sleep(5 * (attempt + 1))
-    raise RuntimeError(f"Notarization polling ended with {status}; rerun to resume {submission}")
+    raise RuntimeError(f"Notarization polling ended with {status}; rerun to resume {submission}. Last error: {last or 'none'}")
 
 
 if __name__ == "__main__":
@@ -124,7 +164,10 @@ if __name__ == "__main__":
             with open(sys.argv[2],"rb") as file:
                 validate_metadata(plistlib.load(file),sys.argv[3],sys.argv[4])
         elif sys.argv[1] == "cask":
-            Path(sys.argv[4]).write_text(render_cask(Path(sys.argv[2]).read_text(),sys.argv[3]))
+            version, _ = read_version(Path(sys.argv[5]).read_text())
+            Path(sys.argv[4]).write_text(render_cask(Path(sys.argv[2]).read_text(),sys.argv[3],version))
+        elif sys.argv[1] == "version":
+            print(*read_version(Path(sys.argv[2]).read_text()))
         else:
             raise ValueError("Unknown operation")
     except (ValueError, RuntimeError, subprocess.CalledProcessError) as error:

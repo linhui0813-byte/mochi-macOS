@@ -1,5 +1,6 @@
 import XCTest
 @testable import MochiCore
+import MochiAutomation
 final class MCPTests: XCTestCase {
     func response(_ server: MochiMCPProtocol, _ request: [String:Any]) throws -> [String:Any] {
         try JSONSerialization.jsonObject(with:XCTUnwrap(server.respond(JSONSerialization.data(withJSONObject:request)))) as! [String:Any]

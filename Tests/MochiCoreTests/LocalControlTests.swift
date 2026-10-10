@@ -2,6 +2,22 @@ import XCTest
 import Darwin
 @testable import MochiAutomation
 final class LocalControlTests: XCTestCase {
+    /// Polls without blocking the main actor until `condition` holds or two seconds pass.
+    private func eventually(_ condition: () -> Bool) async throws {
+        let deadline = Date().addingTimeInterval(2)
+        while !condition() && Date() < deadline { try await Task.sleep(nanoseconds:2_000_000) }
+        XCTAssertTrue(condition())
+    }
+    /// Reads one reply line with plain recv, so the client's own size check is not involved.
+    private nonisolated func readLine(_ fd: Int32) throws -> Data {
+        var data = Data(), buffer = [UInt8](repeating:0,count:4096)
+        while true {
+            let count = recv(fd,&buffer,buffer.count,0)
+            guard count > 0 else { throw POSIXError(.ECONNRESET) }
+            if let newline = buffer.prefix(count).firstIndex(of:10) { data.append(contentsOf:buffer[..<newline]); return data }
+            data.append(contentsOf:buffer.prefix(count))
+        }
+    }
     private func path() -> String { "/tmp/mochi-socket-tests-\(UUID().uuidString)/control.sock" }
     private func connect(_ path: String) throws -> Int32 {
         let fd = socket(AF_UNIX,SOCK_STREAM,0)
@@ -17,15 +33,10 @@ final class LocalControlTests: XCTestCase {
         try server.start(path:path) { _ in response }; defer { server.stop() }
         let result = try await Task.detached { [self] in
             let fd = try connect(path); defer { close(fd) }
-            Thread.sleep(forTimeInterval:0.15)
+            // A deliberately slow client: the server must wait for the request instead of closing early.
+            usleep(150_000)
             try LocalControl.sendFrame(Data("hello".utf8),fd:fd)
-            var data = Data(), buffer = [UInt8](repeating:0,count:2048)
-            while true {
-                let count = recv(fd,&buffer,buffer.count,0)
-                guard count > 0 else { throw POSIXError(.EIO) }
-                if let newline = buffer.prefix(count).firstIndex(of:10) { data.append(contentsOf:buffer[..<newline]); return data }
-                data.append(contentsOf:buffer.prefix(count)); Thread.sleep(forTimeInterval:0.001)
-            }
+            return try readLine(fd)
         }.value
         XCTAssertEqual(result,response)
     }
@@ -35,7 +46,7 @@ final class LocalControlTests: XCTestCase {
         var calls = 0; let server = LocalControlServer()
         try server.start(path:path) { data in calls += 1; return data }
         let client = try connect(path); defer { close(client) }
-        try await Task.sleep(nanoseconds:50_000_000)
+        try await eventually { server.activeClientCount == 1 }
         server.stop()
         XCTAssertFalse(FileManager.default.fileExists(atPath:path))
         let result = await Task.detached { () -> Bool in
@@ -61,23 +72,58 @@ final class LocalControlTests: XCTestCase {
     }
 }
 extension LocalControlTests {
-    @MainActor func testOversizedAndIdleClientsDoNotInvokeHandler() async throws {
+    @MainActor func testServerRejectsOversizedRequestsItself() async throws {
         let path = path(), root = URL(fileURLWithPath:path).deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at:root) }
         var calls = 0; let server = LocalControlServer()
         try server.start(path:path) { data in calls += 1; return data }; defer { server.stop() }
-        let rejected = try await Task.detached { [self] in
+        // Raw sends bypass sendFrame's client-side check, so only the server's limit can stop this.
+        let reply = try await Task.detached { [self] in
             let fd = try connect(path); defer { close(fd) }
-            let huge = Data(repeating:65,count:LocalControl.maxFrame+10)
-            do { try LocalControl.sendFrame(huge,fd:fd); return false } catch { return true }
+            let huge = [UInt8](repeating:65,count:LocalControl.maxFrame + 10) + [10]
+            var offset = 0
+            while offset < huge.count {
+                let sent = huge[offset...].withUnsafeBytes { Darwin.send(fd,$0.baseAddress,min(65536,$0.count),0) }
+                if sent <= 0 { break }; offset += sent
+            }
+            return try readLine(fd)
         }.value
-        XCTAssertTrue(rejected)
+        XCTAssertTrue(String(decoding:reply,as:UTF8.self).contains("exceeds the size limit"))
+        XCTAssertEqual(calls,0)
+        // The largest permitted request still reaches the handler.
+        let largest = Data(repeating:66,count:LocalControl.maxFrame)
+        let echoed = try await Task.detached { try LocalControl.request(largest,path:path) }.value
+        XCTAssertEqual(echoed,largest); XCTAssertEqual(calls,1)
+    }
+    @MainActor func testIdleClientIsDisconnectedAfterTheDeadline() async throws {
+        let path = path(), root = URL(fileURLWithPath:path).deletingLastPathComponent()
+        defer { try? FileManager.default.removeItem(at:root) }
+        var calls = 0; let server = LocalControlServer(timeout:0.2)
+        try server.start(path:path) { data in calls += 1; return data }; defer { server.stop() }
         let fd = try connect(path); defer { close(fd) }
         let start = Date()
-        let timedOut = await Task.detached { () -> Bool in
-            do { _ = try LocalControl.receiveFrame(fd:fd); return false } catch { return true }
-        }.value
-        XCTAssertTrue(timedOut); XCTAssertLessThan(Date().timeIntervalSince(start),6.5); XCTAssertEqual(calls,0)
+        let reply = try await Task.detached { [self] in try readLine(fd) }.value
+        XCTAssertTrue(String(decoding:reply,as:UTF8.self).contains("timed out"))
+        XCTAssertLessThan(Date().timeIntervalSince(start),1.5); XCTAssertEqual(calls,0)
+        try await eventually { server.activeClientCount == 0 }
+    }
+    @MainActor func testBusyAppGetsAnAnswerInsteadOfASilentClose() async throws {
+        let path = path(), root = URL(fileURLWithPath:path).deletingLastPathComponent()
+        defer { try? FileManager.default.removeItem(at:root) }
+        var calls = 0; let server = LocalControlServer(timeout:0.4)
+        try server.start(path:path) { data in calls += 1; return data }; defer { server.stop() }
+        let reply = Task.detached { try LocalControl.request(Data("hello".utf8),path:path) }
+        usleep(700_000) // Keep the main actor busy past the start deadline.
+        let text = String(decoding:try await reply.value,as:UTF8.self)
+        XCTAssertTrue(text.contains("busy and did not start"),text); XCTAssertEqual(calls,0)
+    }
+    @MainActor func testSlowHandlerIsReportedAsPossiblyCompleting() async throws {
+        let path = path(), root = URL(fileURLWithPath:path).deletingLastPathComponent()
+        defer { try? FileManager.default.removeItem(at:root) }
+        var calls = 0; let server = LocalControlServer(timeout:0.3)
+        try server.start(path:path) { data in calls += 1; usleep(600_000); return data }; defer { server.stop() }
+        let text = String(decoding:try await Task.detached { try LocalControl.request(Data("hello".utf8),path:path) }.value,as:UTF8.self)
+        XCTAssertTrue(text.contains("may complete it"),text); XCTAssertEqual(calls,1)
     }
     func testSymlinkFolderAndSocketAreRejected() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("mochi-links-\(UUID())")
@@ -98,14 +144,17 @@ extension LocalControlTests {
         let server = LocalControlServer(); try server.start(path:path) { $0 }; defer { server.stop() }
         var sockets: [Int32] = []; defer { sockets.forEach { close($0) } }
         for _ in 0..<8 { sockets.append(try connect(path)) }
-        try await Task.sleep(nanoseconds:100_000_000)
-        let excess = try connect(path); defer { close(excess) }
-        let rejected = await Task.detached { () -> Bool in
-            do { try LocalControl.sendFrame(Data("excess".utf8),fd:excess); _ = try LocalControl.receiveFrame(fd:excess); return false } catch { return true }
+        try await eventually { server.activeClientCount == 8 }
+        // The server may close the ninth client before it is even configured; any failure to exchange is a rejection.
+        let rejected = await Task.detached { [self] () -> Bool in
+            do {
+                let excess = try connect(path); defer { close(excess) }
+                try LocalControl.sendFrame(Data("excess".utf8),fd:excess); _ = try LocalControl.receiveFrame(fd:excess); return false
+            } catch { return true }
         }.value
         XCTAssertTrue(rejected)
         sockets.forEach { shutdown($0,SHUT_RDWR) }
-        try await Task.sleep(nanoseconds:100_000_000)
+        try await eventually { server.activeClientCount == 0 }
         let reply = try await Task.detached { try LocalControl.request(Data("ready".utf8),path:path) }.value
         XCTAssertEqual(reply,Data("ready".utf8))
     }

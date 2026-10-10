@@ -41,7 +41,7 @@ final class PlaybackTests: XCTestCase {
         XCTAssertTrue(failed); XCTAssertFalse(audio.paused); XCTAssertEqual(audio.duration,0)
     }
     @MainActor func testMessagePlaybackSwitchSeekAndConversationStop() {
-        let app = AppModel(demo:true)
+        let app = makeApp(demo:true)
         app.resume()
         var players: [FakePlayer] = []
         app.audio.makePlayer = { _ in let player = FakePlayer(); players.append(player); return player }
@@ -58,7 +58,7 @@ final class PlaybackTests: XCTestCase {
         XCTAssertEqual(players[1].stops,1)
     }
     @MainActor func testSeekStartsInactiveRecordingButCannotInterruptGeneration() {
-        let app = AppModel(demo:true)
+        let app = makeApp(demo:true)
         app.resume()
         let player = FakePlayer(); app.audio.makePlayer = { _ in player }
         _ = app.turn.begin(.generating)

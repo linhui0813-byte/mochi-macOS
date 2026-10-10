@@ -5,16 +5,18 @@ cd "$(dirname "$0")/.."
 : "${MOCHI_NOTARY_PROFILE:?Set a notarytool Keychain profile}"
 [ "$MOCHI_SIGN_ID" != - ] || { echo 'Ad-hoc signing cannot ship' >&2; exit 1; }
 xcrun notarytool history --keychain-profile "$MOCHI_NOTARY_PROFILE" >/dev/null
+versions=$(python3 scripts/release_support.py version VERSION)
+read -r MOCHI_VERSION MOCHI_BUILD <<< "$versions"
 swift test
 python3 -m unittest discover -s scripts/tests
 OUT="$PWD/build/release"
 APP="$OUT/Mochi.app"
-[ ! -e "$OUT/Mochi-${MOCHI_RELEASE_VERSION:-0.4.0}.dmg" ] || { echo 'Release DMG already exists; preserve it before rebuilding' >&2; exit 1; }
+[ ! -e "$OUT/Mochi-$MOCHI_VERSION.dmg" ] || { echo 'Release DMG already exists; preserve it before rebuilding' >&2; exit 1; }
 mkdir -p "$OUT"
 MOCHI_DISTRIBUTION=1 MOCHI_APP_PATH="$APP" ./scripts/build-app.sh
 version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")
 build=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP/Contents/Info.plist")
-python3 scripts/release_support.py metadata "$APP/Contents/Info.plist" "${MOCHI_RELEASE_VERSION:-0.4.0}" "${MOCHI_RELEASE_BUILD:-28}"
+python3 scripts/release_support.py metadata "$APP/Contents/Info.plist" "$MOCHI_VERSION" "$MOCHI_BUILD"
 python3 scripts/release_support.py binary "$APP/Contents/MacOS/Mochi"
 python3 scripts/release_support.py binary "$APP/Contents/MacOS/mochi-mcp"
 python3 scripts/release_support.py distribution "$APP/Contents/MacOS/Mochi" "$APP/Contents/MacOS/mochi-mcp"
@@ -72,4 +74,6 @@ hdiutil detach -quiet "$mount"
 rmdir "$mount"
 mount=""
 shasum -a 256 "$dmg" > "$OUT/SHA256SUMS"
+digest=$(shasum -a 256 "$dmg" | cut -d' ' -f1)
+python3 scripts/release_support.py cask scripts/distribution/mochi.rb.in "$digest" "$OUT/mochi.rb" VERSION
 echo "Release verified: Mochi $version (build $build)"

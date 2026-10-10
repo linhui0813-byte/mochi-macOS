@@ -1,5 +1,7 @@
 import XCTest
 @testable import MochiCore
+import MochiKernel
+import MochiAutomation
 final class AuditPersistenceTests: XCTestCase {
     func testPartialAndUnknownPreferencesDecodeSafely() throws {
         for json in ["{}","{\"coaching\":\"future\"}","{\"speed\":10}","{\"speed\":\"bad\"}"] {

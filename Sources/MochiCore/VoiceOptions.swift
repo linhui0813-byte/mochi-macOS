@@ -1,4 +1,4 @@
-import MochiAutomation
+import MochiKernel
 import Foundation
 
 public struct OpenAIVoiceOptions: Codable, Equatable {

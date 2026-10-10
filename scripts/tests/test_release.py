@@ -46,9 +46,26 @@ class ReleaseTests(unittest.TestCase):
             artifact=Path(d)/"app.zip"; artifact.write_bytes(b"artifact")
             calls=[]
             run=self.runner([(1,b"")] * 3,calls)
-            with self.assertRaisesRegex(RuntimeError,"submission ID"):
+            with self.assertRaisesRegex(RuntimeError,"submission ID.*exit 1.*transport error"):
                 release.notarize(artifact,"profile",run=run,sleep=lambda _:None)
             self.assertEqual(len(calls),3)
+
+    def test_polling_failure_reports_notarytool_stderr(self):
+        with tempfile.TemporaryDirectory() as d:
+            artifact=Path(d)/"app.zip"; artifact.write_bytes(b"artifact")
+            calls=[]
+            run=self.runner([(0,{"id":"s"})] + [(1,b"")] * 3,calls)
+            with self.assertRaisesRegex(RuntimeError,"rerun to resume s.*transport error"):
+                release.notarize(artifact,"profile",run=run,sleep=lambda _:None)
+
+    def test_version_file_is_the_single_validated_source(self):
+        self.assertEqual(release.read_version("MOCHI_VERSION=0.4.0\nMOCHI_BUILD=28\n"),("0.4.0","28"))
+        for text in ("MOCHI_VERSION=0.4\nMOCHI_BUILD=28","MOCHI_VERSION=0.4.0\nMOCHI_BUILD=0","MOCHI_VERSION=0.4.0","MOCHI_VERSION=0.4.0\nMOCHI_BUILD=28\nOTHER=1",
+                     "MOCHI_VERSION=0.4.0\nMOCHI_BUILD=28\nMOCHI_BUILD=29","MOCHI_VERSION=0.4.0; rm -rf /\nMOCHI_BUILD=28"):
+            with self.assertRaises(ValueError): release.read_version(text)
+        repository=(Path(__file__).parents[2]/"VERSION").read_text()
+        version, build = release.read_version(repository)
+        self.assertRegex(version,r"^[0-9]+\.[0-9]+\.[0-9]+$"); self.assertGreater(int(build),0)
 
     def test_changed_artifact_does_not_reuse_old_submission(self):
         with tempfile.TemporaryDirectory() as d:
@@ -69,15 +86,19 @@ class ReleaseTests(unittest.TestCase):
             broken=dict(info); broken[key]="wrong"
             with self.assertRaises(ValueError): release.validate_metadata(broken,"0.3.0","27")
 
-    def test_cask_requires_real_hash_and_explicit_tap_name(self):
-        with self.assertRaises(ValueError): release.render_cask('sha256 "@SHA256@"',"bad")
-        text=release.render_cask('cask "mochi" do\n  sha256 "@SHA256@"\nend',"a"*64)
-        self.assertNotIn("@SHA256@",text)
-        self.assertIn('cask "mochi"',text)
+    def test_cask_requires_real_hash_version_and_explicit_tap_name(self):
+        template='cask "mochi" do\n  version "@VERSION@"\n  sha256 "@SHA256@"\nend'
+        with self.assertRaises(ValueError): release.render_cask(template,"bad","0.4.0")
+        with self.assertRaises(ValueError): release.render_cask(template,"a"*64,"latest")
+        with self.assertRaises(ValueError): release.render_cask('sha256 "@SHA256@"',"a"*64,"0.4.0")
+        text=release.render_cask(template,"a"*64,"0.4.0")
+        self.assertNotIn("@SHA256@",text); self.assertNotIn("@VERSION@",text)
+        self.assertIn('version "0.4.0"',text); self.assertIn('cask "mochi"',text)
 
     def test_template_does_not_conflict_with_its_own_caskroom_token(self):
         template=(Path(__file__).parents[1]/"distribution/mochi.rb.in").read_text()
         self.assertIn('cask "mochi" do',template)
+        self.assertIn('version "@VERSION@"',template)
         self.assertNotIn('conflicts_with cask:',template)
 
     def test_helper_requires_architecture_runtime_identity_and_timestamp(self):
@@ -105,7 +126,7 @@ class ReleaseTests(unittest.TestCase):
         release.validate_distribution_symbols("normal app", "normal helper")
         for probe in ("--tools-probe", "--smoke-test", "--tray-smoke-test", "--single-instance-smoke-test", "MOCHI_INSTANCE_EVENTS_DIR", "MOCHI_INSTANCE_TEST_ID", "--preview", "native-smoke", "mochi-instance-", "MOCHI_E2E_LIBRARY_ROOT", "mochi.e2e.command", "SingleInstanceE2E", "--probe", "--import-environment", "AutomationSmokeClient", "SmokePlaybackPlayer", "ComposerGeometryProbe", "mochi-composer-geometry-probe"):
             with self.assertRaises(ValueError): release.validate_distribution_symbols(probe,"normal")
-        for symbol in ("Credentials", "RealtimeService", "VoiceRenderer", "codexToken", "ElevenLabsSpeech", "ElevenLabsCredential"):
+        for symbol in ("Credentials", "RealtimeService", "VoiceRenderer", "codexToken"):
             with self.assertRaises(ValueError): release.validate_distribution_symbols("normal",symbol)
         for symbol in ("AutomationSmokeClient", "SmokePlaybackPlayer", "toolsProbe", "smokeTray"):
             with self.assertRaises(ValueError): release.validate_distribution_symbols("normal","normal",symbol)
@@ -116,8 +137,11 @@ class ReleaseTests(unittest.TestCase):
         release.check_distribution("app","helper",run=run)
         self.assertEqual(calls,[["strings","app"],["nm","app"],["nm","helper"]])
 
-    def test_distribution_gate_allows_optional_provider_but_rejects_api_key_fallback(self):
-        release.validate_distribution_symbols("api.elevenlabs.io ELEVENLABS_API_KEY", "normal", "ElevenLabsSpeech ElevenLabsCredential")
+    def test_distribution_gate_rejects_retired_providers(self):
+        for retired in ("api.elevenlabs.io", "ELEVENLABS_API_KEY", "ElevenLabsSpeech", "ElevenLabsCredential"):
+            with self.assertRaises(ValueError): release.validate_distribution_symbols(retired,"normal","normal")
+            with self.assertRaises(ValueError): release.validate_distribution_symbols("normal","normal",retired)
+            with self.assertRaises(ValueError): release.validate_distribution_symbols("normal",retired,"normal")
         for retired in ("OPENAI_API_KEY",):
             with self.assertRaises(ValueError): release.validate_distribution_symbols(retired,"normal","normal")
             with self.assertRaises(ValueError): release.validate_distribution_symbols("normal","normal",retired)

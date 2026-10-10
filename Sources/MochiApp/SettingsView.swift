@@ -2,7 +2,7 @@ import SwiftUI
 import MochiCore
 
 struct SettingsView: View {
-    @ObservedObject var app: AppModel
+    @Bindable var app: AppModel
 
     var body: some View {
         TabView(selection:$app.settingsTab) {
@@ -10,7 +10,7 @@ struct SettingsView: View {
                 Section("Connection") {
                     LabeledContent("Sign-in",value:"Codex")
                     Text("Sign in through Codex on this Mac, then check the connection here.").font(.callout).foregroundStyle(.secondary)
-                    TextField("Model",text:$app.modelName).disabled(app.busy)
+                    TextField("Model",text:Bindable(app.settings).modelName).disabled(app.busy)
                     LabeledContent("Status") { Text(app.serviceStatus).foregroundStyle(.secondary) }
                     Button("Check Connection",action:app.checkConnection).disabled(app.busy)
                 }
@@ -32,13 +32,16 @@ struct SettingsView: View {
                 Section("Storage") {
                     LabeledContent("Conversations and recordings",value:"On this Mac")
                     LabeledContent("Sign-in",value:"Your local Codex session")
-                    LabeledContent("ElevenLabs key",value:"macOS Keychain")
-                    Button("Export Library Backup…",action:app.exportLibraryBackup)
-                    Button("Import Library Backup…",action:app.importLibraryBackup)
-                    Button("Show Data Folder…") { NSWorkspace.shared.open(app.store.root) }
+                    Button("Export Library Backup…",action:app.exportLibraryBackup).disabled(app.libraryTransfer != nil)
+                    Button("Import Library Backup…",action:app.importLibraryBackup).disabled(app.libraryTransfer != nil)
+                    Button("Show Data Folder…",action:app.revealDataFolder)
+                    if app.canRestorePreviousLibrary {
+                        Button("Restore Earlier Copy…",action:app.restorePreviousLibrary)
+                        Text("Reinstates the library saved just before the unreadable one. The unreadable file is kept in the data folder.").font(.caption).foregroundStyle(.secondary)
+                    }
                 }
                 Section("Privacy") {
-                    Text("Conversation text, context, and voice messages go to OpenAI through your Codex sign-in. Example text goes to the selected provider: Codex or ElevenLabs. Practice attempts and pitch analysis stay on your Mac.")
+                    Text("Conversation text, context, and voice messages go to OpenAI through your Codex sign-in. Example text is voiced by OpenAI through the same sign-in. Practice attempts and pitch analysis stay on your Mac.")
                     Text("Library backups include conversations and practice audio, not sign-in credentials. Provider processing and retention follow your account settings.").foregroundStyle(.secondary)
                 }
                 Section("Mochi") {

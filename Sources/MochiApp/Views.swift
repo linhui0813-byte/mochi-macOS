@@ -8,7 +8,7 @@ private enum SidebarDestination: Hashable {
 }
 
 struct WorkspaceView: View {
-    @ObservedObject var app: AppModel
+    @Bindable var app: AppModel
     @FocusState private var searchFocused: Bool
     @Environment(\.openSettings) private var openSettings
     private var selection: Binding<SidebarDestination?> {
@@ -37,7 +37,7 @@ struct WorkspaceView: View {
                 Section {
                     ForEach(HistoryScope.allCases) { scope in
                         Label(scope.title,systemImage:scope.icon)
-                            .badge(app.library.history(in:scope).count)
+                            .badge(app.library.count(in:scope))
                             .tag(SidebarDestination.collection(scope))
                             .fontWeight(!app.showExpressions && app.historyScope == scope ? .semibold : .regular)
                     }
@@ -95,6 +95,10 @@ struct WorkspaceView: View {
                 else {
                     VStack(spacing:0) {
                         transcript
+                        if let progress = app.startupProgress ?? app.libraryTransfer {
+                            HStack(spacing:10) { ProgressView().controlSize(.small); Text(progress) }
+                                .font(.callout).frame(maxWidth:.infinity,alignment:.leading).padding(12).background(.bar)
+                        }
                         if let error = app.error { errorBanner(error) }
                         if app.writableConversation { inputBar }
                         else if let chat = app.conversation { historyBanner(chat) }
@@ -363,7 +367,7 @@ struct WorkspaceView: View {
 }
 
 struct PracticeActions: View {
-    @ObservedObject var app: AppModel
+    @Bindable var app: AppModel
     var body: some View {
         HStack(spacing:10) {
             Button(action:app.toggleRecord) {

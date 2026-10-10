@@ -28,7 +28,15 @@ final class SingleInstanceTests: XCTestCase {
         let child = Process(), output = Pipe(); child.executableURL = helper; child.arguments = [url.path]; child.standardOutput = output
         try child.run()
         defer { if child.isRunning { kill(child.processIdentifier,SIGKILL); child.waitUntilExit() } }
-        XCTAssertEqual(output.fileHandleForReading.readData(ofLength:7),Data("locked\n".utf8))
+        // Bounded: a helper that never reports the lock must fail the test, not hang the suite.
+        let locked = expectation(description:"Helper holds the lock")
+        var reported = Data()
+        output.fileHandleForReading.readabilityHandler = { handle in
+            reported.append(handle.availableData)
+            if reported.count >= 7 { handle.readabilityHandler = nil; locked.fulfill() }
+        }
+        wait(for:[locked],timeout:5)
+        XCTAssertEqual(reported.prefix(7),Data("locked\n".utf8))
         XCTAssertNil(try ProcessInstanceLock(url:url))
         kill(child.processIdentifier,SIGKILL); child.waitUntilExit()
         XCTAssertNotNil(try ProcessInstanceLock(url:url))

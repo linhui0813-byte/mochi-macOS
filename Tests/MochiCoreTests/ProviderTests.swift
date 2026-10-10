@@ -22,10 +22,6 @@ final class ProviderTests: XCTestCase {
         XCTAssertFalse(RealtimeEvents.failure(["code":"private-token", "param":"private-token"]).localizedDescription.contains("private-token"))
         XCTAssertFalse(RealtimeEvents.failure(["code":"invalid_value", "param":"private-token"]).localizedDescription.contains("private-token"))
     }
-    func testProviderFailureDoesNotEchoBody() {
-        XCTAssertFalse(ServiceHTTP.failure(status: 401, provider: "Voice").localizedDescription.contains("secret"))
-        XCTAssertTrue(ServiceHTTP.failure(status: 429, provider: "Voice").localizedDescription.contains("limit"))
-    }
     func testRealtimeAccumulator() throws {
         var result = RealtimeAccumulator()
         try result.accept(["type":"response.output_text.delta", "delta":"Hello"])

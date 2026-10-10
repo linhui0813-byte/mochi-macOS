@@ -3,8 +3,8 @@ import AVFoundation
 
 /// Playback stays with the message it belongs to, including during autoplay.
 struct MessagePlayback: View {
-    @ObservedObject var app: AppModel
-    @ObservedObject var audio: AudioController
+    @Bindable var app: AppModel
+    @Bindable var audio: AudioController
     let file: String
     let isUser: Bool
     @State private var fileDuration: Double = 0

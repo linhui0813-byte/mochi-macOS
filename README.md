@@ -28,7 +28,7 @@ brew upgrade --cask xiaolai/tap/mochi
 
 Choose a conversation voice and speaking speed in **Settings → Voices**. You can also set instructions, coaching style, and speech speed for an individual conversation.
 
-Optionally, connect ElevenLabs in **Settings → Voices** to use your own voice for practice examples. Generating new examples uses ElevenLabs credits; replaying saved audio does not. Conversations and transcription continue to use Codex.
+Practice examples are voiced through Codex as well; choose their voice in **Settings → Voices**. Mochi no longer connects to ElevenLabs. Examples you saved with ElevenLabs keep playing, and Mochi leaves a previously saved ElevenLabs key in your Keychain untouched. To remove it, delete the `ELEVENLABS_API_KEY` item in Keychain Access.
 
 ## Conversation templates
 
@@ -94,9 +94,11 @@ External control is off by default. The local connection is restricted to your m
 
 ## Data and backups
 
-Conversations, templates, saved expressions, and practice recordings are stored locally. Conversation and transcription requests are processed by Codex; optional ElevenLabs example generation uses ElevenLabs.
+Conversations, templates, saved expressions, and practice recordings are stored locally. Conversation, transcription, and example-voice requests are processed by Codex.
 
 Use **Export Library Backup…** to keep a portable copy of your library, and **Import Library Backup…** to restore or merge one.
+
+Each save keeps the library as it was just before as `library.previous.json` in the data folder. If the library ever cannot be opened, **Settings → Storage** offers **Restore Earlier Copy**, which reinstates that copy and keeps the unreadable file beside it.
 
 Version 0.4.0 upgrades the library format to **version 3**. Before replacing an older library, Mochi preserves its original bytes in a private `library-before-character-templates-v3*.json` backup. Keep a full current library export before downgrading. An older app cannot open a v3 library and requires restoration of a compatible backup.
 
@@ -110,4 +112,4 @@ python3 -m unittest discover -s scripts/tests
 ./scripts/build-app.sh
 ```
 
-The development app and bundled MCP helper are built into `build/Mochi.app`. Distribution signing and notarization use `scripts/release.sh` with your Developer ID and notarytool Keychain profile.
+The development app and bundled MCP helper are built into `build/Mochi.app`. The release number lives only in `VERSION`. Distribution signing and notarization use `scripts/release.sh` with your Developer ID and notarytool Keychain profile.
