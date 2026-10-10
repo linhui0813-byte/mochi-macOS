@@ -73,7 +73,9 @@ python3 scripts/release_support.py metadata "$mount/Mochi.app/Contents/Info.plis
 hdiutil detach -quiet "$mount"
 rmdir "$mount"
 mount=""
-shasum -a 256 "$dmg" > "$OUT/SHA256SUMS"
-digest=$(shasum -a 256 "$dmg" | cut -d' ' -f1)
+# Published checksums name the file only; an absolute path would leak the build machine's home folder.
+(cd "$OUT" && shasum -a 256 "$(basename "$dmg")") > "$OUT/SHA256SUMS"
+grep -q '/' "$OUT/SHA256SUMS" && { echo 'SHA256SUMS must not contain paths' >&2; exit 1; }
+digest=$(cut -d' ' -f1 "$OUT/SHA256SUMS")
 python3 scripts/release_support.py cask scripts/distribution/mochi.rb.in "$digest" "$OUT/mochi.rb" VERSION
 echo "Release verified: Mochi $version (build $build)"
