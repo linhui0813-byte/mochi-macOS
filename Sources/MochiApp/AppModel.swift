@@ -201,8 +201,12 @@ struct MessageDeletionUndo {
     /// The job that currently owns the turn, so callers can await its end after cancelling it.
     var currentTask: Task<Void, Never>? { task }
     @ObservationIgnored var recordingClock: Task<Void, Never>?
+    /// When the meter last heard sound in the current take, in seconds since it started.
+    @ObservationIgnored var lastAudibleRecordingTime: Double = 0
     /// The recorder stops itself after this many seconds.
     static let recordingLimit: Double = 60
+    /// How long the input must stay quiet before the take warns about it.
+    static let quietWarningDelay: Double = 2
     @ObservationIgnored private var exclusiveTask: (token: UUID, task: Task<Void, Never>)?
     @ObservationIgnored var chooseFile: @MainActor (PanelRequest) -> URL? = FilePanels.choose
     var conversation: Conversation? { library.conversations.first { $0.id == selectedID } }

@@ -297,7 +297,9 @@ struct RecordingFeedback: View {
                 Spacer()
                 Button("Cancel", action: app.cancelRecording)
             }.font(.callout)
-            if let warning = app.recordingWarning { Text(warning).font(.caption).foregroundStyle(.orange) }
+            // The line keeps its height while hidden, so the warning never pushes the layout around.
+            Text(app.recordingWarning ?? " ").font(.caption).foregroundStyle(.orange).lineLimit(1)
+                .opacity(app.recordingWarning == nil ? 0 : 1).accessibilityHidden(app.recordingWarning == nil)
         }
     }
 }
