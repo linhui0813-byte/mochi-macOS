@@ -6,9 +6,12 @@ versions=$(python3 scripts/release_support.py version VERSION)
 read -r MOCHI_VERSION MOCHI_BUILD <<< "$versions"
 SDK_VERSION="$(xcrun --sdk macosx --show-sdk-version)"
 if [ "${MOCHI_DISTRIBUTION:-0}" = 1 ]; then
-    swift build -c release -Xlinker -platform_version -Xlinker macos -Xlinker 14.0 -Xlinker "$SDK_VERSION"
-    # Only the distribution build has exactly the shipped strings: development builds add probe text.
-    python3 scripts/localization.py check .build/out/Intermediates.noindex/Mochi.build/Release
+    # The compiler lists every interface string it sees; only this build has exactly the shipped ones, since
+    # development builds add probe text.
+    STRINGS="$PWD/.build/localized-strings"
+    swift build -c release -Xswiftc -emit-localized-strings -Xswiftc -emit-localized-strings-path -Xswiftc "$STRINGS" \
+        -Xlinker -platform_version -Xlinker macos -Xlinker 14.0 -Xlinker "$SDK_VERSION"
+    python3 scripts/localization.py check "$STRINGS"
 else
     swift build -c release -Xswiftc -DMOCHI_DEVELOPMENT -Xlinker -platform_version -Xlinker macos -Xlinker 14.0 -Xlinker "$SDK_VERSION"
 fi
@@ -31,15 +34,15 @@ for bundle in "$BIN"/*.bundle; do
     if [ -d "$bundle" ]; then cp -R "$bundle" "$APP/Contents/Resources/"; fi
 done
 # macOS takes the app's languages, its menus' language and InfoPlist.strings from the main bundle, and the
-# interface looks its strings up there too, so every translation is copied out of the resource bundle.
+# interface looks its strings up there too. The catalogs are compiled here rather than by the package build,
+# which compiles them on some toolchains and silently skips them on others.
 read -r -a LANGUAGES <<< "$(python3 scripts/localization.py languages)"
-TRANSLATIONS="$BIN/Mochi_MochiApp.bundle/Contents/Resources"
 mkdir -p "$APP/Contents/Resources/en.lproj"
-for language in "${LANGUAGES[@]}"; do
-    for table in Localizable InfoPlist; do
-        [ -f "$TRANSLATIONS/$language.lproj/$table.strings" ] || { echo "Missing $language $table.strings" >&2; exit 1; }
+for catalog in Localizable InfoPlist; do
+    xcrun xcstringstool compile "Localization/$catalog.xcstrings" --output-directory "$APP/Contents/Resources"
+    for language in "${LANGUAGES[@]}"; do
+        [ -s "$APP/Contents/Resources/$language.lproj/$catalog.strings" ] || { echo "Missing $language $catalog.strings" >&2; exit 1; }
     done
-    cp -R "$TRANSLATIONS/$language.lproj" "$APP/Contents/Resources/"
 done
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>

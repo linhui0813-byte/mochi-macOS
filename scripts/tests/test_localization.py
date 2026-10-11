@@ -48,20 +48,38 @@ class LocalizationTests(unittest.TestCase):
         self.assertTrue(any("differs" in p for p in localization.info_plist_problems(catalog, script)))
         self.assertEqual(localization.info_plist_problems(catalog, script.replace("New", "Old")), [])
 
-    def test_source_keys_skip_unshipped_targets_and_refuse_an_empty_build(self):
+    def test_same_named_sources_in_two_modules_are_refused(self):
         with tempfile.TemporaryDirectory() as d:
-            with self.assertRaises(ValueError):
-                localization.source_keys(d)
-            for target, name, key in (
-                ("MochiApp-p.build", "File", "Shipped"), ("mochi-mcp-p.build", "File", "Helper only"),
-                ("MochiApp-p.build", "GeneratedStringSymbols_Localizable", "Echoed from the catalog"),
-            ):
-                folder = Path(d) / target / "Objects-normal" / "arm64"
-                folder.mkdir(parents=True, exist_ok=True)
-                (folder / f"{name}.stringsdata").write_text(
-                    json.dumps({"tables": {"Localizable": [{"key": key}]}}))
-            self.assertEqual(localization.source_keys(d), {"Shipped"})
+            sources = Path(d)
+            for path in ("MochiApp/Automation.swift", "MochiAutomation/Automation.swift", "MochiMCP/main.swift",
+                         "MochiCore/main.swift"):
+                (sources / path).parent.mkdir(parents=True, exist_ok=True)
+                (sources / path).touch()
+            clashes = localization.name_clashes(sources)
+            self.assertEqual(len(clashes), 1)
+            self.assertIn("Automation.swift", clashes[0])
 
+    def test_source_keys_read_only_shipped_sources_and_refuse_an_empty_build(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d).resolve()
+            sources, extracted = root / "Sources", root / "strings"
+            extracted.mkdir()
+            with self.assertRaises(ValueError):
+                localization.source_keys(extracted, sources)
+            for name, source, key in (
+                ("Views", sources / "MochiApp/Views.swift", "Shipped"),
+                ("Domain", sources / "MochiCore/Domain.swift", "Core"),
+                ("main", sources / "MochiMCP/main.swift", "Helper only"),
+                ("Tests", root / "Tests/MochiAppTests/Tests.swift", "Test only"),
+                ("Accessor", root / ".build/resource_bundle_accessor.swift", "Generated"),
+                ("Deleted", sources / "MochiApp/Removed.swift", "Left behind"),
+            ):
+                if name != "Deleted":
+                    source.parent.mkdir(parents=True, exist_ok=True)
+                    source.touch()
+                (extracted / f"{name}.stringsdata").write_text(json.dumps(
+                    {"source": str(source), "tables": {"Localizable": [{"key": key}]}}))
+            self.assertEqual(localization.source_keys(extracted, sources), {"Shipped", "Core"})
 
 if __name__ == "__main__":
     unittest.main()

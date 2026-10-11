@@ -1,7 +1,10 @@
 """Checks that every interface string the compiler extracted has a finished translation in every shipped language.
 
-The compiler writes one .stringsdata file per source file while building. A string that is in the source but missing
-from the catalog would silently show in English, so it fails here instead; a catalog entry no source uses is stale.
+Build with `-Xswiftc -emit-localized-strings -Xswiftc -emit-localized-strings-path -Xswiftc <folder>` and the
+compiler writes one .stringsdata file per source file into <folder>. A string that is in the source but missing from
+the catalog would silently show in English, so it fails here instead; a catalog entry no source uses is stale.
+The catalogs live outside the package: build-app.sh compiles them with xcstringstool, so translations never depend
+on whether a toolchain's package build understands string catalogs.
 """
 import json
 import re
@@ -10,14 +13,13 @@ from pathlib import Path
 
 LANGUAGES = ("zh-Hans", "zh-Hant", "ja", "ko")
 ROOT = Path(__file__).resolve().parents[1]
-CATALOG = ROOT / "Sources/MochiApp/Resources/Localizable.xcstrings"
-INFO_PLIST_CATALOG = ROOT / "Sources/MochiApp/Resources/InfoPlist.xcstrings"
+CATALOG = ROOT / "Localization/Localizable.xcstrings"
+INFO_PLIST_CATALOG = ROOT / "Localization/InfoPlist.xcstrings"
 INFO_PLIST_KEYS = {"NSMicrophoneUsageDescription"}
 BUILD_SCRIPT = ROOT / "scripts/build-app.sh"
-# The MCP helper ships no translations, and test support never ships.
-EXCLUDED_TARGETS = ("mochi-mcp-", "MochiTestSupport-")
-# The build also emits strings data generated from the catalogs themselves; reading it would hide stale entries.
-GENERATED_PREFIX = "GeneratedStringSymbols_"
+SOURCES = ROOT / "Sources"
+# The MCP helper ships no translations; tests and generated files are outside Sources and never ship.
+UNTRANSLATED_MODULES = {"MochiMCP"}
 SPECIFIER = re.compile(r"%(?:(\d+)\$)?(@|lld|lf)")
 
 
@@ -30,21 +32,42 @@ def specifiers(text):
     return [kind for _, kind in sorted(positional)] if positional else [kind for _, kind in found]
 
 
-def source_keys(intermediates):
-    """Every key the compiler extracted from the shipping targets."""
+def shipped(source, sources=SOURCES):
+    """Whether the app ships this source file's strings, judged by where the file lives."""
+    path = Path(source).resolve()
+    # A file deleted since an earlier build leaves its strings data behind; it no longer ships.
+    return (
+        path.is_relative_to(sources) and path.relative_to(sources).parts[0] not in UNTRANSLATED_MODULES
+        and path.is_file()
+    )
+
+
+def name_clashes(sources=SOURCES):
+    """The compiler names each strings file after its source file, so two sources with one name overwrite each
+    other's strings in the shared folder and one file's strings silently go unchecked."""
+    seen = {}
+    for path in sorted(sources.rglob("*.swift")):
+        if path.relative_to(sources).parts[0] not in UNTRANSLATED_MODULES:
+            seen.setdefault(path.name, []).append(str(path.relative_to(sources)))
+    return [f"rename one of {', '.join(paths)}: strings files would collide" for paths in seen.values() if len(paths) > 1]
+
+
+def source_keys(folder, sources=SOURCES):
+    """Every key the compiler extracted from the app's own sources."""
     keys = set()
-    files = [
-        path for path in Path(intermediates).glob("*/Objects-normal/*/*.stringsdata")
-        if not path.parents[2].name.startswith(EXCLUDED_TARGETS) and not path.name.startswith(GENERATED_PREFIX)
-    ]
-    if not files:
-        raise ValueError(f"no .stringsdata files under {intermediates}; build in release configuration first")
-    for path in files:
-        tables = json.loads(path.read_text()).get("tables", {})
+    files = 0
+    for path in Path(folder).rglob("*.stringsdata"):
+        data = json.loads(path.read_text())
+        if not shipped(data.get("source", ""), sources):
+            continue
+        files += 1
+        tables = data.get("tables", {})
         unexpected = set(tables) - {"Localizable"}
         if unexpected:
             raise ValueError(f"{path.name} uses tables {sorted(unexpected)}; Mochi ships only Localizable")
         keys.update(entry["key"] for entry in tables.get("Localizable", []))
+    if not files:
+        raise ValueError(f"no strings data from {sources} under {folder}; build with -emit-localized-strings first")
     return keys
 
 
@@ -89,10 +112,17 @@ def info_plist_problems(catalog, build_script):
     return problems
 
 
-def check(intermediates, catalog_path=CATALOG, info_plist_path=INFO_PLIST_CATALOG, build_script=BUILD_SCRIPT):
-    keys = source_keys(intermediates)
+def check(folder, catalog_path=CATALOG, info_plist_path=INFO_PLIST_CATALOG, build_script=BUILD_SCRIPT):
+    clashes = name_clashes()
+    if clashes:
+        raise ValueError("\n".join(clashes))
+    keys = source_keys(folder)
     problems = catalog_problems(keys, json.loads(Path(catalog_path).read_text()))
     problems += info_plist_problems(json.loads(Path(info_plist_path).read_text()), Path(build_script).read_text())
+    if any(problem.startswith("stale") for problem in problems):
+        problems.append(
+            "An incremental build writes strings only for the files it recompiles: keep the strings folder with its "
+            "build folder, or build clean, before trusting a stale entry.")
     if problems:
         raise ValueError("\n".join(problems))
     return len(keys)
@@ -108,4 +138,4 @@ if __name__ == "__main__":
             sys.exit(str(error))
         print(f"{count} strings translated into {', '.join(LANGUAGES)}")
     else:
-        sys.exit("usage: localization.py languages | check <Intermediates.noindex/Mochi.build/Release>")
+        sys.exit("usage: localization.py languages | check <folder of .stringsdata from -emit-localized-strings>")

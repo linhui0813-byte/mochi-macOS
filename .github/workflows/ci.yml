@@ -60,7 +60,8 @@ jobs:
         run: python3 scripts/release_support.py version VERSION
       - name: No development probes or retired providers ship
         run: |
-          swift build -c release
+          swift build -c release -Xswiftc -emit-localized-strings -Xswiftc -emit-localized-strings-path \
+            -Xswiftc "$PWD/.build/localized-strings"
           python3 scripts/release_support.py distribution .build/release/Mochi .build/release/mochi-mcp
       - name: Every interface string is translated
-        run: python3 scripts/localization.py check .build/out/Intermediates.noindex/Mochi.build/Release
+        run: python3 scripts/localization.py check .build/localized-strings

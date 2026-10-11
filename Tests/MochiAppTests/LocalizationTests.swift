@@ -3,15 +3,32 @@ import XCTest
 
 @testable import MochiApp
 
-/// scripts/localization.py proves the catalog covers the source; these prove the built translations load.
+/// scripts/localization.py proves the catalog covers the source; these prove the compiled translations load.
 final class LocalizationTests: XCTestCase {
     static let languages = ["zh-Hans", "zh-Hant", "ja", "ko"]
+    private var compiled: URL?
 
+    /// Compiles the catalogs the way build-app.sh does, once per test.
     private func translations(_ language: String) throws -> Bundle {
-        let path = try XCTUnwrap(
-            Bundle.module.path(forResource: language, ofType: "lproj"),
-            "\(language) not built in \(Bundle.module.bundlePath): \(Bundle.module.localizations)")
-        return try XCTUnwrap(Bundle(path: path))
+        if compiled == nil {
+            let output = makeTemporaryFolder("mochi-localization")
+            let catalogs = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+                .deletingLastPathComponent().appendingPathComponent("Localization")
+            for catalog in ["Localizable", "InfoPlist"] {
+                let compile = Process()
+                compile.executableURL = URL(fileURLWithPath: "/usr/bin/xcrun")
+                compile.arguments = [
+                    "xcstringstool", "compile", catalogs.appendingPathComponent("\(catalog).xcstrings").path,
+                    "--output-directory", output.path,
+                ]
+                try compile.run()
+                compile.waitUntilExit()
+                XCTAssertEqual(compile.terminationStatus, 0, "xcstringstool could not compile \(catalog)")
+            }
+            compiled = output
+        }
+        let path = try XCTUnwrap(compiled).appendingPathComponent("\(language).lproj").path
+        return try XCTUnwrap(Bundle(path: path), "\(language) was not compiled")
     }
 
     func testEveryShippedLanguageTranslatesTheInterfaceAndTheMicrophonePrompt() throws {
