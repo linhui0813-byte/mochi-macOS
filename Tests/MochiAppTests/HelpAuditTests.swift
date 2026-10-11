@@ -35,7 +35,11 @@ final class HelpAuditTests: XCTestCase {
         app.editEnglish("Finished English")
         app.resume()
         XCTAssertNil(app.conversation?.helpDraft)
-        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("thought.wav").path))
+        XCTAssertFalse(app.library.referencedAudio.contains("thought.wav"))
+        // A recording the earlier copy still names waits for the launch sweep; any other is removed at once.
+        XCTAssertEqual(
+            FileManager.default.fileExists(atPath: root.appendingPathComponent("thought.wav").path),
+            app.store.previousReferencedAudio().contains("thought.wav"))
         app.draft = "Next thought"
         app.startHelp()
         XCTAssertEqual(app.meaning, "Next thought")
@@ -52,10 +56,17 @@ final class HelpAuditTests: XCTestCase {
             try Data([1]).write(to: root.appendingPathComponent(name))
         }
         app.thoughtRecording = "old.wav"
+        // A recording the earlier copy still names waits for the launch sweep; any other is removed at once.
+        func removedUnlessEarlierCopyNames(_ name: String, line: UInt = #line) {
+            XCTAssertFalse(app.library.referencedAudio.contains(name), line: line)
+            XCTAssertEqual(
+                FileManager.default.fileExists(atPath: root.appendingPathComponent(name).path),
+                app.store.previousReferencedAudio().contains(name), line: line)
+        }
         app.thoughtRecording = "new.wav"
-        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("old.wav").path))
+        removedUnlessEarlierCopyNames("old.wav")
         app.discardThoughtRecording()
-        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("new.wav").path))
+        removedUnlessEarlierCopyNames("new.wav")
         app.append(Message(role: "user", text: "Shared", audio: "shared.wav"), to: app.selectedID!)
         app.thoughtRecording = "shared.wav"
         app.discardThoughtRecording()

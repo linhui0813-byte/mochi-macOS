@@ -937,34 +937,6 @@
         }
       }
     },
-    "A backup recording is missing or is not a regular file." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "バックアップの録音が見つからないか、通常のファイルではありません。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "백업 녹음이 없거나 일반 파일이 아닙니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "某个备份录音缺失或不是常规文件。"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "某個備份錄音遺失，或不是一般檔案。"
-          }
-        }
-      }
-    },
     "A connected assistant can read active conversations, configure a conversation, save expressions, open practice, and control playback. Recording always starts with you. The connection stays on this Mac and is available only to your macOS user." : {
       "localizations" : {
         "ja" : {
@@ -13764,6 +13736,34 @@
         }
       }
     },
+    "The recording “%@” is missing or is not a regular file." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "録音「%@」が見つからないか、通常のファイルではありません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "녹음 “%@”이(가) 없거나 일반 파일이 아닙니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "录音“%@”缺失或不是常规文件。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "錄音「%@」遺失，或不是一般檔案。"
+          }
+        }
+      }
+    },
     "The running Mochi window could not be reopened." : {
       "localizations" : {
         "ja" : {
@@ -14404,6 +14404,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "無法輸入此備份。其中可能有遺失的錄音、無效的 ID 或不支援的結構。你的記錄未被更改。"
+          }
+        }
+      }
+    },
+    "This backup has no library.json, so it cannot be imported." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このバックアップには library.json がないため、読み込めません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 백업에는 library.json이 없어 가져올 수 없습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此备份缺少 library.json，因此无法导入。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此備份缺少 library.json，因此無法匯入。"
           }
         }
       }

@@ -78,7 +78,10 @@ final class HistoryModelTests: XCTestCase {
         model.deleteChats([id])
         model.permanentDeleteIDs = [id]
         model.permanentlyDeleteChats()
-        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("chat-only.wav").path))
+        // The earlier copy still names the chat's recording, so the launch sweep removes it, not this deletion.
+        XCTAssertFalse(model.library.referencedAudio.contains("chat-only.wav"))
+        XCTAssertTrue(model.store.previousReferencedAudio().contains("chat-only.wav"))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: root.appendingPathComponent("chat-only.wav").path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: root.appendingPathComponent("shared.wav").path))
         XCTAssertEqual(model.library.expressions.count, 1)
         // Use an expression without audio to avoid decoding the synthetic fixture.

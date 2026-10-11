@@ -1,3 +1,4 @@
+import MochiKernel
 import MochiTestSupport
 import XCTest
 
@@ -101,7 +102,11 @@ final class HistoryTests: XCTestCase {
         XCTAssertThrowsError(try library.validate())
         chat.messages[0].audio = "missing.wav"
         library.conversations = [chat]
-        XCTAssertThrowsError(try LibraryBackup.write(library, from: root, to: root.appendingPathComponent("backup")))
+        XCTAssertThrowsError(try LibraryBackup.write(library, from: root, to: root.appendingPathComponent("backup"))) {
+            // The file system's own error must not hide which recording is missing.
+            XCTAssertEqual(
+                ($0 as? AppFailure)?.message, "The recording “missing.wav” is missing or is not a regular file.")
+        }
         library.conversations.append(chat)
         XCTAssertThrowsError(try library.validate())
     }

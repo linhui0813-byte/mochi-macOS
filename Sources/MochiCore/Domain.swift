@@ -231,6 +231,8 @@ public final class LibraryStore {
         var featureBackup: Bool
     }
     private var known: Known?
+    /// The recordings the earlier copy names, read once per version of that file.
+    private var previousAudio: (identity: FileIdentity, names: Set<String>)?
     public init(root: URL) { self.root = root }
     public func prepare() throws {
         try FileManager.default.createDirectory(
@@ -284,6 +286,18 @@ public final class LibraryStore {
         library.version = 3
         return library
     }
+    /// Recordings the earlier copy names. Restore Earlier Copy can reinstate them, so none may be removed while named here.
+    /// An unreadable earlier copy cannot be restored and protects nothing.
+    public func previousReferencedAudio() -> Set<String> {
+        guard let current = identity(previousFile) else {
+            previousAudio = nil
+            return []
+        }
+        if let previousAudio, previousAudio.identity == current { return previousAudio.names }
+        let names = (try? loadPrevious())?.referencedAudio ?? []
+        previousAudio = (current, names)
+        return names
+    }
     /// Keeps an unreadable library under a second name (never deleting it) and atomically reinstates the earlier copy,
     /// so `library.json` always names one of the two.
     public func restorePrevious() throws -> Library {
@@ -315,8 +329,7 @@ public final class LibraryStore {
     /// generated examples, previews and replaced imports once unused for `cacheLifetime`. Other files are never touched.
     public func cleanupOrphanedAudio(_ library: Library, now: Date = Date()) throws {
         try library.validate()
-        // The earlier copy can be reinstated later, so its recordings stay too.
-        let referenced = library.referencedAudio.union((try? loadPrevious())?.referencedAudio ?? [])
+        let referenced = library.referencedAudio.union(previousReferencedAudio())
         let keys: Set<URLResourceKey> = [
             .isRegularFileKey, .isSymbolicLinkKey, .isDirectoryKey, .contentModificationDateKey,
         ]

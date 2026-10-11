@@ -46,6 +46,44 @@ final class PersistenceModelTests: XCTestCase {
             })
         XCTAssertEqual(makeApp(root: root).conversation?.title, "Before damage")
     }
+    @MainActor func testRestoredEarlierCopyStillHasTheRecordingsItNamesAndBacksUp() async throws {
+        let root = makeTemporaryFolder()
+        let first = makeApp(root: root)
+        let id = try XCTUnwrap(first.selectedID)
+        let name = "recording-\(UUID().uuidString).wav"
+        try Data([1]).write(to: root.appendingPathComponent(name))
+        first.append(Message(role: "user", text: "Hello", audio: name), to: id)
+        first.deleteChats([id])
+        first.permanentDeleteIDs = [id]
+        first.permanentlyDeleteChats()
+        // The earlier copy still names the recording, so it outlives its last use in the library.
+        XCTAssertTrue(FileManager.default.fileExists(atPath: root.appendingPathComponent(name).path))
+        try Data("damaged".utf8).write(to: root.appendingPathComponent("library.json"))
+        let app = makeApp(root: root)
+        app.restorePreviousLibrary()
+        XCTAssertTrue(app.library.conversations.contains { $0.messages.contains { $0.audio == name } })
+        let backup = makeTemporaryFolder().appendingPathComponent("Restored.mochibackup")
+        await app.exportLibraryBackup(to: backup)?.value
+        XCTAssertNil(app.error)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: backup.appendingPathComponent(name).path))
+    }
+    @MainActor func testARecordingNoCopyNamesIsSweptAtTheNextLaunch() throws {
+        let root = makeTemporaryFolder()
+        let first = makeApp(root: root)
+        let id = try XCTUnwrap(first.selectedID)
+        let name = "recording-\(UUID().uuidString).wav"
+        let url = root.appendingPathComponent(name)
+        try Data([1]).write(to: url)
+        first.append(Message(role: "user", text: "Hello", audio: name), to: id)
+        first.deleteChats([id])
+        first.permanentDeleteIDs = [id]
+        first.permanentlyDeleteChats()
+        XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
+        // The next save replaces the earlier copy, so nothing can reinstate the recording any more.
+        XCTAssertTrue(first.save())
+        _ = makeApp(root: root)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
+    }
 
     // MARK: Typing (H1)
 

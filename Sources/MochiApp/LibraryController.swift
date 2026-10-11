@@ -195,9 +195,11 @@ import MochiKernel
     // MARK: Files
 
     /// Removes a recording nothing references any more. `protected` names a file an undo may still restore.
+    /// One the earlier copy still names is left for the launch sweep, which removes it once no copy does.
     func removeUnreferencedRecording(_ name: String?, protected: String? = nil) throws {
         guard let name, !name.isEmpty, URL(fileURLWithPath: name).lastPathComponent == name,
-            !library.referencedAudio.contains(name), protected != name
+            !library.referencedAudio.contains(name), protected != name,
+            !store.previousReferencedAudio().contains(name)
         else { return }
         let url = store.root.appendingPathComponent(name)
         guard FileManager.default.fileExists(atPath: url.path) else { return }

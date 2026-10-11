@@ -150,7 +150,7 @@ public enum LibraryBackup {
         guard !FileManager.default.fileExists(atPath: package.path) else {
             throw AppFailure("Choose a new backup filename; an existing backup is never overwritten.")
         }
-        for name in library.referencedAudio { try validateRegularFile(root.appendingPathComponent(name)) }
+        for name in library.referencedAudio { try requireRecording(name, in: root) }
         try FileManager.default.createDirectory(
             at: package.deletingLastPathComponent(), withIntermediateDirectories: true)
         // Exclusive: a package that appeared since the check above is neither written into nor removed.
@@ -176,12 +176,14 @@ public enum LibraryBackup {
         }
     }
     public static func read(_ package: URL) throws -> Library {
-        try validateRegularFile(package.appendingPathComponent("library.json"))
+        try requireRegularFile(package.appendingPathComponent("library.json")) {
+            AppFailure("This backup has no library.json, so it cannot be imported.", underlying: $0)
+        }
         var library = try JSONDecoder().decode(
             Library.self, from: Data(contentsOf: package.appendingPathComponent("library.json")))
         guard (1...3).contains(library.version) else { throw AppFailure("This backup requires a newer app.") }
         try library.validate()
-        for name in library.referencedAudio { try validateRegularFile(package.appendingPathComponent(name)) }
+        for name in library.referencedAudio { try requireRecording(name, in: package) }
         library.version = 3
         return library
     }
@@ -229,7 +231,7 @@ public enum LibraryBackup {
         -> PreparedImport
     {
         try imported.validate()
-        for name in imported.referencedAudio { try validateRegularFile(package.appendingPathComponent(name)) }
+        for name in imported.referencedAudio { try requireRecording(name, in: package) }
         let chatIDs = Set(local.conversations.map(\.id))
         let expressionIDs = Set(local.expressions.map(\.id))
         var additions = Library()
@@ -286,10 +288,18 @@ public enum LibraryBackup {
             }
         }
     }
-    private static func validateRegularFile(_ url: URL) throws {
-        let v = try url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
-        guard v.isRegularFile == true, v.isSymbolicLink != true else {
-            throw AppFailure("A backup recording is missing or is not a regular file.")
+    /// A recording a backup names must be a regular file in `folder`; the failure names it so it can be found.
+    private static func requireRecording(_ name: String, in folder: URL) throws {
+        try requireRegularFile(folder.appendingPathComponent(name)) {
+            AppFailure("The recording “\(name)” is missing or is not a regular file.", underlying: $0)
         }
+    }
+    /// Throws `failure`, with the file system's reason when there is one, unless `url` is a regular file, not a link.
+    private static func requireRegularFile(_ url: URL, _ failure: (Error?) -> AppFailure) throws {
+        let values: URLResourceValues
+        do { values = try url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey]) } catch {
+            throw failure(error)
+        }
+        guard values.isRegularFile == true, values.isSymbolicLink != true else { throw failure(nil) }
     }
 }
