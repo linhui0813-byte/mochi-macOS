@@ -7,6 +7,8 @@ read -r MOCHI_VERSION MOCHI_BUILD <<< "$versions"
 SDK_VERSION="$(xcrun --sdk macosx --show-sdk-version)"
 if [ "${MOCHI_DISTRIBUTION:-0}" = 1 ]; then
     swift build -c release -Xlinker -platform_version -Xlinker macos -Xlinker 14.0 -Xlinker "$SDK_VERSION"
+    # Only the distribution build has exactly the shipped strings: development builds add probe text.
+    python3 scripts/localization.py check .build/out/Intermediates.noindex/Mochi.build/Release
 else
     swift build -c release -Xswiftc -DMOCHI_DEVELOPMENT -Xlinker -platform_version -Xlinker macos -Xlinker 14.0 -Xlinker "$SDK_VERSION"
 fi
@@ -27,6 +29,17 @@ done
 iconutil -c icns "$ICON_WORK/AppIcon.iconset" -o "$APP/Contents/Resources/AppIcon.icns"
 for bundle in "$BIN"/*.bundle; do
     if [ -d "$bundle" ]; then cp -R "$bundle" "$APP/Contents/Resources/"; fi
+done
+# macOS takes the app's languages, its menus' language and InfoPlist.strings from the main bundle, and the
+# interface looks its strings up there too, so every translation is copied out of the resource bundle.
+read -r -a LANGUAGES <<< "$(python3 scripts/localization.py languages)"
+TRANSLATIONS="$BIN/Mochi_MochiApp.bundle/Contents/Resources"
+mkdir -p "$APP/Contents/Resources/en.lproj"
+for language in "${LANGUAGES[@]}"; do
+    for table in Localizable InfoPlist; do
+        [ -f "$TRANSLATIONS/$language.lproj/$table.strings" ] || { echo "Missing $language $table.strings" >&2; exit 1; }
+    done
+    cp -R "$TRANSLATIONS/$language.lproj" "$APP/Contents/Resources/"
 done
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -53,6 +66,11 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 </dict></plist>
 PLIST
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $MOCHI_VERSION" -c "Set :CFBundleVersion $MOCHI_BUILD" "$APP/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Add :CFBundleDevelopmentRegion string en" -c "Add :CFBundleLocalizations array" \
+    -c "Add :CFBundleLocalizations:0 string en" "$APP/Contents/Info.plist"
+for language in "${LANGUAGES[@]}"; do
+    /usr/libexec/PlistBuddy -c "Add :CFBundleLocalizations: string $language" "$APP/Contents/Info.plist"
+done
 if [ "${MOCHI_DISTRIBUTION:-0}" = 1 ]; then
     : "${MOCHI_SIGN_ID:?Distribution requires MOCHI_SIGN_ID}"
     [ "$MOCHI_SIGN_ID" != - ] || { echo "Distribution cannot use ad-hoc signing" >&2; exit 1; }

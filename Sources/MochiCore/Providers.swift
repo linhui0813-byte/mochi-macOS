@@ -150,7 +150,7 @@ public enum ServiceHTTP {
         guard let error = error as? URLError else {
             return AppFailure("Cannot reach \(provider). Check your connection and retry.", underlying: error)
         }
-        let message: String
+        let message: String.LocalizationValue
         switch error.code {
         case .notConnectedToInternet, .networkConnectionLost, .dataNotAllowed, .internationalRoamingOff:
             message = "Your Mac is offline or lost its connection. Reconnect, then retry."
@@ -292,8 +292,9 @@ public struct RealtimeAccumulator {
                 let error = event["error"] as? [String: Any]
                 transcriptionError =
                     error?["code"] as? String == "audio_unintelligible"
-                    ? "No clear speech was recognized. Check your microphone level or add text."
-                    : "Transcription failed. Your recording is saved; retry transcription or add text."
+                    ? String(localized: "No clear speech was recognized. Check your microphone level or add text.")
+                    : String(
+                        localized: "Transcription failed. Your recording is saved; retry transcription or add text.")
             }
         case "response.done":
             let response = event["response"] as? [String: Any]
@@ -566,7 +567,9 @@ public struct RealtimeService {
             accumulator.transcriptionState = .failed
             accumulator.transcriptionError =
                 (error as? AppFailure)?.message
-                ?? "The transcription connection ended. Your recording is saved; retry transcription or add text."
+                ?? String(
+                    localized:
+                        "The transcription connection ended. Your recording is saved; retry transcription or add text.")
         }
         return accumulator
     }

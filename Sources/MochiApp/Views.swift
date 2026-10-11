@@ -49,7 +49,7 @@ struct WorkspaceView: View {
                             .fontWeight(!app.showExpressions && app.historyScope == scope ? .semibold : .regular)
                     }
                 }
-                ForEach(historyGroups, id: \.title) { group in
+                ForEach(historyGroups, id: \.id) { group in
                     Section {
                         ForEach(group.chats) { chat in
                             SidebarChatRow(app: app, chat: chat)
@@ -187,7 +187,7 @@ struct WorkspaceView: View {
     /// Every group is always present, empty or not. Inserting a whole section into the live
     /// sidebar table (for example Pinned, when switching to Conversations) makes SwiftUI
     /// update NSTableView reentrantly; with a fixed section list only rows change.
-    private var historyGroups: [(title: String, chats: [Conversation])] {
+    private var historyGroups: [(id: String, title: LocalizedStringKey, chats: [Conversation])] {
         let chats = app.visibleChats
         let searching = !app.search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let listed = searching ? [] : chats
@@ -198,12 +198,12 @@ struct WorkspaceView: View {
             app.historyScope == .deleted ? chat.deletedAt ?? chat.updatedAt : chat.updatedAt
         }
         return [
-            ("Search Results", searching ? chats : []),
-            ("Pinned", pinned),
-            ("Today", remaining.filter { calendar.isDateInToday(rowDate($0)) }),
-            ("Yesterday", remaining.filter { calendar.isDateInYesterday(rowDate($0)) }),
+            ("search", "Search Results", searching ? chats : []),
+            ("pinned", "Pinned", pinned),
+            ("today", "Today", remaining.filter { calendar.isDateInToday(rowDate($0)) }),
+            ("yesterday", "Yesterday", remaining.filter { calendar.isDateInYesterday(rowDate($0)) }),
             (
-                "Earlier",
+                "earlier", "Earlier",
                 remaining.filter { !calendar.isDateInToday(rowDate($0)) && !calendar.isDateInYesterday(rowDate($0)) }
             ),
         ]
@@ -290,7 +290,8 @@ struct WorkspaceView: View {
         return HStack(alignment: .top, spacing: 8) {
             if isUser { Spacer(minLength: 60) }
             VStack(alignment: isUser ? .trailing : .leading, spacing: 5) {
-                Text(isUser ? "You" : (message.speakerName ?? "Mochi")).font(.caption).foregroundStyle(.secondary)
+                Text(isUser ? String(localized: "You") : (message.speakerName ?? "Mochi")).font(.caption)
+                    .foregroundStyle(.secondary)
                 VStack(alignment: .leading, spacing: 8) {
                     Text(message.displayText)
                         .font(.system(size: 15))
@@ -455,12 +456,12 @@ private struct SidebarChatRow: View {
             )
             .font(.system(size: 18)).foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: 4) {
-                Text(chat.title).fontWeight(.medium).lineLimit(1)
+                Text(chat.displayTitle).fontWeight(.medium).lineLimit(1)
                 Text(
                     chat.matchingMessage(app.search)?.text
                         ?? (chat.draft.isEmpty
-                            ? chat.messages.last?.text ?? "New conversation"
-                            : "Draft: " + chat.draft)
+                            ? chat.messages.last?.text ?? String(localized: "New conversation")
+                            : String(localized: "Draft: \(chat.draft)"))
                 )
                 .font(.caption).foregroundStyle(.secondary).lineLimit(1)
             }
@@ -471,7 +472,7 @@ private struct SidebarChatRow: View {
                 Image(systemName: "ellipsis").frame(width: 20, height: 24)
             }.menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
                 .help("Conversation Actions")
-                .accessibilityLabel("Actions for \(chat.title)")
+                .accessibilityLabel("Actions for \(chat.displayTitle)")
         }.padding(.vertical, 7)
     }
 }

@@ -30,6 +30,8 @@ Choose a conversation voice and speaking speed in **Settings → Voices**. You c
 
 Practice examples are voiced through Codex as well; choose their voice in **Settings → Voices**. Mochi no longer connects to ElevenLabs. Examples you saved with ElevenLabs keep playing, and Mochi leaves a previously saved ElevenLabs key in your Keychain untouched. To remove it, delete the `ELEVENLABS_API_KEY` item in Keychain Access.
 
+Mochi's menus, buttons and messages are available in English, Simplified Chinese, Traditional Chinese, Japanese and Korean, following your Mac's language. To choose a language for Mochi alone, open **System Settings → General → Language & Region → Applications**. Conversations and practice stay in English.
+
 ## Conversation templates
 
 Mochi 0.4.0 includes six built-in templates:

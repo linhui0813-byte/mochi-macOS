@@ -2,7 +2,7 @@
 import PackageDescription
 
 let package = Package(
-    name: "Mochi", platforms: [.macOS(.v14)],
+    name: "Mochi", defaultLocalization: "en", platforms: [.macOS(.v14)],
     products: [
         .executable(name: "Mochi", targets: ["MochiApp"]), .executable(name: "mochi-mcp", targets: ["MochiMCP"]),
     ],

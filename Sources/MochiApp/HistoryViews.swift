@@ -49,7 +49,7 @@ struct RenameChatView: View {
             }
         }.padding(24).frame(width: 420)
             .onAppear {
-                title = app.library.conversations.first(where: { $0.id == id })?.title ?? ""
+                title = app.library.conversations.first(where: { $0.id == id })?.displayTitle ?? ""
                 focused = true
             }
     }
@@ -152,15 +152,15 @@ private struct HistoryRow: View {
             )
             .foregroundStyle(.secondary).frame(width: 20)
             VStack(alignment: .leading, spacing: 4) {
-                Text(chat.title).fontWeight(.medium).lineLimit(1)
-                Text(chat.matchingMessage(query)?.text ?? chat.messages.last?.text ?? "No messages")
+                Text(chat.displayTitle).fontWeight(.medium).lineLimit(1)
+                Text(chat.matchingMessage(query)?.text ?? chat.messages.last?.text ?? String(localized: "No messages"))
                     .foregroundStyle(.secondary).lineLimit(1)
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 4) {
                 Text(chat.deletedAt ?? chat.updatedAt, format: .dateTime.month(.abbreviated).day())
                     .foregroundStyle(.secondary)
-                Text("\(chat.messages.count) \(chat.messages.count == 1 ? "message" : "messages")").font(.caption)
+                Text(chat.messages.count == 1 ? "1 message" : "\(chat.messages.count) messages").font(.caption)
                     .foregroundStyle(.secondary)
             }
         }.padding(.vertical, 5)
@@ -201,7 +201,9 @@ struct DeleteHistoryConfirmation: View {
         VStack(alignment: .leading, spacing: 16) {
             Label("Delete Permanently", systemImage: "trash").font(.title2).fontWeight(.semibold)
             Text(
-                "Permanently delete \(app.permanentDeleteIDs.count) \(app.permanentDeleteIDs.count == 1 ? "conversation" : "conversations")?"
+                app.permanentDeleteIDs.count == 1
+                    ? "Permanently delete 1 conversation?"
+                    : "Permanently delete \(app.permanentDeleteIDs.count) conversations?"
             ).font(.headline)
             Text(
                 "This cannot be undone. Messages and unused recordings will be removed from the current library. Saved expressions and their recordings will be kept."

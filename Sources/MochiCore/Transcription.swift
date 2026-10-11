@@ -152,7 +152,7 @@ extension RealtimeService {
             throw AppFailure("Transcription timed out. Your recording is saved; retry or add text.")
         } catch let error as AppFailure { throw error } catch let error as URLError {
             throw AppFailure(
-                ServiceHTTP.transportFailure(error, provider: "OpenAI").message + " Your recording is saved.",
+                "\(ServiceHTTP.transportFailure(error, provider: "OpenAI").message) Your recording is saved.",
                 underlying: error)
         } catch {
             throw AppFailure(
@@ -218,7 +218,8 @@ extension RealtimeService {
         try Task.checkCancellation()
         guard accumulator.transcriptionState == .completed else {
             throw AppFailure(
-                accumulator.transcriptionError ?? "Transcription failed. Your recording is saved; retry or add text.")
+                verbatim: accumulator.transcriptionError
+                    ?? String(localized: "Transcription failed. Your recording is saved; retry or add text."))
         }
         return accumulator.inputTranscript
     }

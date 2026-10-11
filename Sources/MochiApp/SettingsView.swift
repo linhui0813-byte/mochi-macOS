@@ -13,7 +13,7 @@ struct SettingsView: View {
                     TextField("Model", text: Bindable(app.settings).modelName).textFieldStyle(.roundedBorder).disabled(
                         app.busy
                     )
-                    .onChange(of: app.settings.modelName) { app.serviceStatus = "Not checked" }
+                    .onChange(of: app.settings.modelName) { app.serviceStatus = String(localized: "Not checked") }
                     LabeledContent("Status") { Text(app.serviceStatus).foregroundStyle(.secondary) }
                     Button("Check Connection", action: app.checkConnection).disabled(app.busy)
                 }

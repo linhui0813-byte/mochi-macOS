@@ -31,7 +31,7 @@ extension AppModel {
     }
     /// Picker starts need only valid copied settings (as MCP instantiation does); editors and the manager need a writable template.
     var templateDraftIssue: String? {
-        guard let draft = templateDraft else { return "Choose a template or create one." }
+        guard let draft = templateDraft else { return String(localized: "Choose a template or create one.") }
         do {
             if templatePresentation == .picker {
                 _ = try draft.value.conversation()

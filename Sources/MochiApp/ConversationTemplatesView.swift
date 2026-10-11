@@ -115,7 +115,9 @@ struct ConversationTemplatesView: View {
                         try app.deleteTemplate(id: t.id, revision: t.revision)
                         app.templateDraft = nil
                         error = nil
-                    } catch { self.error = (error as? AppFailure)?.message ?? "Could not delete template." }
+                    } catch {
+                        self.error = (error as? AppFailure)?.message ?? String(localized: "Could not delete template.")
+                    }
                     pendingDelete = nil
                 }
             }
@@ -126,8 +128,8 @@ struct ConversationTemplatesView: View {
                 Section(builtin ? "Built-in" : "My Templates") {
                     ForEach(values.filter { $0.isBuiltin == builtin }) { t in
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(t.title).fontWeight(.medium)
-                            Text(t.description).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                            Text(t.displayTitle).fontWeight(.medium)
+                            Text(t.displayDescription).font(.caption).foregroundStyle(.secondary).lineLimit(2)
                         }.frame(maxWidth: .infinity, alignment: .leading).tag(t.id)
                     }
                 }
@@ -148,16 +150,19 @@ struct ConversationTemplatesView: View {
     @ViewBuilder private var preview: some View {
         if let draft = app.templateDraft {
             VStack(alignment: .leading, spacing: 12) {
-                Text(draft.value.title).font(.headline)
-                Text(draft.value.description).foregroundStyle(.secondary)
+                Text(draft.value.displayTitle).font(.headline)
+                Text(draft.value.displayDescription).foregroundStyle(.secondary)
                 if mode == .picker {
                     ConversationSettingsFields(
                         instructions: draftBinding.instructions,
                         characterName: draftBinding.characterName, preferences: draftBinding.preferences)
                 } else {
-                    Text(draft.value.instructions.isEmpty ? "No additional instructions" : draft.value.instructions)
-                        .font(.callout)
-                    Text("Character: \(draft.value.characterName ?? "Default")").font(.caption)
+                    Text(
+                        draft.value.instructions.isEmpty
+                            ? String(localized: "No additional instructions") : draft.value.instructions
+                    )
+                    .font(.callout)
+                    Text(draft.value.characterName.map { "Character: \($0)" } ?? "Character: Default").font(.caption)
                 }
                 sourceStatus(draft)
                 HStack {
@@ -226,7 +231,8 @@ struct ConversationTemplatesView: View {
             if mode == .picker {
                 Button("Start Conversation") {
                     do { if let t = app.templateDraft?.value { _ = try app.startTemplateSnapshot(t) } } catch {
-                        self.error = (error as? AppFailure)?.message ?? "Could not start conversation."
+                        self.error =
+                            (error as? AppFailure)?.message ?? String(localized: "Could not start conversation.")
                     }
                 }.keyboardShortcut(.defaultAction).disabled(validationError != nil || app.busy)
             } else if mode == .editor {
@@ -262,6 +268,9 @@ struct ConversationTemplatesView: View {
             }
             error = nil
             app.closeTemplateEditor()
-        } catch { self.error = (error as? AppFailure)?.message ?? "Could not save template. Your draft is kept." }
+        } catch {
+            self.error =
+                (error as? AppFailure)?.message ?? String(localized: "Could not save template. Your draft is kept.")
+        }
     }
 }

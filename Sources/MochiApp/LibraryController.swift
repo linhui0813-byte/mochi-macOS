@@ -64,7 +64,7 @@ import MochiKernel
         AppIdentity.sweepStaleMigrations(in: support)
         if AppIdentity.needsMigration(in: support) {
             readable = false
-            startupProgress = "Moving your library into Mochi’s folder…"
+            startupProgress = String(localized: "Moving your library into Mochi’s folder…")
             Task { [weak self] in
                 let outcome = await Task.detached { Result { try AppIdentity.prepareDataDirectory(in: support) } }.value
                 guard let self else { return }
@@ -89,9 +89,12 @@ import MochiKernel
         MochiLog.failure(MochiLog.library, "Prepare data folder", error)
         readable = false
         dataFolder = AppIdentity.recoveryFolder(in: support)
+        let cause = AppFailure.message(for: error, fallback: "the folder could not be prepared.")
         report(
-            "Mochi could not move your library into its folder: \(AppFailure.message(for:error,fallback:"the folder could not be prepared.")) Your data has not been changed. Reveal the data folder from Settings to review it."
-        )
+            String(
+                localized:
+                    "Mochi could not move your library into its folder: \(cause) Your data has not been changed. Reveal the data folder from Settings to review it."
+            ))
     }
     /// Loads the library, or explains why it cannot be opened and offers the earlier copy when one exists.
     private func load(isolated: Bool) {
@@ -110,10 +113,15 @@ import MochiKernel
             canRestorePrevious = (try? store.loadPrevious()) != nil
             let cause = AppFailure.message(for: error, fallback: "The library file is damaged or incomplete.")
             report(
-                "Your saved library could not be opened. \(cause) It has not been overwritten. "
-                    + (canRestorePrevious
-                        ? "Choose Restore Earlier Copy in Settings → Storage to reinstate the version saved just before it."
-                        : "Reveal the data folder from Settings to recover it."))
+                canRestorePrevious
+                    ? String(
+                        localized:
+                            "Your saved library could not be opened. \(cause) It has not been overwritten. Choose Restore Earlier Copy in Settings → Storage to reinstate the version saved just before it."
+                    )
+                    : String(
+                        localized:
+                            "Your saved library could not be opened. \(cause) It has not been overwritten. Reveal the data folder from Settings to recover it."
+                    ))
         }
     }
     /// Reinstates the copy kept before the last save, setting the unreadable file aside.
@@ -174,11 +182,13 @@ import MochiKernel
         library = normalized
     }
     /// The text for a failed write. Disk space is blamed only when it is the cause.
-    static func persistenceMessage(_ error: Error, action: String, fallback: String, diskFull: String) -> String {
+    static func persistenceMessage(
+        _ error: Error, action: String, fallback: String.LocalizationValue, diskFull: String.LocalizationValue
+    ) -> String {
         let invariant = (error as? AppFailure)?.underlying is LibraryInvariantViolation
         MochiLog.failure(MochiLog.library, action, error, level: invariant ? .fault : .error)
         assert(!invariant, "\(action): the in-memory library violated an invariant")
-        if ErrorChain.isOutOfSpace(error) { return diskFull }
+        if ErrorChain.isOutOfSpace(error) { return String(localized: diskFull) }
         return AppFailure.message(for: error, fallback: fallback)
     }
 
@@ -198,7 +208,7 @@ import MochiKernel
     /// The snapshot's recordings are hard-linked first, so deleting or replacing one meanwhile cannot fail the backup.
     func exportBackup(to url: URL) -> Task<Void, Error>? {
         guard readable, transfer == nil else { return nil }
-        transfer = "Exporting your library backup…"
+        transfer = String(localized: "Exporting your library backup…")
         let snapshot = library
         let staging = store.root.appendingPathComponent("\(LibraryStore.exportStagingPrefix)\(UUID().uuidString)")
         let retained = Result { try Self.link(snapshot.referencedAudio, from: store.root, into: staging) }
@@ -226,7 +236,7 @@ import MochiKernel
     /// so edits made meanwhile are kept. The task returns the import summary.
     func importBackup(from url: URL) -> Task<String, Error>? {
         guard readable, transfer == nil else { return nil }
-        transfer = "Importing your library backup…"
+        transfer = String(localized: "Importing your library backup…")
         let snapshot = library
         let root = store.root
         return Task { [weak self] in

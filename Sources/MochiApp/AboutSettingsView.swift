@@ -59,7 +59,7 @@ struct AboutSettingsView: View {
         let info = Bundle.main.infoDictionary ?? [:]
         guard let version = info["CFBundleShortVersionString"] as? String,
             let build = info["CFBundleVersion"] as? String
-        else { return "Development build" }
-        return "Version \(version) (build \(build))"
+        else { return String(localized: "Development build") }
+        return String(localized: "Version \(version) (build \(build))")
     }
 }

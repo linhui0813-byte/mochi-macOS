@@ -60,7 +60,9 @@ public struct Message: Codable, Identifiable, Equatable {
         else { return nil }
         return text
     }
-    public var displayText: String { contextText ?? (role == "user" && audio != nil ? "Voice recording" : text) }
+    public var displayText: String {
+        contextText ?? (role == "user" && audio != nil ? String(localized: "Voice recording") : text)
+    }
     private static let legacyLabels = ["Voice message (transcript unavailable)", "Voice message · awaiting transcript"]
     private enum CodingKeys: String, CodingKey {
         case id, role, text, audio, date, transcriptionState, transcriptionError, speakerName
@@ -110,7 +112,13 @@ public struct Conversation: Codable, Identifiable {
     public var voiceIntroduced = false
     public var isDeleted: Bool { deletedAt != nil }
     public var updatedAt: Date { messages.last?.date ?? date }
-    public init(title: String = "A new conversation") { self.title = title }
+    /// The stored title of an untitled conversation. It stays English on disk: older libraries are read by comparing to it.
+    public static let untitled = "A new conversation"
+    public init(title: String = Conversation.untitled) { self.title = title }
+    /// The title as shown: an untitled conversation reads in the app's language.
+    public var displayTitle: String {
+        !customTitle && title == Self.untitled ? String(localized: "A new conversation") : title
+    }
     private enum CodingKeys: String, CodingKey {
         case id, title, messages, date, pinned, archived, deletedAt, wasArchivedBeforeDeletion, customTitle, draft,
             helpDraft, voiceIntroduced, instructions, preferences, characterName, sourceTemplateID,
@@ -128,7 +136,7 @@ public struct Conversation: Codable, Identifiable {
         wasArchivedBeforeDeletion = try c.decodeIfPresent(Bool.self, forKey: .wasArchivedBeforeDeletion) ?? false
         customTitle =
             try c.decodeIfPresent(Bool.self, forKey: .customTitle)
-            ?? (title != "A new conversation" && messages.isEmpty)
+            ?? (title != Self.untitled && messages.isEmpty)
         draft = try c.decodeIfPresent(String.self, forKey: .draft) ?? ""
         helpDraft = try c.decodeIfPresent(HelpDraft.self, forKey: .helpDraft)
         characterName = try c.decodeIfPresent(String.self, forKey: .characterName)
@@ -359,7 +367,7 @@ public final class LibraryStore {
             throw AppFailure(
                 "Mochi found an inconsistency in your library and did not save it. Your saved library is unchanged.",
                 underlying: LibraryInvariantViolation(
-                    reason: AppFailure.message(for: error, fallback: String(describing: error))))
+                    reason: (error as? AppFailure)?.message ?? String(describing: error)))
         }
         var library = library
         library.version = 3

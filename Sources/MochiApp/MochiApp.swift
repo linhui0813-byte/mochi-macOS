@@ -6,6 +6,7 @@ import SwiftUI
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @State private var model: AppModel
     init() {
+        DevelopmentLaunch.pinSmokeLanguage()
         SingleInstanceController.shared.enforce()
         _model = State(
             initialValue: AppModel(
@@ -126,10 +127,10 @@ import SwiftUI
         guard !TrayController.finishWork(model) else { return .terminateNow }
         tray.showWindow()
         let alert = NSAlert()
-        alert.messageText = "Mochi couldn’t save your library"
-        alert.informativeText = model.error ?? "Your latest changes were not saved."
-        alert.addButton(withTitle: "Keep Mochi Open")
-        alert.addButton(withTitle: "Quit Without Saving")
+        alert.messageText = String(localized: "Mochi couldn’t save your library")
+        alert.informativeText = model.error ?? String(localized: "Your latest changes were not saved.")
+        alert.addButton(withTitle: String(localized: "Keep Mochi Open"))
+        alert.addButton(withTitle: String(localized: "Quit Without Saving"))
         return alert.runModal() == .alertSecondButtonReturn ? .terminateNow : .terminateCancel
     }
     func applicationWillTerminate(_ notification: Notification) {
@@ -162,6 +163,21 @@ enum DevelopmentLaunch {
             + SHA256.hash(data: Data(root.standardizedFileURL.path.utf8)).prefix(16).map {
                 String(format: "%02x", $0)
             }.joined()
+    }
+    /// Smoke runs compare English interface text, so they run in English whatever the Mac's language, unless the
+    /// launch names a language to capture translated screenshots. Must run before anything reads a localized
+    /// string: the bundle fixes its language on first use.
+    static func pinSmokeLanguage() {
+        #if MOCHI_DEVELOPMENT
+            let smoke = [
+                "--smoke-test", "--tray-smoke-test", "--single-instance-smoke-test", "--tools-probe", "--probe",
+            ]
+            guard smoke.contains(where: CommandLine.arguments.contains) else { return }
+            var arguments = UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)
+            guard arguments["AppleLanguages"] == nil else { return }
+            arguments["AppleLanguages"] = ["en"]
+            UserDefaults.standard.setVolatileDomain(arguments, forName: UserDefaults.argumentDomain)
+        #endif
     }
     static var demo: Bool {
         #if MOCHI_DEVELOPMENT

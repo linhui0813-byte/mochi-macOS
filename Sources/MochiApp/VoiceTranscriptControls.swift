@@ -70,7 +70,7 @@ struct VoiceTranscriptControls: View {
                         if app.editTranscript(message.id, text: text) {
                             editing = false
                         } else {
-                            saveError = app.error ?? "The transcript could not be saved."
+                            saveError = app.error ?? String(localized: "The transcript could not be saved.")
                         }
                     }
                     .buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)

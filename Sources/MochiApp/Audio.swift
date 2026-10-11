@@ -261,7 +261,7 @@ enum AudioFile {
             state.pointee = .haveData
             return source
         }
-        guard status != .error, error == nil else { throw AppFailure(failure.message, underlying: error) }
+        guard status != .error, error == nil else { throw AppFailure(verbatim: failure.message, underlying: error) }
         return Array(UnsafeBufferPointer(start: targetData[0], count: Int(target.frameLength)))
     }
     /// Cancelling the calling task stops with `CancellationError`, never a partial or empty contour.

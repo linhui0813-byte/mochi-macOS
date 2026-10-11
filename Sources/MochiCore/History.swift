@@ -7,9 +7,9 @@ public enum HistoryScope: String, CaseIterable, Identifiable {
     public var id: String { rawValue }
     public var title: String {
         switch self {
-        case .active: return "Conversations"
-        case .archived: return "Archived"
-        case .deleted: return "Recently Deleted"
+        case .active: return String(localized: "Conversations")
+        case .archived: return String(localized: "Archived")
+        case .deleted: return String(localized: "Recently Deleted")
         }
     }
     public var icon: String {

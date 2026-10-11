@@ -159,7 +159,7 @@ struct MessageDeletionUndo {
     @ObservationIgnored private var noticeKeepsDeletionUndo = false
     func showMessageDeletedNotice() {
         noticeKeepsDeletionUndo = true
-        notice = "Message deleted."
+        notice = String(localized: "Message deleted.")
     }
     @ObservationIgnored private var noticeTask: Task<Void, Never>?
     /// The timer that will clear the current notice, so a caller can wait for it to run.
@@ -190,7 +190,7 @@ struct MessageDeletionUndo {
     var settingsOpen = false
     var recordingSeconds = 0
     var recordingMeaning = false
-    var serviceStatus = "Not checked"
+    var serviceStatus = String(localized: "Not checked")
     let settings: PreferencesStore
     var settingsTab = "conversation"
     let audio: AudioController
@@ -217,17 +217,24 @@ struct MessageDeletionUndo {
     var status: String {
         switch turn.activity {
         case .recording:
-            if recordingMeaning { return "Recording your thought · finish to review" }
+            if recordingMeaning { return String(localized: "Recording your thought · finish to review") }
             return practice
-                ? "Recording your attempt · stays on this Mac" : "Recording · finish to send to \(displayCharacterName)"
-        case .requestingPermission: return "Waiting for microphone permission"
+                ? String(localized: "Recording your attempt · stays on this Mac")
+                : String(localized: "Recording · finish to send to \(displayCharacterName)")
+        case .requestingPermission: return String(localized: "Waiting for microphone permission")
         case .generating:
-            if greetingActive { return "Preparing \(displayCharacterName)’s greeting…" }
-            return practice ? "Preparing your expression…" : "\(displayCharacterName) is thinking…"
+            if greetingActive { return String(localized: "Preparing \(displayCharacterName)’s greeting…") }
+            return practice
+                ? String(localized: "Preparing your expression…")
+                : String(localized: "\(displayCharacterName) is thinking…")
         case .playing:
-            if audio.paused { return "Playback paused" }
-            return speaking ? "\(displayCharacterName) is speaking" : "Playing your recording"
-        case .idle: return practice ? "Conversation paused · microphone off" : "Ready when you are · microphone off"
+            if audio.paused { return String(localized: "Playback paused") }
+            return speaking
+                ? String(localized: "\(displayCharacterName) is speaking") : String(localized: "Playing your recording")
+        case .idle:
+            return practice
+                ? String(localized: "Conversation paused · microphone off")
+                : String(localized: "Ready when you are · microphone off")
         }
     }
     /// - Parameter applicationSupport: where the managed library lives when `libraryRoot` is nil; tests pass a temporary folder.
@@ -287,7 +294,9 @@ struct MessageDeletionUndo {
     }
     @discardableResult func save() -> Bool { libraryController.save() }
     func scheduleSave() { libraryController.scheduleSave() }
-    func persistenceMessage(_ error: Error, action: String, fallback: String, diskFull: String) -> String {
+    func persistenceMessage(
+        _ error: Error, action: String, fallback: String.LocalizationValue, diskFull: String.LocalizationValue
+    ) -> String {
         LibraryController.persistenceMessage(error, action: action, fallback: fallback, diskFull: diskFull)
     }
     func restorePreviousLibrary() {
@@ -304,7 +313,9 @@ struct MessageDeletionUndo {
                 historyScope = chat.isDeleted ? .deleted : chat.archived ? .archived : .active
             }
             draft = conversation?.draft ?? ""
-            notice = "Restored the earlier copy of your library. The unreadable file was kept in the data folder."
+            notice = String(
+                localized: "Restored the earlier copy of your library. The unreadable file was kept in the data folder."
+            )
         } catch {
             self.error = persistenceMessage(
                 error, action: "Restore earlier library",
@@ -314,8 +325,10 @@ struct MessageDeletionUndo {
     }
     func revealDataFolder() {
         guard libraryController.revealDataFolder() else {
-            error =
-                "The data folder could not be opened. In Finder, choose Go → Go to Folder and enter ~/Library/Application Support."
+            error = String(
+                localized:
+                    "The data folder could not be opened. In Finder, choose Go → Go to Folder and enter ~/Library/Application Support."
+            )
             return
         }
     }
@@ -345,7 +358,7 @@ struct MessageDeletionUndo {
     /// Unlike Stop, leaves transcriptions running and does not force a save.
     func cancelHelpWork() {
         if !practice && task != nil && turn.activity == .generating {
-            notice = "Your pending reply was cancelled. You can retry it when you return."
+            notice = String(localized: "Your pending reply was cancelled. You can retry it when you return.")
         }
         let recording = cancelTurn()
         persistHelpDraft()
@@ -390,9 +403,10 @@ struct MessageDeletionUndo {
     /// Runs `body` as the only active job. Finishing, cancellation and error reporting live here, so every job
     /// checks the same invariant: no state changes after the job is superseded.
     @discardableResult func runExclusive(
-        _ context: String, progress: String? = nil, onFailure: (@MainActor () -> Void)? = nil,
+        _ context: String, progress: String.LocalizationValue? = nil, onFailure: (@MainActor () -> Void)? = nil,
         _ body: @escaping @MainActor (ExclusiveJob) async throws -> Void
     ) -> UUID {
+        let progress = progress.map { String(localized: $0) }
         let token = turn.begin(.generating)
         error = nil
         if let progress { helpProgress = progress }
@@ -429,7 +443,8 @@ struct MessageDeletionUndo {
             try libraryController.removeUnreferencedRecording(name, protected: messageDeletionUndo?.message.audio)
         } catch {
             MochiLog.failure(MochiLog.library, "Remove discarded recording", error, level: .info)
-            self.error = "Could not remove the discarded recording. Reveal the data folder in Settings to review it."
+            self.error = String(
+                localized: "Could not remove the discarded recording. Reveal the data folder in Settings to review it.")
         }
     }
     func fail(_ failure: Error, token: UUID, context: String = "Operation") {

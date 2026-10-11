@@ -5,9 +5,10 @@ import MochiKernel
 /// Playback and recording, arbitrated by the shared turn machine.
 extension AppModel {
     var microphoneLabel: String {
-        if turn.activity == .recording { return "Finish Recording" }
-        if greetingActive { return "Skip Greeting and Start Recording" }
-        return conversation?.voiceIntroduced == true ? "Record Voice Message" : "Start Voice Conversation"
+        if turn.activity == .recording { return String(localized: "Finish Recording") }
+        if greetingActive { return String(localized: "Skip Greeting and Start Recording") }
+        return conversation?.voiceIntroduced == true
+            ? String(localized: "Record Voice Message") : String(localized: "Start Voice Conversation")
     }
     func cancelRecording() {
         let url = media.stopRecording()
@@ -50,7 +51,7 @@ extension AppModel {
                     guard let self, self.turn.epoch == token else { return }
                     finished()
                     self.greetingActive = false
-                    self.error = "This recording could not be played. Try another recording."
+                    self.error = String(localized: "This recording could not be played. Try another recording.")
                     afterPlaybackFailure?()
                 },
                 completed: { [weak self] in
@@ -67,7 +68,7 @@ extension AppModel {
     }
     func recordMeaning() {
         guard !isSavedPractice else {
-            notice = "Open Help Me Say This from the conversation to record a new thought."
+            notice = String(localized: "Open Help Me Say This from the conversation to record a new thought.")
             return
         }
         beginRecording(forMeaning: true)
@@ -91,7 +92,9 @@ extension AppModel {
             guard allowed else {
                 recordingMeaning = false
                 _ = turn.finish(token)
-                error = "Microphone access is off. Enable Mochi in System Settings → Privacy & Security → Microphone."
+                error = String(
+                    localized:
+                        "Microphone access is off. Enable Mochi in System Settings → Privacy & Security → Microphone.")
                 return
             }
             do {
@@ -120,7 +123,7 @@ extension AppModel {
         // Only sustained silence warns; ordinary pauses in speech would make the warning blink on every word.
         recordingWarning =
             time - lastAudibleRecordingTime >= Self.quietWarningDelay
-            ? "Input is very quiet. Check your microphone or speak closer." : nil
+            ? String(localized: "Input is very quiet. Check your microphone or speak closer.") : nil
     }
     func startRecordingFeedback(token: UUID, started: Date? = nil) {
         recordingClock?.cancel()
@@ -160,8 +163,10 @@ extension AppModel {
     /// The microphone stopped mid-take. A partial take is discarded rather than sent as if complete.
     private func recordingInterrupted() {
         cancelRecording()
-        error =
-            "Recording stopped because the microphone disconnected or stopped responding. Check your microphone, then record again."
+        error = String(
+            localized:
+                "Recording stopped because the microphone disconnected or stopped responding. Check your microphone, then record again."
+        )
     }
     func finishRecording() {
         // A recorder that already stopped (time limit, disconnect, failure) is judged by its reported outcome,
@@ -198,7 +203,8 @@ extension AppModel {
     /// Decodes off the main actor; cancelling the job stops decoding. A take that cannot be decoded, or whose job
     /// was superseded, is removed.
     private func decodeTake<T: Sendable>(
-        _ url: URL, job: ExclusiveJob, fallback: String, _ decode: @escaping @Sendable (URL) throws -> T
+        _ url: URL, job: ExclusiveJob, fallback: String.LocalizationValue,
+        _ decode: @escaping @Sendable (URL) throws -> T
     ) async throws -> T? {
         let work = Task.detached(priority: .userInitiated) { try decode(url) }
         let value: T
@@ -211,7 +217,7 @@ extension AppModel {
         } catch {
             removeUnreferencedRecording(url.lastPathComponent)
             guard job.isCurrent() else { return nil }
-            throw AppFailure(AppFailure.message(for: error, fallback: fallback), underlying: error)
+            throw AppFailure(verbatim: AppFailure.message(for: error, fallback: fallback), underlying: error)
         }
         guard job.isCurrent() else {
             removeUnreferencedRecording(url.lastPathComponent)
@@ -234,9 +240,11 @@ extension AppModel {
                 // Assigning the recording saves the help draft and removes the one it replaces.
                 thoughtRecording = url.lastPathComponent
                 recordingWarning =
-                    quiet ? "This recording is very quiet. Listen before transcribing, or record it again." : nil
+                    quiet
+                    ? String(localized: "This recording is very quiet. Listen before transcribing, or record it again.")
+                    : nil
                 job.finish()
-                notice = "Your thought is recorded locally. Listen, then choose Transcribe."
+                notice = String(localized: "Your thought is recorded locally. Listen, then choose Transcribe.")
             })
     }
     private func finishPracticeAttempt(_ url: URL) {
@@ -253,8 +261,8 @@ extension AppModel {
             job.finish()
             notice =
                 pitch.contains(where: { $0.hz != nil })
-                ? "Try comparing one phrase at a time. These contours are unscored."
-                : "No clear voiced pitch detected. Try speaking closer to the microphone."
+                ? String(localized: "Try comparing one phrase at a time. These contours are unscored.")
+                : String(localized: "No clear voiced pitch detected. Try speaking closer to the microphone.")
         }
     }
     private func sendRecording(_ url: URL, conversationID id: UUID) {

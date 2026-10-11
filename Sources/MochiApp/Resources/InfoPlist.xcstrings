@@ -1,0 +1,42 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "NSMicrophoneUsageDescription": {
+      "comment": "Shown by macOS when Mochi first asks for the microphone.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Record a voice message for Mochi or a practice attempt. Practice recordings stay on your Mac."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mochi への音声メッセージや練習の録音に使用します。練習の録音はこの Mac 内にのみ保存されます。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mochi에 보낼 음성 메시지나 연습 녹음을 녹음하는 데 사용합니다. 연습 녹음은 Mac에만 저장됩니다."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "用于给 Mochi 录制语音消息或练习录音。练习录音只保存在你的 Mac 上。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "用於為 Mochi 錄製語音訊息或練習錄音。練習錄音只會保留在你的 Mac 上。"
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

@@ -56,15 +56,19 @@ public struct ConversationTemplate: Codable, Identifiable, Equatable {
         if scalar.properties.generalCategory == .control { return true }
         return (0x202A...0x202E).contains(scalar.value) || (0x2066...0x2069).contains(scalar.value)
     }
-    public static func validateText(_ value: String, field: String, characters: Int, bytes: Int, required: Bool = false)
+    public static func validateText(
+        _ value: String, field: String.LocalizationValue, characters: Int, bytes: Int, required: Bool = false
+    )
         throws
     {
         guard value.count <= characters, value.utf8.count <= bytes,
             !required || !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         else {
-            throw AppFailure(
-                "\(field) must \(required ? "contain text and " : "")fit within \(characters) characters and \(bytes / 1024) KB."
-            )
+            let name = String(localized: field)
+            throw required
+                ? AppFailure(
+                    "\(name) must contain text and fit within \(characters) characters and \(bytes / 1024) KB.")
+                : AppFailure("\(name) must fit within \(characters) characters and \(bytes / 1024) KB.")
         }
     }
     public func validateForWrite() throws {
@@ -192,6 +196,37 @@ public struct ConversationTemplate: Codable, Identifiable, Equatable {
         value["fields_truncated"] = truncated
         value["needs_review"] = needsReview
         return value
+    }
+    /// Built-in templates are stored in English, since their revision hashes that text; they are shown translated.
+    public var displayTitle: String {
+        guard isBuiltin else { return title }
+        switch title {
+        case "Restaurant": return String(localized: "Restaurant")
+        case "Hotel check-in": return String(localized: "Hotel check-in")
+        case "Job interview": return String(localized: "Job interview")
+        case "Vocabulary recall": return String(localized: "Vocabulary recall")
+        case "Pronunciation and shadowing": return String(localized: "Pronunciation and shadowing")
+        case "Topic discussion": return String(localized: "Topic discussion")
+        default: return title
+        }
+    }
+    public var displayDescription: String {
+        guard isBuiltin else { return description }
+        switch description {
+        case "Order a meal and handle follow-up questions.":
+            return String(localized: "Order a meal and handle follow-up questions.")
+        case "Practise arrivals, reservations, and requests.":
+            return String(localized: "Practise arrivals, reservations, and requests.")
+        case "Practise explaining experience and answering questions.":
+            return String(localized: "Practise explaining experience and answering questions.")
+        case "Recall words and use them in your own sentences.":
+            return String(localized: "Recall words and use them in your own sentences.")
+        case "Listen, record, and compare selected sentences.":
+            return String(localized: "Listen, record, and compare selected sentences.")
+        case "Discuss something interesting at your own pace.":
+            return String(localized: "Discuss something interesting at your own pace.")
+        default: return description
+        }
     }
     public static let builtins: [ConversationTemplate] = {
         let entries: [(String, String, String, String)] = [

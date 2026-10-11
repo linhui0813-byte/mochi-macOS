@@ -31,7 +31,9 @@ extension AppModel {
         helpStage = english.isEmpty || recognizedThought != nil ? .thought : .english
         referencePitch = []
         attemptPitch = []
-        notice = cancelledReply ? "Your pending reply was cancelled. You can retry it when you return." : nil
+        notice =
+            cancelledReply
+            ? String(localized: "Your pending reply was cancelled. You can retry it when you return.") : nil
         recordingWarning = nil
         if let thoughtRecording { warnIfQuiet(thoughtRecording) }
         persistHelpDraft()
@@ -45,7 +47,8 @@ extension AppModel {
                 return RecordingSignal(samples: samples).isQuiet
             }.value
             guard let self, quiet, thoughtRecording == recording, turn.activity != .recording else { return }
-            recordingWarning = "This recording is very quiet. Listen before transcribing, or record it again."
+            recordingWarning = String(
+                localized: "This recording is very quiet. Listen before transcribing, or record it again.")
         }
     }
     /// Typing in an existing draft is written after a pause; every other change is written at once,
@@ -106,7 +109,7 @@ extension AppModel {
                 recognizedThought = clean
             }
             job.finish()
-            notice = "Check the recognized thought before finding the English."
+            notice = String(localized: "Check the recognized thought before finding the English.")
         }
     }
     func useRecognizedThought(replace: Bool) {
@@ -115,7 +118,7 @@ extension AppModel {
             replace || meaning.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             ? recognizedThought : meaning + "\n" + recognizedThought
         self.recognizedThought = nil
-        notice = "Check your thought before finding the English."
+        notice = String(localized: "Check your thought before finding the English.")
     }
     func discardThoughtRecording() {
         thoughtRecording = nil
@@ -206,7 +209,7 @@ extension AppModel {
             referencePitch = pitch
             saveExpression()
             job.finish()
-            notice = "Your reference is ready. Listen, then try saying it yourself."
+            notice = String(localized: "Your reference is ready. Listen, then try saying it yourself.")
         }
     }
 
@@ -266,7 +269,8 @@ extension AppModel {
         expression = nil
         notice =
             completed
-            ? "Saved to My Expressions. Say the thought in your own words when you're ready." : "Help draft saved."
+            ? String(localized: "Saved to My Expressions. Say the thought in your own words when you're ready.")
+            : String(localized: "Help draft saved.")
     }
     func openExpression(_ opened: PracticeExpression) {
         var item = opened

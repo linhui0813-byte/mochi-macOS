@@ -2,7 +2,7 @@ import MochiCore
 import SwiftUI
 
 struct VoiceValueSlider: View {
-    let title: String
+    let title: LocalizedStringKey
     @Binding var value: Double
     let range: ClosedRange<Double>
     var speed = false

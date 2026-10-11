@@ -44,7 +44,7 @@ struct AutomationSettingsView: View {
             }
         }.formStyle(.grouped)
     }
-    private var copyLabel: String {
+    private var copyLabel: LocalizedStringKey {
         switch copied {
         case true?: "Configuration Copied"
         case false?: "Could Not Copy Configuration"

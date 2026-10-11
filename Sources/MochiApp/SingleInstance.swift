@@ -153,12 +153,12 @@ struct LegacyInstance {
         }
     }
 
-    private static func fail(_ explanation: String) -> Never {
+    private static func fail(_ explanation: String.LocalizationValue) -> Never {
         // NSApplication must exist before presenting startup failures.
         _ = NSApplication.shared
         let alert = NSAlert()
-        alert.messageText = "Mochi couldn’t start safely"
-        alert.informativeText = explanation
+        alert.messageText = String(localized: "Mochi couldn’t start safely")
+        alert.informativeText = String(localized: explanation)
         alert.runModal()
         exit(EXIT_FAILURE)
     }

@@ -112,7 +112,7 @@ extension AppModel {
         guard !chat.customTitle else { return }
         chat.title =
             chat.messages.first(where: { $0.role == "user" && $0.contextText != nil })
-            .flatMap(\.contextText).map { String($0.prefix(42)) } ?? "A new conversation"
+            .flatMap(\.contextText).map { String($0.prefix(42)) } ?? Conversation.untitled
     }
     func finishMessageDeletion() {
         let recording = messageDeletionUndo?.message.audio
@@ -133,13 +133,15 @@ extension AppModel {
         where ids.contains(candidate.conversations[i].id) && !candidate.conversations[i].isDeleted {
             candidate.conversations[i].archived = true
         }
-        if finishHistoryChange(candidate, affected: ids) { historyFeedback = "Conversations archived." }
+        if finishHistoryChange(candidate, affected: ids) {
+            historyFeedback = String(localized: "Conversations archived.")
+        }
     }
     func deleteChats(_ ids: Set<UUID>) {
         var candidate = library
         candidate.moveToDeleted(ids)
         if finishHistoryChange(candidate, affected: ids) {
-            historyFeedback = "Moved to Recently Deleted. You can recover them there."
+            historyFeedback = String(localized: "Moved to Recently Deleted. You can recover them there.")
         }
     }
     func restoreChats(_ ids: Set<UUID>) {
@@ -147,7 +149,7 @@ extension AppModel {
         candidate.restore(ids)
         let selectedRestored = selectedID.flatMap { ids.contains($0) ? $0 : nil }
         guard finishHistoryChange(candidate, affected: ids) else { return }
-        historyFeedback = "Conversations restored."
+        historyFeedback = String(localized: "Conversations restored.")
         if let id = selectedRestored, let chat = library.conversations.first(where: { $0.id == id && !$0.isDeleted }) {
             historyScope = chat.archived ? .archived : .active
             select(id)
@@ -196,8 +198,9 @@ extension AppModel {
         }
         historyFeedback =
             failed
-            ? "Conversations deleted. Some unused recordings could not be removed from the data folder."
-            : "Conversations permanently deleted. Saved expressions were kept."
+            ? String(
+                localized: "Conversations deleted. Some unused recordings could not be removed from the data folder.")
+            : String(localized: "Conversations permanently deleted. Saved expressions were kept.")
     }
     func exportChats(_ ids: Set<UUID>, json: Bool = false) {
         let count = library.conversations.filter { ids.contains($0.id) }.count
@@ -210,13 +213,13 @@ extension AppModel {
         do {
             let data = json ? try HistoryExport.json(chats) : Data(HistoryExport.markdown(chats).utf8)
             try data.write(to: url, options: .atomic)
-            historyFeedback = "Transcript exported."
+            historyFeedback = String(localized: "Transcript exported.")
         } catch {
             MochiLog.failure(MochiLog.library, "Export transcript", error)
             self.error =
                 ErrorChain.isOutOfSpace(error)
-                ? "The transcript could not be exported because the disk is full."
-                : "The transcript could not be exported. Choose another location."
+                ? String(localized: "The transcript could not be exported because the disk is full.")
+                : String(localized: "The transcript could not be exported. Choose another location.")
         }
     }
     func exportLibraryBackup() {
@@ -228,12 +231,12 @@ extension AppModel {
         return Task { [weak self] in
             do {
                 try await transfer.value
-                self?.historyFeedback = "Library backup exported."
+                self?.historyFeedback = String(localized: "Library backup exported.")
             } catch {
                 MochiLog.failure(MochiLog.library, "Export library backup", error)
                 self?.error =
                     ErrorChain.isOutOfSpace(error)
-                    ? "Could not export the backup because the disk is full."
+                    ? String(localized: "Could not export the backup because the disk is full.")
                     : AppFailure.message(
                         for: error,
                         fallback:

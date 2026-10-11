@@ -18,13 +18,15 @@ struct ConversationInstructionsView: View {
             try ConversationTemplate.validateName(characterName?.trimmingCharacters(in: .whitespacesAndNewlines))
             try preferences.validate()
             return nil
-        } catch { return (error as? AppFailure)?.message ?? "Review these settings." }
+        } catch { return (error as? AppFailure)?.message ?? String(localized: "Review these settings.") }
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Conversation Instructions").font(.title2).fontWeight(.semibold)
-            Text(app.library.conversations.first(where: { $0.id == id })?.title ?? "").foregroundStyle(.secondary)
-                .lineLimit(1)
+            Text(app.library.conversations.first(where: { $0.id == id })?.displayTitle ?? "").foregroundStyle(
+                .secondary
+            )
+            .lineLimit(1)
             Text(
                 "Tell \(MochiTools.boundedText(characterName ?? "Mochi",characters:80,bytes:1024)) how you want to practise. These settings apply to future replies."
             ).font(.callout).foregroundStyle(.secondary)

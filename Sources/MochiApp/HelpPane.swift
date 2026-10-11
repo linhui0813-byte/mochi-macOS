@@ -115,11 +115,25 @@ struct PracticePane: View {
             }
         }.padding(20)
     }
-    private func englishEditor(_ placeholder: String, lines: ClosedRange<Int>) -> some View {
+    private func englishEditor(_ placeholder: LocalizedStringKey, lines: ClosedRange<Int>) -> some View {
         TextField(placeholder, text: Binding(get: { app.english }, set: app.editEnglish), axis: .vertical)
             .font(.system(size: 22, weight: .medium)).textFieldStyle(.roundedBorder).lineLimit(lines).disabled(app.busy)
     }
-    private func stage(_ label: String, active: Bool) -> some View {
+    /// Reference kinds are stored in English; the ones Mochi writes are translated for display.
+    static func referenceKindLabel(_ kind: String?) -> String {
+        let codexVoice = " · Codex voice"
+        switch kind {
+        case nil: return String(localized: "Reference")
+        case "Your voice": return String(localized: "Your voice")
+        case "Imported reference": return String(localized: "Imported reference")
+        case "Preview · illustrative contours": return String(localized: "Preview · illustrative contours")
+        case let kind? where kind.hasSuffix(codexVoice):
+            let voice = String(kind.dropLast(codexVoice.count))
+            return String(localized: "\(voice) · Codex voice")
+        case let kind?: return kind
+        }
+    }
+    private func stage(_ label: LocalizedStringKey, active: Bool) -> some View {
         Text(label).fontWeight(active ? .semibold : .regular).foregroundStyle(active ? Color.accentColor : .secondary)
             .accessibilityAddTraits(active ? [.isSelected] : [])
     }
@@ -130,15 +144,17 @@ struct PracticePane: View {
                 Spacer()
                 Button("Edit thought", action: app.editThought).buttonStyle(.link).disabled(app.busy)
             }
-            Text(app.meaning.isEmpty ? "Your English sentence" : app.meaning).font(.callout).textSelection(.enabled)
+            Text(app.meaning.isEmpty ? String(localized: "Your English sentence") : app.meaning).font(.callout)
+                .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }.padding(12).background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
     }
     private var meaningInput: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("What would you like to say?").font(.headline)
-            Text("Type your thought in Chinese or English, or record it first.").font(.callout).foregroundStyle(
-                .secondary)
+            Text("Type your thought in your own language or in English, or record it first.").font(.callout)
+                .foregroundStyle(
+                    .secondary)
             if let question = app.helpClarification {
                 Label(question, systemImage: "questionmark.bubble").font(.callout).foregroundStyle(Color.accentColor)
             }
@@ -228,8 +244,9 @@ struct PracticePane: View {
                 }
             }
             if app.expression?.reference != nil {
-                Text("Saved example: \(app.expression?.referenceKind ?? "Reference")").font(.caption).foregroundStyle(
-                    .secondary)
+                Text("Saved example: \(Self.referenceKindLabel(app.expression?.referenceKind))").font(.caption)
+                    .foregroundStyle(
+                        .secondary)
             }
             HStack {
                 Button {

@@ -2,7 +2,7 @@ import MochiCore
 import SwiftUI
 
 struct BuiltInVoicePicker: View {
-    let title: String
+    let title: LocalizedStringKey
     @Binding var selection: String
     @Bindable var app: AppModel
     var options: OpenAIVoiceOptions? = nil

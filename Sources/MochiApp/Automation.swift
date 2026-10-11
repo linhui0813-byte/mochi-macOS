@@ -134,7 +134,7 @@ extension AppModel {
         try patch.apply(to: &candidate.conversations[index])
         do { try commitLibraryCandidate(candidate) } catch {
             throw AppFailure(
-                persistenceMessage(
+                verbatim: persistenceMessage(
                     error, action: "Save conversation settings",
                     fallback: "The settings could not be saved. Nothing was changed.",
                     diskFull: "The settings could not be saved because the disk is full. Nothing was changed."),

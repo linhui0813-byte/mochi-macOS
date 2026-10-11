@@ -24,7 +24,7 @@ struct RecentResults<Value> {
 
 /// The local control server and the result caches that make external and voice tool calls safe to retry.
 @MainActor @Observable final class AutomationController {
-    private(set) var status = "Disabled"
+    private(set) var status = String(localized: "Disabled")
     @ObservationIgnored private(set) var server: LocalControlServer?
     @ObservationIgnored private(set) var healthTask: Task<Void, Never>?
     /// External replies by request ID: a retried request gets the first reply instead of running twice.
@@ -58,7 +58,7 @@ struct RecentResults<Value> {
             self.recheck = nil
             self.handler = nil
             externalResults.removeAll()
-            status = "Disabled"
+            status = String(localized: "Disabled")
             return
         }
         self.recheck = recheck
@@ -83,7 +83,7 @@ struct RecentResults<Value> {
             try server.start(path: path) { [weak self] data in self?.handler?(data) ?? Data() }
             self.server = server
             serverPath = path
-            status = "Available locally"
+            status = String(localized: "Available locally")
         } catch {
             MochiLog.failure(MochiLog.automation, "Start external control", error)
             status = AppFailure.message(for: error, fallback: "Could not start external control.")

@@ -23,7 +23,8 @@ extension AppModel {
             return
         }
         if conversation?.characterNameNeedsReview == true {
-            error = "Review the character name in Conversation Instructions before sending. Your draft is kept."
+            error = String(
+                localized: "Review the character name in Conversation Instructions before sending. Your draft is kept.")
             return
         }
         notice = nil
@@ -53,7 +54,7 @@ extension AppModel {
     func retryReply() {
         guard canRetry, let chat = conversation, let last = chat.messages.last else { return }
         if chat.characterNameNeedsReview {
-            error = "Review the character name in Conversation Instructions before retrying."
+            error = String(localized: "Review the character name in Conversation Instructions before retrying.")
             return
         }
         do {
@@ -63,7 +64,9 @@ extension AppModel {
             requestReply(
                 history: Array(chat.messages.dropLast()), text: last.text, pcm: pcm, audioFile: last.audio,
                 conversationID: chat.id, existingUserID: last.id)
-        } catch { self.error = "The saved recording could not be read. Record a new message to continue." }
+        } catch {
+            self.error = String(localized: "The saved recording could not be read. Record a new message to continue.")
+        }
     }
     func requestReply(
         history: [Message], text: String, pcm: Data?, audioFile: String?, conversationID: UUID,
@@ -208,7 +211,7 @@ extension AppModel {
         else { return }
         updateTranscript(
             messageID, chatID: chatID, text: nil, state: .interrupted,
-            error: "Transcription was interrupted. Your recording is saved.")
+            error: String(localized: "Transcription was interrupted. Your recording is saved."))
     }
     /// False when the message is gone or the library could not be saved; the save failure is already reported.
     @discardableResult private func updateTranscript(
@@ -281,7 +284,7 @@ extension AppModel {
     func toggleConversationVoice() {
         guard !practice, writableConversation, libraryReadable else { return }
         if turn.activity != .recording, !greetingActive, conversation?.characterNameNeedsReview == true {
-            error = "Review the character name in Conversation Instructions before recording."
+            error = String(localized: "Review the character name in Conversation Instructions before recording.")
             return
         }
         if greetingActive {
@@ -347,17 +350,17 @@ extension AppModel {
     }
     func checkConnection() {
         guard !busy else { return }
-        serviceStatus = "Checking…"
+        serviceStatus = String(localized: "Checking…")
         let service = settings.conversationService()
         let textReply = speech.textReply
         runExclusive(
-            "Check connection", onFailure: { [weak self] in self?.serviceStatus = "Not connected" },
+            "Check connection", onFailure: { [weak self] in self?.serviceStatus = String(localized: "Not connected") },
             { [weak self] job in
                 guard let self else { return }
                 _ = try await textReply(
                     service, ConversationRequest(history: [], text: "Reply with the single word ready."))
                 guard job.isCurrent() else { return }
-                serviceStatus = "Verified · text response received"
+                serviceStatus = String(localized: "Verified · text response received")
             })
     }
 }

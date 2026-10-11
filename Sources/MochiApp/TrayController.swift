@@ -18,10 +18,12 @@ import SwiftUI
         item.button?.toolTip = "Mochi"
         item.button?.setAccessibilityLabel("Mochi")
         let menu = NSMenu()
-        let show = menu.addItem(withTitle: "Open Mochi", action: #selector(showWindow), keyEquivalent: "")
+        let show = menu.addItem(
+            withTitle: String(localized: "Open Mochi"), action: #selector(showWindow), keyEquivalent: "")
         show.target = self
         menu.addItem(.separator())
-        let quit = menu.addItem(withTitle: "Quit Mochi Completely", action: #selector(quitApp), keyEquivalent: "")
+        let quit = menu.addItem(
+            withTitle: String(localized: "Quit Mochi Completely"), action: #selector(quitApp), keyEquivalent: "")
         quit.target = self
         self.menu = menu
         item.button?.target = self
