@@ -90,4 +90,26 @@ struct RecentResults<Value> {
         }
     }
     deinit { healthTask?.cancel() }
+
+    // MARK: Connecting an MCP client
+
+    /// The control socket for a library; the MCP helper is pointed at it.
+    static func socketPath(forLibraryRoot root: URL) -> String { LocalControl.path(forLibraryRoot: root) }
+    /// The helper an MCP client launches: the bundled one, or the one beside a development build.
+    static var helperPath: String {
+        let bundled = Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/mochi-mcp").path
+        if FileManager.default.isExecutableFile(atPath: bundled) { return bundled }
+        return URL(fileURLWithPath: CommandLine.arguments[0]).standardizedFileURL.deletingLastPathComponent()
+            .appendingPathComponent("mochi-mcp").path
+    }
+    static var helperAvailable: Bool {
+        FileManager.default.isExecutableFile(atPath: helperPath)
+            && !Bundle.main.bundleURL.path.contains("/AppTranslocation/")
+    }
+    /// The JSON an MCP client needs to launch the helper against this library's socket.
+    static func clientConfiguration(socketPath: String) -> String {
+        (try? MochiTools.encode([
+            "mcpServers": ["mochi": ["command": helperPath, "env": ["MOCHI_CONTROL_SOCKET": socketPath]]]
+        ])) ?? ""
+    }
 }

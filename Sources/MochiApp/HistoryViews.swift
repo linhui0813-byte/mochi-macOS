@@ -7,13 +7,13 @@ struct ChatActions: View {
     var body: some View {
         if chat.isDeleted {
             Button("Recover Conversation") { app.restoreChats([chat.id]) }
-            Button("Delete Permanently…", role: .destructive) { app.permanentDeleteIDs = [chat.id] }
+            Button("Delete Permanently…", role: .destructive) { app.history.permanentDeleteIDs = [chat.id] }
         } else {
             Button("Save as Template…") { app.saveConversationAsTemplate(chat.id) }.disabled(
                 chat.archived || !app.canOpenConversationInstructions)
             Button("Conversation Instructions…") { app.openConversationInstructions(chat.id) }.disabled(
                 chat.archived || !app.canOpenConversationInstructions)
-            Button("Rename…") { app.renameID = chat.id }
+            Button("Rename…") { app.history.renameID = chat.id }
             Button(chat.pinned ? "Unpin" : "Pin") { app.pinChats([chat.id], pinned: !chat.pinned) }
             if chat.archived {
                 Button("Move to Conversations") { app.restoreChats([chat.id]) }
@@ -44,7 +44,7 @@ struct RenameChatView: View {
             if let error = app.error { Text(error).font(.callout).foregroundStyle(.red) }
             HStack {
                 Spacer()
-                Button("Cancel") { app.renameID = nil }.keyboardShortcut(.cancelAction)
+                Button("Cancel") { app.history.renameID = nil }.keyboardShortcut(.cancelAction)
                 Button("Rename", action: rename).keyboardShortcut(.defaultAction).disabled(!valid)
             }
         }.padding(24).frame(width: 420)
@@ -69,7 +69,7 @@ struct HistoryManagerView: View {
             HStack {
                 Text("Manage Conversations").font(.title2).fontWeight(.semibold)
                 Spacer()
-                Button("Done") { app.managerOpen = false }.keyboardShortcut(.cancelAction)
+                Button("Done") { app.history.managerOpen = false }.keyboardShortcut(.cancelAction)
             }.padding(20)
             HStack {
                 Picker("Collection", selection: $scope) { ForEach(HistoryScope.allCases) { Text($0.title).tag($0) } }
@@ -102,13 +102,13 @@ struct HistoryManagerView: View {
                 Spacer()
                 if scope == .deleted {
                     Button("Empty Recently Deleted…", role: .destructive) {
-                        app.permanentDeleteIDs = Set(app.library.history(in: .deleted).map(\.id))
+                        app.history.permanentDeleteIDs = Set(app.library.history(in: .deleted).map(\.id))
                     }
                     .disabled(app.library.history(in: .deleted).isEmpty)
                 }
             }.padding(.horizontal, 20).padding(.top, 10)
             if let error = app.error { Text(error).font(.callout).foregroundStyle(.red).padding(.horizontal, 20) }
-            if let feedback = app.historyFeedback {
+            if let feedback = app.history.feedback {
                 Text(feedback).font(.caption).foregroundStyle(.secondary).padding(.horizontal, 20).padding(.top, 6)
             }
             HStack(spacing: 10) {
@@ -120,16 +120,20 @@ struct HistoryManagerView: View {
                 }.disabled(selection.isEmpty)
             }.padding(20)
         }.frame(width: 760, height: 570)
-            .onAppear { scope = app.historyScope }
-            .onChange(of: app.searchFocusRequest) { _, _ in queryFocused = true }
+            .onAppear { scope = app.history.scope }
+            .onChange(of: app.history.searchFocusRequest) { _, _ in queryFocused = true }
             .onChange(of: scope) { _, _ in selection = [] }
             .onChange(of: chats.map(\.id)) { _, ids in selection.formIntersection(Set(ids)) }
-            .sheet(isPresented: Binding(get: { app.renameID != nil }, set: { if !$0 { app.renameID = nil } })) {
-                if let id = app.renameID { RenameChatView(app: app, id: id) }
+            .sheet(
+                isPresented: Binding(
+                    get: { app.history.renameID != nil }, set: { if !$0 { app.history.renameID = nil } })
+            ) {
+                if let id = app.history.renameID { RenameChatView(app: app, id: id) }
             }
             .sheet(
                 isPresented: Binding(
-                    get: { !app.permanentDeleteIDs.isEmpty }, set: { if !$0 { app.permanentDeleteIDs = [] } })
+                    get: { !app.history.permanentDeleteIDs.isEmpty },
+                    set: { if !$0 { app.history.permanentDeleteIDs = [] } })
             ) { DeleteHistoryConfirmation(app: app) }
     }
     @ViewBuilder private func bulkActions(_ ids: Set<UUID>) -> some View {
@@ -176,7 +180,8 @@ struct HistorySelectionActions: View {
     var body: some View {
         if scope == .deleted {
             Button("Recover") { app.restoreChats(ids) }.disabled(ids.isEmpty)
-            Button("Delete Permanently…", role: .destructive) { app.permanentDeleteIDs = ids }.disabled(ids.isEmpty)
+            Button("Delete Permanently…", role: .destructive) { app.history.permanentDeleteIDs = ids }.disabled(
+                ids.isEmpty)
         } else {
             let targets = Self.targets(ids, in: app.library)
             if !targets.archive.isEmpty || scope != .archived {
@@ -201,9 +206,9 @@ struct DeleteHistoryConfirmation: View {
         VStack(alignment: .leading, spacing: 16) {
             Label("Delete Permanently", systemImage: "trash").font(.title2).fontWeight(.semibold)
             Text(
-                app.permanentDeleteIDs.count == 1
+                app.history.permanentDeleteIDs.count == 1
                     ? "Permanently delete 1 conversation?"
-                    : "Permanently delete \(app.permanentDeleteIDs.count) conversations?"
+                    : "Permanently delete \(app.history.permanentDeleteIDs.count) conversations?"
             ).font(.headline)
             Text(
                 "This cannot be undone. Messages and unused recordings will be removed from the current library. Saved expressions and their recordings will be kept."
@@ -212,7 +217,7 @@ struct DeleteHistoryConfirmation: View {
             if let error = app.error { Text(error).foregroundStyle(.red).font(.callout) }
             HStack {
                 Spacer()
-                Button("Cancel") { app.permanentDeleteIDs = [] }.keyboardShortcut(.cancelAction)
+                Button("Cancel") { app.history.permanentDeleteIDs = [] }.keyboardShortcut(.cancelAction)
                 Button("Delete Permanently", role: .destructive, action: app.permanentlyDeleteChats)
             }
         }.padding(24).frame(width: 440)

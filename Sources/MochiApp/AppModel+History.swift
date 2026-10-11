@@ -6,14 +6,16 @@ import MochiKernel
 /// deleting messages with undo, and exporting or importing the library.
 extension AppModel {
     func newChat() {
-        guard libraryReadable, templatePresentation == nil, instructionsID == nil else { return }
+        guard libraryReadable, customization.templatePresentation == nil, customization.instructionsID == nil else {
+            return
+        }
         if let chat = conversation, writableConversation, chat.isPristine {
             stop()
             leavePractice()
-            expression = nil
+            help.expression = nil
             showExpressions = false
-            historyScope = .active
-            search = ""
+            history.scope = .active
+            history.query = ""
             return
         }
         var candidate = library
@@ -22,14 +24,14 @@ extension AppModel {
         candidate.selectedConversationID = chat.id
         guard commitHistory(candidate) else { return }
         select(chat.id)
-        historyScope = .active
-        search = ""
+        history.scope = .active
+        history.query = ""
     }
     func select(_ id: UUID) {
         guard let chat = library.conversations.first(where: { $0.id == id }) else { return }
         stop()
         leavePractice()
-        expression = nil
+        help.expression = nil
         selectedID = id
         showExpressions = false
         draft = chat.draft
@@ -39,10 +41,10 @@ extension AppModel {
     func showHistory(_ scope: HistoryScope) {
         stop()
         leavePractice()
-        expression = nil
+        help.expression = nil
         showExpressions = false
-        historyScope = scope
-        search = ""
+        history.scope = scope
+        history.query = ""
         selectedID = library.history(in: scope).first?.id
         draft = conversation?.draft ?? ""
         save()
@@ -69,7 +71,7 @@ extension AppModel {
         var candidate = library
         candidate.conversations[i].title = value
         candidate.conversations[i].customTitle = true
-        if commitHistory(candidate) { renameID = nil }
+        if commitHistory(candidate) { history.renameID = nil }
     }
     var canDeleteMessages: Bool {
         writableConversation && !practice && turn.activity != .recording && turn.activity != .requestingPermission
@@ -134,14 +136,14 @@ extension AppModel {
             candidate.conversations[i].archived = true
         }
         if finishHistoryChange(candidate, affected: ids) {
-            historyFeedback = String(localized: "Conversations archived.")
+            history.feedback = String(localized: "Conversations archived.")
         }
     }
     func deleteChats(_ ids: Set<UUID>) {
         var candidate = library
         candidate.moveToDeleted(ids)
         if finishHistoryChange(candidate, affected: ids) {
-            historyFeedback = String(localized: "Moved to Recently Deleted. You can recover them there.")
+            history.feedback = String(localized: "Moved to Recently Deleted. You can recover them there.")
         }
     }
     func restoreChats(_ ids: Set<UUID>) {
@@ -149,15 +151,15 @@ extension AppModel {
         candidate.restore(ids)
         let selectedRestored = selectedID.flatMap { ids.contains($0) ? $0 : nil }
         guard finishHistoryChange(candidate, affected: ids) else { return }
-        historyFeedback = String(localized: "Conversations restored.")
+        history.feedback = String(localized: "Conversations restored.")
         if let id = selectedRestored, let chat = library.conversations.first(where: { $0.id == id && !$0.isDeleted }) {
-            historyScope = chat.archived ? .archived : .active
+            history.scope = chat.archived ? .archived : .active
             select(id)
         }
     }
     @discardableResult private func finishHistoryChange(_ candidate: Library, affected: Set<UUID>) -> Bool {
         var next = candidate
-        if practice, selectedID.map(affected.contains) == true, let item = expression, !item.english.isEmpty {
+        if practice, selectedID.map(affected.contains) == true, let item = help.expression, !item.english.isEmpty {
             if let index = next.expressions.firstIndex(where: { $0.id == item.id }) {
                 next.expressions[index] = item
             } else {
@@ -165,27 +167,29 @@ extension AppModel {
             }
         }
         let selectedAffected = selectedID.map(affected.contains) ?? false
-        if selectedAffected { next.selectedConversationID = next.history(in: historyScope, query: search).first?.id }
+        if selectedAffected {
+            next.selectedConversationID = next.history(in: history.scope, query: history.query).first?.id
+        }
         guard commitHistory(next) else { return false }
         if selectedAffected {
             stop()
             leavePractice()
-            expression = nil
+            help.expression = nil
             selectedID = next.selectedConversationID
             draft = conversation?.draft ?? ""
             // stop() saved while the old conversation was still selected; record the replacement selection.
             save()
         }
-        historyFeedback = nil
+        history.feedback = nil
         return true
     }
     func permanentlyDeleteChats() {
-        let ids = permanentDeleteIDs
+        let ids = history.permanentDeleteIDs
         var candidate = library
         let removedAudio = candidate.removePermanently(ids)
         guard finishHistoryChange(candidate, affected: ids) else { return }
         guard !library.conversations.contains(where: { ids.contains($0.id) && $0.isDeleted }) else { return }
-        permanentDeleteIDs = []
+        history.permanentDeleteIDs = []
         var failed = false
         for name in removedAudio {
             // The message held for Undo may share a recording with a deleted conversation; keep it.
@@ -196,7 +200,7 @@ extension AppModel {
                 failed = true
             }
         }
-        historyFeedback =
+        history.feedback =
             failed
             ? String(
                 localized: "Conversations deleted. Some unused recordings could not be removed from the data folder.")
@@ -213,7 +217,7 @@ extension AppModel {
         do {
             let data = json ? try HistoryExport.json(chats) : Data(HistoryExport.markdown(chats).utf8)
             try data.write(to: url, options: .atomic)
-            historyFeedback = String(localized: "Transcript exported.")
+            history.feedback = String(localized: "Transcript exported.")
         } catch {
             MochiLog.failure(MochiLog.library, "Export transcript", error)
             self.error =
@@ -231,7 +235,7 @@ extension AppModel {
         return Task { [weak self] in
             do {
                 try await transfer.value
-                self?.historyFeedback = String(localized: "Library backup exported.")
+                self?.history.feedback = String(localized: "Library backup exported.")
             } catch {
                 MochiLog.failure(MochiLog.library, "Export library backup", error)
                 self?.error =
@@ -259,7 +263,7 @@ extension AppModel {
                 } onCancel: {
                     transfer.cancel()
                 }
-                self?.historyFeedback = summary
+                self?.history.feedback = summary
                 self?.error = nil
             } catch is CancellationError {
                 return

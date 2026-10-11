@@ -1,4 +1,3 @@
-import MochiKernel
 import MochiTestSupport
 import XCTest
 
@@ -66,50 +65,6 @@ final class HistoryTests: XCTestCase {
         XCTAssertEqual(library.expressions.count, 1)
         XCTAssertEqual(library.conversations.count, 0)
     }
-    func testBackupRoundTripAndConflictMerge() throws {
-        let root = temporary()
-        let target = temporary()
-        let package = temporary()
-        defer { for p in [root, target, package] { try? FileManager.default.removeItem(at: p) } }
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        var chat = Conversation(title: "Original")
-        chat.messages = [Message(role: "user", text: "Hello", audio: "voice.wav")]
-        var library = Library()
-        library.conversations = [chat]
-        try Data([1, 2, 3]).write(to: root.appendingPathComponent("voice.wav"))
-        try LibraryBackup.write(library, from: root, to: package)
-        let imported = try LibraryBackup.read(package)
-        XCTAssertEqual(imported.conversations[0].messages[0].text, "Hello")
-        var local = Library()
-        var localChat = chat
-        localChat.title = "Local version"
-        local.conversations = [localChat]
-        XCTAssertEqual(try LibraryBackup.merge(imported, from: package, into: &local, root: target), 0)
-        XCTAssertEqual(local.conversations[0].title, "Local version")
-        var fresh = Library()
-        XCTAssertEqual(try LibraryBackup.merge(imported, from: package, into: &fresh, root: target), 1)
-        XCTAssertEqual(
-            try Data(contentsOf: target.appendingPathComponent(fresh.conversations[0].messages[0].audio!)),
-            Data([1, 2, 3]))
-    }
-    func testRejectUnsafeMissingAndDuplicateBackup() throws {
-        let root = temporary()
-        defer { try? FileManager.default.removeItem(at: root) }
-        var chat = Conversation()
-        chat.messages = [Message(role: "user", text: "Bad", audio: "../secret")]
-        var library = Library()
-        library.conversations = [chat]
-        XCTAssertThrowsError(try library.validate())
-        chat.messages[0].audio = "missing.wav"
-        library.conversations = [chat]
-        XCTAssertThrowsError(try LibraryBackup.write(library, from: root, to: root.appendingPathComponent("backup"))) {
-            // The file system's own error must not hide which recording is missing.
-            XCTAssertEqual(
-                ($0 as? AppFailure)?.message, "The recording “missing.wav” is missing or is not a regular file.")
-        }
-        library.conversations.append(chat)
-        XCTAssertThrowsError(try library.validate())
-    }
     func testMarkdownAndSearchPerformance() throws {
         var chat = Conversation(title: "A title")
         chat.messages = [Message(role: "user", text: "Find needle here")]
@@ -144,32 +99,32 @@ final class HistoryTests: XCTestCase {
         XCTAssertThrowsError(try store.save(library))
         XCTAssertEqual(try String(contentsOf: store.file), "block")
     }
-    func testImportSharesRemappedAudioAndRejectsSymlinksBeforeCopying() throws {
-        let source = temporary()
-        let package = temporary()
-        let target = temporary()
-        defer { for p in [source, package, target] { try? FileManager.default.removeItem(at: p) } }
-        try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
-        try Data([1]).write(to: source.appendingPathComponent("shared.wav"))
-        var a = Conversation()
-        a.messages = [Message(role: "user", text: "One", audio: "shared.wav")]
-        var b = Conversation()
-        b.messages = [Message(role: "assistant", text: "Two", audio: "shared.wav")]
-        var expression = PracticeExpression(conversationID: a.id, meaning: "", english: "One")
-        expression.reference = "shared.wav"
-        var imported = Library()
-        imported.conversations = [a, b]
-        imported.expressions = [expression]
-        try LibraryBackup.write(imported, from: source, to: package)
-        var local = Library()
-        XCTAssertEqual(try LibraryBackup.merge(imported, from: package, into: &local, root: target), 2)
-        XCTAssertEqual(local.referencedAudio.count, 1)
-        XCTAssertEqual(local.expressions[0].reference, local.conversations[0].messages[0].audio)
-        try FileManager.default.removeItem(at: package.appendingPathComponent("shared.wav"))
-        try FileManager.default.createSymbolicLink(
-            at: package.appendingPathComponent("shared.wav"),
-            withDestinationURL: source.appendingPathComponent("shared.wav"))
-        XCTAssertThrowsError(try LibraryBackup.read(package))
-    }
     private func temporary() -> URL { TestScratch.folder() }
+}
+
+extension HistoryTests {
+    func testMessageSearchesAgreeOnLegacyVoicePlaceholders() {
+        var chat = Conversation()
+        let placeholder = Message(role: "user", text: "Voice message (transcript unavailable)", audio: "a.wav")
+        let typed = Message(role: "user", text: "A voice message about tea")
+        chat.messages = [placeholder, typed]
+        XCTAssertEqual(chat.matchingMessage("voice message")?.id, typed.id)
+        XCTAssertEqual(chat.matchingMessageIDs("voice message"), [typed.id])
+        XCTAssertNil(chat.matchingMessage("  "))
+        XCTAssertEqual(chat.matchingMessageIDs(""), [])
+    }
+
+    /// The sidebar badges count without sorting; they must agree with the lists they label.
+    func testHistoryCountsMatchTheListedConversations() {
+        var library = Library()
+        library.conversations = (0..<30).map { n in
+            var chat = Conversation(title: "\(n)")
+            chat.archived = n % 3 == 0
+            if n % 5 == 0 { chat.deletedAt = Date(timeIntervalSince1970: Double(n)) }
+            return chat
+        }
+        for scope in HistoryScope.allCases {
+            XCTAssertEqual(library.count(in: scope), library.history(in: scope).count, scope.rawValue)
+        }
+    }
 }

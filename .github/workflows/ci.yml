@@ -21,6 +21,9 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: swift --version
+      # SwiftPM otherwise lets a target import any module that happens to be built, so a boundary could erode silently.
+      - name: Every import is a declared dependency
+        run: swift build --build-tests --explicit-target-dependency-import-check error
       - name: Every declared test is discovered
         run: |
           declared=$(grep -rhoE '^\s*(@MainActor )?(private )?func test[A-Za-z0-9_]+' Tests | wc -l | tr -d ' ')

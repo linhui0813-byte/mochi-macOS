@@ -4,6 +4,7 @@ import MochiKernel
 import XCTest
 
 @testable import MochiApp
+@testable import MochiProviders
 
 final class PersistenceModelTests: XCTestCase {
     // MARK: Opening the library (H2, H3, L2)
@@ -54,7 +55,7 @@ final class PersistenceModelTests: XCTestCase {
         try Data([1]).write(to: root.appendingPathComponent(name))
         first.append(Message(role: "user", text: "Hello", audio: name), to: id)
         first.deleteChats([id])
-        first.permanentDeleteIDs = [id]
+        first.history.permanentDeleteIDs = [id]
         first.permanentlyDeleteChats()
         // The earlier copy still names the recording, so it outlives its last use in the library.
         XCTAssertTrue(FileManager.default.fileExists(atPath: root.appendingPathComponent(name).path))
@@ -76,7 +77,7 @@ final class PersistenceModelTests: XCTestCase {
         try Data([1]).write(to: url)
         first.append(Message(role: "user", text: "Hello", audio: name), to: id)
         first.deleteChats([id])
-        first.permanentDeleteIDs = [id]
+        first.history.permanentDeleteIDs = [id]
         first.permanentlyDeleteChats()
         XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
         // The next save replaces the earlier copy, so nothing can reinstate the recording any more.
@@ -94,15 +95,15 @@ final class PersistenceModelTests: XCTestCase {
         defer { app.externalControlEnabled = false }
         app.saveDelay = 20_000_000
         let id = try XCTUnwrap(app.selectedID)
-        let revision = app.controlRevision
+        let revision = app.tools.revision
         for character in "Hello there" { app.draft.append(character) }
-        XCTAssertEqual(app.controlRevision, revision)
+        XCTAssertEqual(app.tools.revision, revision)
         XCTAssertTrue(app.hasPendingSave)
         XCTAssertEqual(try LibraryStore(root: root).load().conversations[0].draft, "")
         await waitUntil { !app.hasPendingSave }
         XCTAssertEqual(try LibraryStore(root: root).load().conversations[0].draft, "Hello there")
         // An automation client holding the old revision is not rejected because the user typed.
-        let result = try app.executeTool(
+        let result = try app.tools.execute(
             "save_expression",
             arguments: ["conversation_id": id.uuidString, "expected_revision": revision, "english": "Let me think."],
             origin: .external)
@@ -179,9 +180,9 @@ final class PersistenceModelTests: XCTestCase {
         app.render()
         await waitUntil { !app.busy }
         XCTAssertNil(app.error)
-        XCTAssertEqual(app.expression?.reference, "builtin-test.mp3")
-        XCTAssertEqual(app.expression?.referenceKind, "Cedar · Codex voice")
-        XCTAssertFalse(app.referencePitch.isEmpty)
+        XCTAssertEqual(app.help.expression?.reference, "builtin-test.mp3")
+        XCTAssertEqual(app.help.expression?.referenceKind, "Cedar · Codex voice")
+        XCTAssertFalse(app.help.referencePitch.isEmpty)
         app.render(force: true)
         await waitUntil { !app.busy }
         XCTAssertEqual(calls.map(\.0), ["Let me think.", "Let me think."])
@@ -191,23 +192,23 @@ final class PersistenceModelTests: XCTestCase {
     @MainActor func testFailedExampleKeepsTheSavedOne() async throws {
         let app = practisingApp()
         app.ensureExpression()
-        app.expression?.reference = "saved.wav"
-        app.expression?.referenceKind = "Original"
+        app.help.expression?.reference = "saved.wav"
+        app.help.expression?.referenceKind = "Original"
         app.speech.referenceAudio = { _, _, _, _ in throw AppFailure("The example did not match the sentence exactly.")
         }
         app.render(force: true)
         await waitUntil { !app.busy }
         XCTAssertEqual(app.error, "The example did not match the sentence exactly.")
-        XCTAssertEqual(app.expression?.reference, "saved.wav")
-        XCTAssertEqual(app.expression?.referenceKind, "Original")
+        XCTAssertEqual(app.help.expression?.reference, "saved.wav")
+        XCTAssertEqual(app.help.expression?.referenceKind, "Original")
     }
     @MainActor func testStoppingWhileAnExampleIsCreatedCannotReplaceTheSavedOne() async throws {
         let app = practisingApp()
         let gate = TestGate()
         let started = expectation(description: "Example requested")
         app.ensureExpression()
-        app.expression?.reference = "saved.wav"
-        app.expression?.referenceKind = "Original"
+        app.help.expression?.reference = "saved.wav"
+        app.help.expression?.referenceKind = "Original"
         app.speech.referenceAudio = { _, _, root, _ in
             started.fulfill()
             await gate.wait()
@@ -221,7 +222,102 @@ final class PersistenceModelTests: XCTestCase {
         await job.value
         XCTAssertFalse(app.busy)
         XCTAssertNil(app.error)
-        XCTAssertEqual(app.expression?.reference, "saved.wav")
-        XCTAssertEqual(app.expression?.referenceKind, "Original")
+        XCTAssertEqual(app.help.expression?.reference, "saved.wav")
+        XCTAssertEqual(app.help.expression?.referenceKind, "Original")
+    }
+}
+
+extension PersistenceModelTests {
+    @MainActor func testUnsavedMessageKeepsTheDraftAndIsNotSent() async throws {
+        let root = makeTemporaryFolder()
+        let app = makeApp(root: root)
+        defer { chmod(root.path, 0o700) }
+        let id = try XCTUnwrap(app.selectedID)
+        let title = app.conversation?.title
+        var requests = 0
+        app.speech.conversationReply = { _, _, callbacks in
+            requests += 1
+            var reply = RealtimeAccumulator()
+            reply.text = "Hello back."
+            reply.done = true
+            try callbacks.response(reply)
+        }
+        XCTAssertEqual(chmod(root.path, 0o500), 0)
+        app.draft = "  Hello  "
+        app.send()
+        XCTAssertEqual(app.draft, "  Hello  ")
+        XCTAssertNotNil(app.error)
+        XCTAssertFalse(app.busy)
+        XCTAssertEqual(requests, 0)
+        XCTAssertEqual(app.conversation?.messages.count, 0)
+        XCTAssertEqual(app.conversation?.title, title)
+        XCTAssertEqual(app.conversation?.draft, "  Hello  ")
+
+        XCTAssertEqual(chmod(root.path, 0o700), 0)
+        app.send()
+        await waitUntil { !app.busy }
+        XCTAssertEqual(requests, 1)
+        XCTAssertEqual(app.draft, "")
+        XCTAssertNil(app.error)
+        let saved = try LibraryStore(root: root).load().conversations.first { $0.id == id }
+        XCTAssertEqual(saved?.messages.map(\.text), ["Hello", "Hello back."])
+        XCTAssertEqual(saved?.draft, "")
+    }
+
+    @MainActor func testUnsavedTextReplyIsNotReportedAsSavedWithoutAudio() async throws {
+        let root = makeTemporaryFolder()
+        let app = makeApp(root: root)
+        defer { chmod(root.path, 0o700) }
+        app.writeReplyAudio = { _, _ in throw POSIXError(.EACCES) }
+        app.speech.conversationReply = { _, _, callbacks in
+            // The message saved; the library becomes unwritable before the reply arrives.
+            XCTAssertEqual(chmod(root.path, 0o500), 0)
+            var reply = RealtimeAccumulator()
+            reply.text = "Hello back."
+            reply.audio = Data(repeating: 0, count: 4800)
+            reply.done = true
+            try callbacks.response(reply)
+        }
+        app.draft = "Hello"
+        app.send()
+        await waitUntil { !app.busy }
+        let error = try XCTUnwrap(app.error)
+        XCTAssertFalse(error.contains("was saved"), error)
+        XCTAssertTrue(error.contains("Could not save your conversation"), error)
+    }
+
+    @MainActor func testAudioOnlyReplyThatCannotBeWrittenIsReportedAsLost() async throws {
+        let app = makeApp(root: makeTemporaryFolder())
+        // Only the audio write fails; a failed message save now stops the send, which
+        // testUnsavedMessageKeepsTheDraftAndIsNotSent covers.
+        app.writeReplyAudio = { _, _ in throw POSIXError(.EACCES) }
+        app.speech.conversationReply = { _, _, callbacks in
+            var reply = RealtimeAccumulator()
+            reply.audio = Data(repeating: 0, count: 4800)
+            reply.done = true
+            try callbacks.response(reply)
+        }
+        app.draft = "Hello"
+        app.send()
+        await waitUntil { !app.busy }
+        XCTAssertFalse(app.conversation?.messages.contains { $0.role == "assistant" } == true)
+        XCTAssertTrue(app.error?.contains("reply could not be saved") == true, app.error ?? "no error")
+    }
+
+    @MainActor func testStopSavesOnceSoTheEarlierCopyIsTheStateBeforeStop() throws {
+        let root = makeTemporaryFolder()
+        let app = makeApp(root: root)
+        app.startHelp()
+        XCTAssertTrue(app.practice)
+        XCTAssertTrue(app.save())
+        // Typing in an existing draft is only scheduled, so disk still lacks it when Stop runs.
+        app.help.meaning = "Typed just before Stop"
+        XCTAssertTrue(app.hasPendingSave)
+        XCTAssertTrue(app.stop())
+        let store = LibraryStore(root: root)
+        XCTAssertEqual(try store.load().conversations.first?.helpDraft?.meaning, "Typed just before Stop")
+        // A second save would have replaced the earlier copy with the state Stop wrote.
+        let previous = try String(contentsOf: store.previousFile, encoding: .utf8)
+        XCTAssertFalse(previous.contains("Typed just before Stop"))
     }
 }

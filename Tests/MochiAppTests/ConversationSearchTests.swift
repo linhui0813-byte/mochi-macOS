@@ -19,16 +19,16 @@ final class ConversationSearchTests: XCTestCase {
         app.append(second, to: current.id)
         app.append(unknown, to: current.id)
         app.append(Message(role: "user", text: "cafe"), to: other.id)
-        app.search = "Other conversation"
+        app.history.query = "Other conversation"
         app.openConversationSearch()
-        app.conversationQuery = " CAFE "
-        XCTAssertEqual(app.conversationMatchIDs, [first.id, second.id])
-        XCTAssertEqual(app.search, "Other conversation")
+        app.find.query = " CAFE "
+        XCTAssertEqual(app.find.matchIDs, [first.id, second.id])
+        XCTAssertEqual(app.history.query, "Other conversation")
         XCTAssertEqual(app.selectedID, current.id)
-        app.conversationQuery = "Unsearched title"
-        XCTAssertTrue(app.conversationMatchIDs.isEmpty)
-        app.conversationQuery = "Voice recording"
-        XCTAssertTrue(app.conversationMatchIDs.isEmpty)
+        app.find.query = "Unsearched title"
+        XCTAssertTrue(app.find.matchIDs.isEmpty)
+        app.find.query = "Voice recording"
+        XCTAssertTrue(app.find.matchIDs.isEmpty)
         app.stop()
     }
     @MainActor func testMatchNavigationWrapsAndQueryChangesResetPosition() {
@@ -39,20 +39,20 @@ final class ConversationSearchTests: XCTestCase {
         app.select(chat.id)
         let messages = [Message(role: "user", text: "one match"), Message(role: "assistant", text: "another match")]
         for message in messages { app.append(message, to: chat.id) }
-        app.conversationQuery = "match"
-        XCTAssertEqual(app.conversationMatchID, messages[0].id)
-        app.moveConversationMatch(-1)
-        XCTAssertEqual(app.conversationMatchID, messages[1].id)
-        app.moveConversationMatch(1)
-        XCTAssertEqual(app.conversationMatchID, messages[0].id)
-        app.moveConversationMatch(1)
-        app.conversationQuery = "one"
-        XCTAssertEqual(app.conversationMatchIndex, 0)
-        XCTAssertEqual(app.conversationMatchID, messages[0].id)
-        app.conversationQuery = "missing"
-        app.moveConversationMatch(1)
-        XCTAssertNil(app.conversationMatchID)
-        XCTAssertEqual(app.conversationMatchIndex, 0)
+        app.find.query = "match"
+        XCTAssertEqual(app.find.matchID, messages[0].id)
+        app.find.move(-1)
+        XCTAssertEqual(app.find.matchID, messages[1].id)
+        app.find.move(1)
+        XCTAssertEqual(app.find.matchID, messages[0].id)
+        app.find.move(1)
+        app.find.query = "one"
+        XCTAssertEqual(app.find.matchIndex, 0)
+        XCTAssertEqual(app.find.matchID, messages[0].id)
+        app.find.query = "missing"
+        app.find.move(1)
+        XCTAssertNil(app.find.matchID)
+        XCTAssertEqual(app.find.matchIndex, 0)
         app.stop()
     }
     @MainActor func testSearchClosesOnConversationChangeOrExpressionsAndCanReopen() {
@@ -63,22 +63,22 @@ final class ConversationSearchTests: XCTestCase {
         app.library.conversations = [first, second]
         app.select(first.id)
         app.openConversationSearch()
-        app.conversationQuery = "hello"
+        app.find.query = "hello"
         app.select(second.id)
-        XCTAssertFalse(app.conversationSearchOpen)
-        XCTAssertEqual(app.conversationQuery, "")
+        XCTAssertFalse(app.find.isOpen)
+        XCTAssertEqual(app.find.query, "")
         app.openConversationSearch()
-        app.conversationQuery = "world"
+        app.find.query = "world"
         app.openExpressions()
-        XCTAssertFalse(app.conversationSearchOpen)
-        XCTAssertEqual(app.conversationQuery, "")
+        XCTAssertFalse(app.find.isOpen)
+        XCTAssertEqual(app.find.query, "")
         app.openConversationSearch()
-        XCTAssertFalse(app.conversationSearchOpen)
+        XCTAssertFalse(app.find.isOpen)
         app.select(first.id)
         app.openConversationSearch()
-        XCTAssertTrue(app.conversationSearchOpen)
-        app.closeConversationSearch()
-        XCTAssertFalse(app.conversationSearchOpen)
+        XCTAssertTrue(app.find.isOpen)
+        app.find.close()
+        XCTAssertFalse(app.find.isOpen)
         app.stop()
     }
 }
@@ -94,15 +94,15 @@ extension ConversationSearchTests {
         let first = Message(role: "user", text: "match one")
         let selected = Message(role: "assistant", text: "match two")
         for message in [pending, first, selected] { app.append(message, to: chat.id) }
-        app.conversationQuery = "match"
-        app.moveConversationMatch(1)
+        app.find.query = "match"
+        app.find.move(1)
         let ci = app.library.conversations.firstIndex { $0.id == chat.id }!
         app.library.conversations[ci].messages[0].text = "late match"
-        XCTAssertEqual(app.conversationMatchID, selected.id)
-        XCTAssertEqual(app.conversationMatchIndex, 2)
+        XCTAssertEqual(app.find.matchID, selected.id)
+        XCTAssertEqual(app.find.matchIndex, 2)
         app.library.conversations[ci].messages.removeLast()
-        XCTAssertEqual(app.conversationMatchID, first.id)
-        XCTAssertEqual(app.conversationMatchSet, Set([pending.id, first.id]))
+        XCTAssertEqual(app.find.matchID, first.id)
+        XCTAssertEqual(app.find.matchSet, Set([pending.id, first.id]))
         app.stop()
     }
     @MainActor func testManagerFindWithoutSelectionOrConversationView() {
@@ -111,13 +111,13 @@ extension ConversationSearchTests {
         app.selectedID = nil
         app.showExpressions = true
         XCTAssertFalse(app.canFindInConversation)
-        app.managerOpen = true
+        app.history.managerOpen = true
         XCTAssertTrue(app.canFindInConversation)
-        let before = app.searchFocusRequest
+        let before = app.history.searchFocusRequest
         app.findInConversation()
-        XCTAssertEqual(app.searchFocusRequest, before + 1)
-        XCTAssertFalse(app.conversationSearchOpen)
-        app.renameID = UUID()
+        XCTAssertEqual(app.history.searchFocusRequest, before + 1)
+        XCTAssertFalse(app.find.isOpen)
+        app.history.renameID = UUID()
         XCTAssertFalse(app.canFindInConversation)
         app.stop()
     }
@@ -127,14 +127,14 @@ extension ConversationSearchTests {
         chat.messages = (0..<1000).map { Message(role: "user", text: $0.isMultiple(of: 2) ? "match" : "other") }
         app.library.conversations = [chat]
         app.select(chat.id)
-        app.conversationQuery = "match"
-        XCTAssertEqual(app.conversationMatchIDs.count, 500)
+        app.find.query = "match"
+        XCTAssertEqual(app.find.matchIDs.count, 500)
         for _ in 0..<1000 {
-            XCTAssertEqual(app.conversationMatchSet.count, 500)
-            XCTAssertEqual(app.conversationMatchID, chat.messages[0].id)
+            XCTAssertEqual(app.find.matchSet.count, 500)
+            XCTAssertEqual(app.find.matchID, chat.messages[0].id)
         }
         app.library.conversations[0].messages[1].text = "match"
-        XCTAssertEqual(app.conversationMatchIDs.count, 501)
+        XCTAssertEqual(app.find.matchIDs.count, 501)
         app.stop()
     }
 }

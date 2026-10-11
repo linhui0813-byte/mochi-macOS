@@ -1,4 +1,3 @@
-import MochiAutomation
 import MochiKernel
 import MochiTestSupport
 import XCTest
@@ -46,7 +45,7 @@ final class ConversationTemplateTests: XCTestCase {
         let enormous = "a" + String(repeating: "\u{301}", count: 30000)
         XCTAssertLessThan(enormous.count, 80)
         XCTAssertThrowsError(try ConversationTemplate(title: "Huge", instructions: enormous).validateForWrite())
-        XCTAssertEqual(MochiTools.boundedInstructions(enormous), "")
+        XCTAssertEqual(ConversationInstructions.bounded(enormous), "")
     }
     func testMigrationBacksUpReupgradeAndStampsVersion() throws {
         let root = TestScratch.folder()
@@ -109,55 +108,10 @@ extension ConversationTemplateTests {
         XCTAssertLessThan(try JSONSerialization.data(withJSONObject: preview).count, 100000)
         XCTAssertEqual(preview["needs_review"] as? Bool, true)
         XCTAssertFalse((preview["fields_truncated"] as! [String: Bool]).isEmpty)
-        let changed = try t.applying(["character_name": "Loki"])
+        let changed = try t.applying(.init(settings: .init(characterName: .set("Loki"))))
         XCTAssertEqual(changed.instructions, t.instructions)
         XCTAssertEqual(changed.description, t.description)
         XCTAssertNotEqual(changed.revision, t.revision)
-    }
-    func testNamePromptAndReferenceIsolationAndGreetingPatterns() throws {
-        var prefs = ConversationPreferences()
-        prefs.coaching = .direct
-        let prompt = VoiceIdentity.conversationInstructions(
-            custom: "Your name is Sam", preferences: prefs, characterName: "Loki")
-        XCTAssertTrue(prompt.contains("\"Loki\""))
-        XCTAssertTrue(prompt.contains("previous names"))
-        XCTAssertFalse(prompt.contains("pronounced MOH-chee"))
-        let reference = ConversationRequest(
-            history: [], text: "Say this", reference: true, instructions: "Your name is Sam", characterName: "Loki")
-        XCTAssertFalse(reference.resolvedInstructions.contains("Loki"))
-        var history: [String] = []
-        for _ in 0..<30 {
-            let greeting = VoiceIdentity.namedGreeting(name: "Loki", excluding: history)
-            XCTAssertTrue(greeting.text.contains("Loki"))
-            XCTAssertFalse(history.suffix(3).contains(greeting.pattern))
-            history.append(greeting.pattern)
-        }
-    }
-    func testToolBooleanOriginAndRevisionSchemas() throws {
-        for bad: Any in [1, "true", NSNull()] {
-            XCTAssertThrowsError(
-                try MochiTools.validate(
-                    name: "update_conversation_template",
-                    arguments: [
-                        "template_id": UUID().uuidString, "expected_template_revision": "r", "clear_speed": bad,
-                    ], origin: .external))
-        }
-        let tool = try MochiTools.validate(
-            name: "create_conversation_template", arguments: ["title": "Loki", "character_name": "Loki"],
-            origin: .external)
-        XCTAssertFalse(tool.required.contains("expected_revision"))
-        XCTAssertThrowsError(
-            try MochiTools.validate(
-                name: "create_conversation_template", arguments: ["title": "Loki", "character_name": "Loki"],
-                origin: .voice))
-        _ = try MochiTools.validate(name: "list_conversation_templates", arguments: ["offset": 200], origin: .external)
-        XCTAssertThrowsError(
-            try MochiTools.validate(
-                name: "update_conversation_template",
-                arguments: [
-                    "template_id": UUID().uuidString, "expected_template_revision": "r", "clear_speed": true,
-                    "speed": 1,
-                ], origin: .external))
     }
     func testPristineAndHistoricalExport() throws {
         var c = Conversation()
@@ -174,7 +128,6 @@ extension ConversationTemplateTests {
     }
 }
 
-// Audit regressions (2026-10-10).
 extension ConversationTemplateTests {
     func testV1MigrationBackupIsPrivateCompleteAndLeavesNoStaging() throws {
         let root = TestScratch.folder()
@@ -253,19 +206,6 @@ extension ConversationTemplateTests {
         XCTAssertThrowsError(try LibraryBackup.merge(bad, from: root, into: &local, root: root))
         XCTAssertTrue(local.conversationTemplates.isEmpty)
     }
-    func testTemplateMCPAnnotationsAndDiscoveryInstructions() throws {
-        let tools = MochiTools.catalog(origin: .external)
-        for name in ["update_conversation_template", "delete_conversation_template"] {
-            let value = try XCTUnwrap(tools.first(where: { $0.name.rawValue == name }))
-            let a = value.mcp["annotations"] as! [String: Any]
-            XCTAssertEqual(a["destructiveHint"] as? Bool, true)
-            XCTAssertEqual(a["idempotentHint"] as? Bool, false)
-        }
-        for name in ["list_conversation_templates", "get_conversation_template"] {
-            let a = tools.first(where: { $0.name.rawValue == name })!.mcp["annotations"] as! [String: Any]
-            XCTAssertEqual(a["readOnlyHint"] as? Bool, true)
-        }
-    }
     func testExplicitNamePrecedenceAndNilPromptCompatibility() {
         let prompt = VoiceIdentity.conversationInstructions(
             custom: "Your name is Sam", preferences: ConversationPreferences(), characterName: "Loki")
@@ -276,5 +216,30 @@ extension ConversationTemplateTests {
         XCTAssertTrue(
             VoiceIdentity.conversationInstructions(custom: "Your name is Sam", preferences: ConversationPreferences())
                 .contains("these override the conversational defaults above"))
+    }
+}
+
+extension ConversationTemplateTests {
+    func testBuiltinIDsAreReservedFromOneDefinition() {
+        XCTAssertEqual(ConversationTemplate.reservedIDs, Set(ConversationTemplate.builtins.map(\.id)))
+        XCTAssertEqual(ConversationTemplate.reservedIDs.count, ConversationTemplate.builtins.count)
+        XCTAssertTrue(ConversationTemplate.builtins.allSatisfy(\.isBuiltin))
+    }
+
+    func testInstructionPreviewUsesTheValidationLimit() {
+        var t = ConversationTemplate(title: "Long", instructions: "x")
+        t.instructions = String(repeating: "y", count: ConversationInstructions.maxCharacters + 5)
+        let preview = t.representation()
+        XCTAssertEqual((preview["instructions"] as? String)?.count, ConversationInstructions.maxCharacters)
+        XCTAssertEqual((preview["fields_truncated"] as? [String: Bool])?["instructions"], true)
+    }
+
+    func testRealNamesWithJoinersAreAcceptedAndSpoofingIsNot() {
+        for name in ["Teacher 👩‍🏫", "می‌خواهم", "Renée", "❤️ Mochi"] {
+            XCTAssertNoThrow(try ConversationTemplate.validateName(name), name)
+        }
+        for name in ["Line\nbreak", "Nul\u{0}", "Tab\tbed", "Evil\u{202E}txt.exe", "Iso\u{2066}late"] {
+            XCTAssertThrowsError(try ConversationTemplate.validateName(name), name)
+        }
     }
 }

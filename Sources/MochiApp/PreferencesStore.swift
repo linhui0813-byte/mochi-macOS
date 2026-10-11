@@ -1,6 +1,7 @@
 import Foundation
 import MochiCore
 import MochiKernel
+import MochiProviders
 
 /// The app's stored settings. Stored values that no longer validate fall back to defaults, and the log names them.
 @MainActor @Observable final class PreferencesStore {

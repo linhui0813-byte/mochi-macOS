@@ -46,7 +46,7 @@ struct WorkspaceView: View {
                         Label(scope.title, systemImage: scope.icon)
                             .badge(app.library.count(in: scope))
                             .tag(SidebarDestination.collection(scope))
-                            .fontWeight(!app.showExpressions && app.historyScope == scope ? .semibold : .regular)
+                            .fontWeight(!app.showExpressions && app.history.scope == scope ? .semibold : .regular)
                     }
                 }
                 ForEach(historyGroups, id: \.id) { group in
@@ -62,16 +62,16 @@ struct WorkspaceView: View {
                 }
                 Section {
                     if app.visibleChats.isEmpty {
-                        Text(app.search.isEmpty ? "No conversations here" : "No matching conversations")
+                        Text(app.history.query.isEmpty ? "No conversations here" : "No matching conversations")
                             .foregroundStyle(.secondary).font(.callout)
-                        if !app.search.isEmpty { Button("Clear Search") { app.search = "" } }
+                        if !app.history.query.isEmpty { Button("Clear Search") { app.history.query = "" } }
                     }
                 }
 
             }
             .listStyle(.sidebar)
             .searchable(
-                text: $app.search, isPresented: $app.searchOpen, placement: .sidebar,
+                text: $app.history.query, isPresented: $app.history.searchOpen, placement: .sidebar,
                 prompt: "Search titles and messages"
             )
             .historySearchFocus($searchFocused)
@@ -143,37 +143,30 @@ struct WorkspaceView: View {
         }
         .sheet(
             isPresented: Binding(
-                get: { app.instructionsID != nil || app.templatePresentation != nil },
-                set: {
-                    if !$0 {
-                        app.instructionsID = nil
-                        app.templatePresentation = nil
-                        app.templateDraft = nil
-                        app.retainedInstructionsDraft = nil
-                    }
-                })
+                get: { app.customization.isPresented },
+                set: { if !$0 { app.customization.dismiss() } })
         ) {
-            if app.templatePresentation != nil {
+            if app.customization.templatePresentation != nil {
                 ConversationTemplatesView(app: app)
-            } else if let id = app.instructionsID {
+            } else if let id = app.customization.instructionsID {
                 ConversationInstructionsView(app: app, id: id)
             }
         }
-        .sheet(isPresented: $app.managerOpen) { HistoryManagerView(app: app) }
+        .sheet(isPresented: $app.history.managerOpen) { HistoryManagerView(app: app) }
         .sheet(
             isPresented: Binding(
-                get: { app.renameID != nil && !app.managerOpen },
-                set: { if !$0 && !app.managerOpen { app.renameID = nil } })
-        ) { if let id = app.renameID { RenameChatView(app: app, id: id) } }
+                get: { app.history.renameID != nil && !app.history.managerOpen },
+                set: { if !$0 && !app.history.managerOpen { app.history.renameID = nil } })
+        ) { if let id = app.history.renameID { RenameChatView(app: app, id: id) } }
         .sheet(
             isPresented: Binding(
-                get: { !app.permanentDeleteIDs.isEmpty && !app.managerOpen },
-                set: { if !$0 && !app.managerOpen { app.permanentDeleteIDs = [] } })
+                get: { !app.history.permanentDeleteIDs.isEmpty && !app.history.managerOpen },
+                set: { if !$0 && !app.history.managerOpen { app.history.permanentDeleteIDs = [] } })
         ) { DeleteHistoryConfirmation(app: app) }
         .sheet(isPresented: Binding(get: { app.practice }, set: { if !$0 && app.practice { app.resume() } })) {
             PracticePane(app: app).frame(width: 640, height: 580)
         }
-        .onChange(of: app.searchFocusRequest) { _, _ in if !app.managerOpen { searchFocused = true } }
+        .onChange(of: app.history.searchFocusRequest) { _, _ in if !app.history.managerOpen { searchFocused = true } }
         .onChange(of: app.settingsOpen) { _, show in
             if show {
                 openSettings()
@@ -189,13 +182,13 @@ struct WorkspaceView: View {
     /// update NSTableView reentrantly; with a fixed section list only rows change.
     private var historyGroups: [(id: String, title: LocalizedStringKey, chats: [Conversation])] {
         let chats = app.visibleChats
-        let searching = !app.search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let searching = !app.history.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let listed = searching ? [] : chats
-        let pinned = listed.filter { $0.pinned && app.historyScope == .active }
-        let remaining = listed.filter { !($0.pinned && app.historyScope == .active) }
+        let pinned = listed.filter { $0.pinned && app.history.scope == .active }
+        let remaining = listed.filter { !($0.pinned && app.history.scope == .active) }
         let calendar = Calendar.current
         func rowDate(_ chat: Conversation) -> Date {
-            app.historyScope == .deleted ? chat.deletedAt ?? chat.updatedAt : chat.updatedAt
+            app.history.scope == .deleted ? chat.deletedAt ?? chat.updatedAt : chat.updatedAt
         }
         return [
             ("search", "Search Results", searching ? chats : []),
@@ -222,16 +215,16 @@ struct WorkspaceView: View {
     }
 
     private var transcript: some View {
-        let sidebarMatchID = app.conversation?.matchingMessage(app.search)?.id
+        let sidebarMatchID = app.conversation?.matchingMessage(app.history.query)?.id
         return Group {
             if app.conversation?.messages.isEmpty != false {
                 if app.conversation == nil {
                     ContentUnavailableView(
-                        "No Conversation Selected", systemImage: app.historyScope.icon,
+                        "No Conversation Selected", systemImage: app.history.scope.icon,
                         description: Text("Select a conversation, or start a new one with ⌘N."))
                 } else if !app.writableConversation {
                     ContentUnavailableView(
-                        "No Messages", systemImage: app.historyScope.icon,
+                        "No Messages", systemImage: app.history.scope.icon,
                         description: Text("This conversation is empty."))
                 } else {
                     ContentUnavailableView {
@@ -258,22 +251,22 @@ struct WorkspaceView: View {
                     }
                     .defaultScrollAnchor(.bottom)
                     .id(app.selectedID)
-                    .task(id: "\(app.selectedID?.uuidString ?? "")|\(app.search)") {
+                    .task(id: "\(app.selectedID?.uuidString ?? "")|\(app.history.query)") {
                         await Task.yield()
-                        if let id = app.conversationMatchID {
+                        if let id = app.find.matchID {
                             proxy.scrollTo(id, anchor: .center)
-                        } else if let message = app.conversation?.matchingMessage(app.search) {
+                        } else if let message = app.conversation?.matchingMessage(app.history.query) {
                             proxy.scrollTo(message.id, anchor: .center)
                         } else {
                             proxy.scrollTo("bottom", anchor: .bottom)
                         }
                     }
-                    .onChange(of: app.conversationMatchID) { _, id in
+                    .onChange(of: app.find.matchID) { _, id in
                         if let id { withAnimation { proxy.scrollTo(id, anchor: .center) } }
                     }
                     .onChange(of: app.conversation?.messages.map(\.id) ?? []) { previous, current in
                         if current.count > previous.count, current.starts(with: previous),
-                            app.conversationQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                            app.find.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                         {
                             withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
                         }
@@ -324,11 +317,11 @@ struct WorkspaceView: View {
                     SharedMessageActions(app: app, message: message)
                 }
                 .overlay(alignment: .leading) {
-                    if app.conversationMatchSet.contains(message.id) || sidebarMatchID == message.id {
+                    if app.find.matchSet.contains(message.id) || sidebarMatchID == message.id {
                         RoundedRectangle(cornerRadius: 18)
                             .stroke(
-                                app.conversationMatchID == message.id ? Color.orange : Color.accentColor,
-                                lineWidth: app.conversationMatchID == message.id ? 3 : 1.5
+                                app.find.matchID == message.id ? Color.orange : Color.accentColor,
+                                lineWidth: app.find.matchID == message.id ? 3 : 1.5
                             ).padding(-3)
                     }
                 }
@@ -458,7 +451,7 @@ private struct SidebarChatRow: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(chat.displayTitle).fontWeight(.medium).lineLimit(1)
                 Text(
-                    chat.matchingMessage(app.search)?.text
+                    chat.matchingMessage(app.history.query)?.text
                         ?? (chat.draft.isEmpty
                             ? chat.messages.last?.text ?? String(localized: "New conversation")
                             : String(localized: "Draft: \(chat.draft)"))
@@ -515,7 +508,7 @@ struct PracticeActions: View {
                     app.turn.activity == .recording ? "Finish (\(app.recordingSeconds)s)" : "Record Attempt",
                     systemImage: app.turn.activity == .recording ? "stop.fill" : "mic")
             }.disabled(app.busy && app.turn.activity != .recording)
-            if let file = app.expression?.attempts.last?.file {
+            if let file = app.help.expression?.attempts.last?.file {
                 Button {
                     app.play(file)
                 } label: {

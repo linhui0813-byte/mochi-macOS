@@ -67,7 +67,7 @@ extension AppModel {
         }
     }
     func recordMeaning() {
-        guard !isSavedPractice else {
+        guard !help.isSavedPractice else {
             notice = String(localized: "Open Help Me Say This from the conversation to record a new thought.")
             return
         }
@@ -238,7 +238,7 @@ extension AppModel {
                         { RecordingSignal(samples: try AudioFile.samples($0).samples).isQuiet })
                 else { return }
                 // Assigning the recording saves the help draft and removes the one it replaces.
-                thoughtRecording = url.lastPathComponent
+                help.thoughtRecording = url.lastPathComponent
                 recordingWarning =
                     quiet
                     ? String(localized: "This recording is very quiet. Listen before transcribing, or record it again.")
@@ -255,8 +255,8 @@ extension AppModel {
                     url, job: job, fallback: "This attempt could not be read. Record it again.",
                     { try AudioFile.pitch($0) })
             else { return }
-            expression?.attempts.append(Attempt(file: url.lastPathComponent))
-            attemptPitch = pitch
+            help.expression?.attempts.append(Attempt(file: url.lastPathComponent))
+            help.attemptPitch = pitch
             saveExpression()
             job.finish()
             notice =

@@ -19,17 +19,20 @@ struct AutomationSettingsView: View {
                     "Keep Mochi running, enable external control, then add this configuration to your assistant’s MCP settings."
                 )
                 .font(.callout).foregroundStyle(.secondary)
-                if !app.mcpConfigurationAvailable {
+                if !AutomationController.helperAvailable {
                     Text(
                         "Build Mochi’s bundled helper, or move Mochi to Applications and reopen it before copying the configuration."
                     ).foregroundStyle(.secondary)
                 }
-                Text(app.mcpConfiguration).font(.system(.caption, design: .monospaced))
-                    .textSelection(.enabled).lineLimit(nil)
+                Text(AutomationController.clientConfiguration(socketPath: app.controlSocketPath)).font(
+                    .system(.caption, design: .monospaced)
+                )
+                .textSelection(.enabled).lineLimit(nil)
                 Button(copyLabel) {
                     NSPasteboard.general.clearContents()
-                    copied = NSPasteboard.general.setString(app.mcpConfiguration, forType: .string)
-                }.disabled(!app.mcpConfigurationAvailable)
+                    copied = NSPasteboard.general.setString(
+                        AutomationController.clientConfiguration(socketPath: app.controlSocketPath), forType: .string)
+                }.disabled(!AutomationController.helperAvailable)
                     .task(id: copied) {
                         guard copied != nil else { return }
                         try? await Task.sleep(for: .seconds(2))

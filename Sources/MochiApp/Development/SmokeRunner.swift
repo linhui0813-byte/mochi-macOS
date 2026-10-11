@@ -3,6 +3,7 @@
     import AppKit
     import MochiKernel
     import MochiCore
+    import MochiProviders
 
     /// Scripted development runs: native smoke tests, tray checks and live provider probes.
     /// Compiled only into development builds; the release gate rejects their strings and symbols.
@@ -511,17 +512,17 @@
                     {
                         captureFailures.append("Conversation instructions could not be saved")
                     }
-                    model.instructionsID = chatID
+                    model.customization.instructionsID = chatID
                     try? await Task.sleep(nanoseconds: 450_000_000)
                     await captureSheet("conversation-instructions.png")
                     NSApp.appearance = NSAppearance(named: .darkAqua)
                     try? await Task.sleep(nanoseconds: 250_000_000)
                     await captureSheet("conversation-instructions-dark.png")
                     NSApp.appearance = NSAppearance(named: .aqua)
-                    model.instructionsID = nil
+                    model.customization.instructionsID = nil
                     try? await Task.sleep(nanoseconds: 350_000_000)
                     model.openTemplatePicker()
-                    model.templateDraft = TemplateEditorDraft(
+                    model.customization.templateDraft = TemplateEditorDraft(
                         value: ConversationTemplate.builtins[0], editingID: nil,
                         expectedRevision: ConversationTemplate.builtins[0].revision)
                     try? await Task.sleep(nanoseconds: 350_000_000)
@@ -551,7 +552,7 @@
                             for child in view.subviews { if let table = findTable(child) { return table } }
                             return nil
                         }
-                        let before = model.templateDraft?.value.id
+                        let before = model.customization.templateDraft?.value.id
                         if let content = sheet.contentView, let table = findTable(content),
                             sheet.makeFirstResponder(table),
                             let event = NSEvent.keyEvent(
@@ -562,7 +563,7 @@
                         {
                             table.keyDown(with: event)
                             try? await Task.sleep(nanoseconds: 250_000_000)
-                            let moved = model.templateDraft?.value.id != before
+                            let moved = model.customization.templateDraft?.value.id != before
                             let keyboard = try? JSONSerialization.data(withJSONObject: [
                                 "arrow_key_moved_selection": moved, "native_table": true,
                             ])
@@ -581,23 +582,21 @@
                     }
                     if let previousFrame { mainWindow?.setFrame(previousFrame, display: true) }
 
-                    model.templatePresentation = nil
-                    model.templateDraft = nil
+                    model.customization.templatePresentation = nil
+                    model.customization.templateDraft = nil
                     try? await Task.sleep(nanoseconds: 350_000_000)
                     model.openTemplateManager()
-                    model.editTemplate(ConversationTemplate.builtins[0], duplicate: true)
+                    model.customization.editTemplate(ConversationTemplate.builtins[0], duplicate: true)
                     try? await Task.sleep(nanoseconds: 350_000_000)
                     await captureSheet("template-editor.png")
-                    model.templatePresentation = nil
-                    model.templateDraft = nil
-                    model.templateReturnTo = nil
+                    model.customization = CustomizationSheet()
                     try? await Task.sleep(nanoseconds: 350_000_000)
                     if !model.setConversationInstructions(
                         chatID, instructions: "Discuss books", preferences: preferences, characterName: "Loki")
                     {
                         captureFailures.append("Character identity could not be saved")
                     }
-                    model.instructionsID = chatID
+                    model.customization.instructionsID = chatID
                     try? await Task.sleep(nanoseconds: 350_000_000)
                     await captureSheet("character-editor.png")
                     model.saveConversationAsTemplate(
@@ -607,14 +606,14 @@
                             preferences: preferences))
                     try? await Task.sleep(nanoseconds: 350_000_000)
                     await captureSheet("template-save-as.png")
-                    model.closeTemplateEditor()
+                    model.customization.closeTemplateEditor()
                     try? await Task.sleep(nanoseconds: 350_000_000)
-                    if model.retainedInstructionsDraft?.instructions != "Unsaved template instructions" {
+                    if model.customization.retainedInstructionsDraft?.instructions != "Unsaved template instructions" {
                         captureFailures.append("Save-as lost instructions draft")
                     }
                     await captureSheet("instructions-draft-return.png")
-                    model.instructionsID = nil
-                    model.retainedInstructionsDraft = nil
+                    model.customization.instructionsID = nil
+                    model.customization.retainedInstructionsDraft = nil
                     try? await Task.sleep(nanoseconds: 350_000_000)
                     // Real bundled MCP subprocess -> private socket -> shared app command layer.
                     model.allowDemoAutomation = true
@@ -624,7 +623,7 @@
                         guard model.automation.server != nil else {
                             throw AppFailure("Production automation listener did not start.")
                         }
-                        let helper = model.mcpExecutablePath
+                        let helper = AutomationController.helperPath
                         let result = try await Task.detached {
                             try AutomationSmokeClient.run(helper: helper, socketPath: socketPath)
                         }.value
@@ -655,7 +654,7 @@
                 model.startHelp()
                 try? await Task.sleep(nanoseconds: 300_000_000)
                 await capture("help.png")
-                model.meaning = "I want to ask for a little more time to think."
+                model.help.meaning = "I want to ask for a little more time to think."
                 model.editEnglish("I would like a little more time to think.")
                 try? await Task.sleep(nanoseconds: 300_000_000)
                 await capture("help-english.png")
@@ -670,15 +669,15 @@
                 let thoughtName = "thought-fixture.wav"
                 try? PCM.wav(Data(repeating: 0, count: 144000)).write(
                     to: model.store.root.appendingPathComponent(thoughtName))
-                model.thoughtRecording = thoughtName
+                model.help.thoughtRecording = thoughtName
                 model.recordingWarning =
                     "This illustrative recording is very quiet. Listen before transcribing, or record it again."
                 try? await Task.sleep(nanoseconds: 300_000_000)
                 await capture("help-recording-review.png")
-                model.recognizedThought = "I need a little more time before I can explain my idea."
+                model.help.recognizedThought = "I need a little more time before I can explain my idea."
                 try? await Task.sleep(nanoseconds: 300_000_000)
                 await capture("help-transcript-review.png")
-                model.recognizedThought = nil
+                model.help.recognizedThought = nil
                 _ = model.turn.begin(.recording)
                 model.recordingMeaning = true
                 model.recordingSeconds = 3
@@ -738,18 +737,18 @@
                     model.stop()
                     model.audio.makePlayer = originalPlayer
                     model.notice = nil
-                    model.search = ""
+                    model.history.query = ""
                     model.openConversationSearch()
-                    model.conversationQuery = "time"
+                    model.find.query = "time"
                     try? await Task.sleep(nanoseconds: 300_000_000)
                     await capture("conversation-search.png")
-                    model.moveConversationMatch(1)
+                    model.find.move(1)
                     try? await Task.sleep(nanoseconds: 250_000_000)
                     await capture("conversation-search-next.png")
-                    if model.conversationMatchIDs.count != 2 {
+                    if model.find.matchIDs.count != 2 {
                         captureFailures.append("Current conversation search did not find both messages")
                     }
-                    model.conversationQuery = "no-such-message"
+                    model.find.query = "no-such-message"
                     try? await Task.sleep(nanoseconds: 250_000_000)
                     await capture("conversation-search-empty.png")
                     @MainActor func searchFields(_ view: NSView) -> [NSSearchField] {
@@ -762,7 +761,7 @@
                         }
                         field.stringValue = ""
                         if let action = field.action { NSApp.sendAction(action, to: field.target, from: field) }
-                        if !model.conversationQuery.isEmpty {
+                        if !model.find.query.isEmpty {
                             captureFailures.append("Native search cancel did not clear the query")
                         }
                     } else {
@@ -770,7 +769,7 @@
                     }
 
                     if let window = mainWindow { window.setContentSize(NSSize(width: 820, height: 700)) }
-                    model.conversationQuery = "time"
+                    model.find.query = "time"
                     try? await Task.sleep(nanoseconds: 250_000_000)
                     await capture("conversation-search-compact.png")
                     let escapeCommand = NSApp.mainMenu?.items.compactMap(\.submenu).flatMap(\.items).first {
@@ -780,11 +779,11 @@
                     if let command = escapeCommand, let menu = command.menu {
                         menu.performActionForItem(at: menu.index(of: command))
                     }
-                    if escapeCommand == nil || model.conversationSearchOpen || model.turn.epoch != searchEpoch {
+                    if escapeCommand == nil || model.find.isOpen || model.turn.epoch != searchEpoch {
                         captureFailures.append("Escape must close search without cancelling a pending reply")
                     }
                     _ = model.turn.finish(searchEpoch)
-                    model.closeConversationSearch()
+                    model.find.close()
                     if let window = mainWindow { window.setContentSize(NSSize(width: 1120, height: 840)) }
 
                     if model.conversation?.messages.first(where: { $0.id == failed.id })?.transcriptionState
@@ -808,7 +807,7 @@
                     model.deleteChats([ids[2]])
                     model.select(ids[0])
                     model.draft = "I think the first step is…"
-                    model.search = "project"
+                    model.history.query = "project"
                     try? await Task.sleep(nanoseconds: 350_000_000)
                     await capture("search.png")
                     model.showHistory(.archived)
@@ -817,21 +816,21 @@
                     model.showHistory(.deleted)
                     try? await Task.sleep(nanoseconds: 350_000_000)
                     await capture("deleted.png")
-                    model.managerOpen = true
+                    model.history.managerOpen = true
                     try? await Task.sleep(nanoseconds: 450_000_000)
                     await capture("manager.png")
-                    model.permanentDeleteIDs = [ids[2]]
+                    model.history.permanentDeleteIDs = [ids[2]]
                     try? await Task.sleep(nanoseconds: 350_000_000)
                     await capture("permanent-delete-confirmation.png")
-                    model.permanentDeleteIDs = []
+                    model.history.permanentDeleteIDs = []
                     try? await Task.sleep(nanoseconds: 250_000_000)
-                    model.managerOpen = false
+                    model.history.managerOpen = false
                     try? await Task.sleep(nanoseconds: 350_000_000)
                     model.showHistory(.active)
-                    model.renameID = ids[0]
+                    model.history.renameID = ids[0]
                     try? await Task.sleep(nanoseconds: 450_000_000)
                     await capture("rename.png")
-                    model.renameID = nil
+                    model.history.renameID = nil
                     if let window = mainWindow { window.setContentSize(NSSize(width: 820, height: 700)) }
                     try? await Task.sleep(nanoseconds: 350_000_000)
                     await capture("history-compact.png")
@@ -889,7 +888,7 @@
                 model.allowDemoAutomation = true
                 model.externalControlEnabled = true
                 let controlPath = model.controlSocketPath
-                let helper = model.mcpExecutablePath
+                let helper = AutomationController.helperPath
                 do {
                     if model.automationModal { throw AppFailure("Closing Settings left a conversation modal active.") }
                     let result = try await Task.detached {
@@ -991,7 +990,7 @@
                         onTool: { name, args, _ in
                             guard model.turn.epoch == token else { throw CancellationError() }
                             calls.append(name)
-                            return try model.executeTool(name, arguments: args, origin: .voice)
+                            return try model.tools.execute(name, arguments: args, origin: .voice)
                         })
                     if !reply.audio.isEmpty && calls.contains("get_session") && calls.contains("save_expression")
                         && model.library.expressions.contains(where: {

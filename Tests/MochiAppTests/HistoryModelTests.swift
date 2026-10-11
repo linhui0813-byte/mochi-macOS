@@ -76,7 +76,7 @@ final class HistoryModelTests: XCTestCase {
         try Data([2]).write(to: root.appendingPathComponent("chat-only.wav"))
         model.append(Message(role: "user", text: "Hello", audio: "chat-only.wav"), to: id)
         model.deleteChats([id])
-        model.permanentDeleteIDs = [id]
+        model.history.permanentDeleteIDs = [id]
         model.permanentlyDeleteChats()
         // The earlier copy still names the chat's recording, so the launch sweep removes it, not this deletion.
         XCTAssertFalse(model.library.referencedAudio.contains("chat-only.wav"))
@@ -128,4 +128,83 @@ final class HistoryModelTests: XCTestCase {
         XCTAssertFalse(model.library.conversations.first(where: { $0.id == source })!.archived)
     }
     private func temporary() -> URL { TestScratch.folder() }
+}
+
+extension HistoryModelTests {
+    @MainActor func testArchivingTheSelectedChatSavesTheReplacementSelection() throws {
+        let root = makeTemporaryFolder()
+        let app = makeApp(root: root)
+        let first = try XCTUnwrap(app.selectedID)
+        app.append(Message(role: "user", text: "First"), to: first)
+        app.newChat()
+        let second = try XCTUnwrap(app.selectedID)
+        app.append(Message(role: "user", text: "Second"), to: second)
+        app.select(first)
+        app.archiveChats([first])
+        XCTAssertEqual(app.selectedID, second)
+        XCTAssertEqual(makeApp(root: root).selectedID, second)
+    }
+
+    /// An active-collection search also lists archived conversations, so bulk actions follow each one's state.
+    @MainActor func testSelectionActionsSplitArchivedFromActiveConversations() {
+        var library = Library()
+        let active = Conversation(title: "Active")
+        var archived = Conversation(title: "Archived")
+        archived.archived = true
+        var deleted = Conversation(title: "Deleted")
+        deleted.deletedAt = Date()
+        library.conversations = [active, archived, deleted]
+        XCTAssertEqual(
+            library.history(in: .active, query: "e").map(\.id).sorted { $0.uuidString < $1.uuidString },
+            [active.id, archived.id].sorted { $0.uuidString < $1.uuidString })
+
+        let mixed = HistorySelectionActions.targets([active.id, archived.id, deleted.id], in: library)
+        XCTAssertEqual(mixed.archive, [active.id])
+        XCTAssertEqual(mixed.restore, [archived.id])
+
+        let onlyArchived = HistorySelectionActions.targets([archived.id], in: library)
+        XCTAssertTrue(onlyArchived.archive.isEmpty)
+        XCTAssertEqual(onlyArchived.restore, [archived.id])
+
+        let none = HistorySelectionActions.targets([], in: library)
+        XCTAssertTrue(none.archive.isEmpty && none.restore.isEmpty)
+    }
+
+    @MainActor func testPermanentDeletionKeepsTheRecordingHeldForUndo() throws {
+        let root = makeTemporaryFolder()
+        let app = makeApp(root: root)
+        let selected = try XCTUnwrap(app.selectedID)
+        let other = Conversation(title: "Other")
+        app.library.conversations.append(other)
+        let url = root.appendingPathComponent("shared.wav")
+        try Data([1]).write(to: url)
+        let message = Message(role: "user", text: "Mine", audio: "shared.wav")
+        app.append(message, to: selected)
+        app.append(Message(role: "user", text: "Theirs", audio: "shared.wav"), to: other.id)
+        app.deleteMessage(message.id)
+        app.deleteChats([other.id])
+        app.history.permanentDeleteIDs = [other.id]
+        app.permanentlyDeleteChats()
+        XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
+        app.undoMessageDeletion()
+        XCTAssertEqual(app.conversation?.messages.first?.audio, "shared.wav")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
+    }
+
+    @MainActor func testRestoringTheEarlierCopyShowsTheScopeOfTheSelectedChat() throws {
+        let root = makeTemporaryFolder()
+        let first = makeApp(root: root)
+        let id = try XCTUnwrap(first.selectedID)
+        first.append(Message(role: "user", text: "Archived words"), to: id)
+        first.archiveChats([id])
+        first.showHistory(.archived)
+        XCTAssertEqual(first.selectedID, id)
+        first.save()
+        try Data("damaged".utf8).write(to: root.appendingPathComponent("library.json"))
+        let app = makeApp(root: root)
+        XCTAssertTrue(app.canRestorePreviousLibrary)
+        app.restorePreviousLibrary()
+        XCTAssertEqual(app.selectedID, id)
+        XCTAssertEqual(app.history.scope, .archived)
+    }
 }

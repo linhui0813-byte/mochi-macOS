@@ -1,4 +1,3 @@
-import MochiAutomation
 import MochiCore
 import MochiKernel
 import SwiftUI
@@ -27,12 +26,14 @@ struct ConversationSettingsFields: View {
             .fieldFrame(cornerRadius: 8, focused: instructionsFocused)
             .accessibilityLabel("Conversation instructions")
         Text(
-            "\(instructions.count)/\(MochiTools.maxInstructions.formatted()) characters · \(instructions.utf8.count)/\(MochiTools.maxInstructionBytes.formatted()) bytes"
+            "\(instructions.count)/\(ConversationInstructions.maxCharacters.formatted()) characters · \(instructions.utf8.count)/\(ConversationInstructions.maxBytes.formatted()) bytes"
         )
         .font(.caption).foregroundStyle(.secondary)
-        if instructions.count > MochiTools.maxInstructions || instructions.utf8.count > MochiTools.maxInstructionBytes {
+        if instructions.count > ConversationInstructions.maxCharacters
+            || instructions.utf8.count > ConversationInstructions.maxBytes
+        {
             Text(
-                "The full original text is preserved. Future replies use a bounded preview. Shorten it to \(MochiTools.maxInstructions.formatted()) characters and \(MochiTools.maxInstructionBytes / 1024) KB to save edited text or a new template. Unchanged conversation text can be preserved when changing other settings."
+                "The full original text is preserved. Future replies use a bounded preview. Shorten it to \(ConversationInstructions.maxCharacters.formatted()) characters and \(ConversationInstructions.maxBytes / 1024) KB to save edited text or a new template. Unchanged conversation text can be preserved when changing other settings."
             )
             .font(.caption).foregroundStyle(.red)
         }
@@ -65,29 +66,30 @@ struct ConversationTemplatesView: View {
     @FocusState private var listFocused: Bool
     @State private var error: String?
     @State private var pendingDelete: ConversationTemplate?
-    private var mode: TemplatePresentation { app.templatePresentation ?? .picker }
+    private var mode: TemplatePresentation { app.customization.templatePresentation ?? .picker }
     private var values: [ConversationTemplate] {
-        app.allTemplates.filter {
+        app.templates.all.filter {
             query.isEmpty || $0.title.localizedCaseInsensitiveContains(query)
                 || $0.description.localizedCaseInsensitiveContains(query)
         }
     }
     private var draftBinding: Binding<ConversationTemplate> {
         Binding(
-            get: { app.templateDraft?.value ?? ConversationTemplate(title: "") },
+            get: { app.customization.templateDraft?.value ?? ConversationTemplate(title: "") },
             set: {
-                app.templateDraft?.value = $0
+                app.customization.templateDraft?.value = $0
                 error = nil
             })
     }
-    private var validationError: String? { app.templateDraftIssue }
+    private var validationError: String? { app.customization.templateDraftIssue }
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(
                 mode == .picker
                     ? "New Conversation from Template"
                     : mode == .manager
-                        ? "Manage Templates" : app.templateDraft?.editingID == nil ? "New Template" : "Edit Template"
+                        ? "Manage Templates"
+                        : app.customization.templateDraft?.editingID == nil ? "New Template" : "Edit Template"
             ).font(.title2).fontWeight(.semibold)
             if mode != .editor {
                 TextField("Search templates", text: $query).textFieldStyle(.roundedBorder)
@@ -99,7 +101,8 @@ struct ConversationTemplatesView: View {
                 editor
             }
             // Selected recovery templates explain why Start/Save is disabled instead of failing silently.
-            if let error = error ?? (mode == .editor || app.templateDraft != nil ? validationError : nil) {
+            if let error = error ?? (mode == .editor || app.customization.templateDraft != nil ? validationError : nil)
+            {
                 Text(error).font(.callout).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
             }
             footer
@@ -112,8 +115,8 @@ struct ConversationTemplatesView: View {
                 Button("Delete Template", role: .destructive) {
                     guard let t = pendingDelete else { return }
                     do {
-                        try app.deleteTemplate(id: t.id, revision: t.revision)
-                        app.templateDraft = nil
+                        try app.templates.delete(id: t.id, revision: t.revision)
+                        app.customization.templateDraft = nil
                         error = nil
                     } catch {
                         self.error = (error as? AppFailure)?.message ?? String(localized: "Could not delete template.")
@@ -136,19 +139,20 @@ struct ConversationTemplatesView: View {
             }
         }.frame(width: 195).focused($listFocused)
             .onAppear {
-                selection = app.templateDraft?.value.id
+                selection = app.customization.templateDraft?.value.id
                 listFocused = true
             }
             .onChange(of: selection) { _, id in
-                guard let id, app.templateDraft?.value.id != id,
-                    let t = app.allTemplates.first(where: { $0.id == id })
+                guard let id, app.customization.templateDraft?.value.id != id,
+                    let t = app.templates.all.first(where: { $0.id == id })
                 else { return }
-                app.templateDraft = TemplateEditorDraft(value: t, editingID: nil, expectedRevision: t.revision)
+                app.customization.templateDraft = TemplateEditorDraft(
+                    value: t, editingID: nil, expectedRevision: t.revision)
                 error = nil
             }
     }
     @ViewBuilder private var preview: some View {
-        if let draft = app.templateDraft {
+        if let draft = app.customization.templateDraft {
             VStack(alignment: .leading, spacing: 12) {
                 Text(draft.value.displayTitle).font(.headline)
                 Text(draft.value.displayDescription).foregroundStyle(.secondary)
@@ -167,12 +171,12 @@ struct ConversationTemplatesView: View {
                 sourceStatus(draft)
                 HStack {
                     Button("Duplicate…") {
-                        app.editTemplate(draft.value, duplicate: true)
+                        app.customization.editTemplate(draft.value, duplicate: true)
                         error = nil
                     }
                     if mode == .manager && !draft.value.isBuiltin {
                         Button("Edit…") {
-                            app.editTemplate(draft.value)
+                            app.customization.editTemplate(draft.value)
                             error = nil
                         }
                         Button("Delete…", role: .destructive) { pendingDelete = draft.value }
@@ -184,11 +188,11 @@ struct ConversationTemplatesView: View {
         }
     }
     @ViewBuilder private func sourceStatus(_ draft: TemplateEditorDraft) -> some View {
-        if let source = app.allTemplates.first(where: { $0.id == draft.value.id }) {
+        if let source = app.templates.all.first(where: { $0.id == draft.value.id }) {
             if source.revision != draft.expectedRevision {
                 Text("The source changed. Your preview is kept.").font(.caption).foregroundStyle(.orange)
                 Button("Refresh from Source") {
-                    app.templateDraft = TemplateEditorDraft(
+                    app.customization.templateDraft = TemplateEditorDraft(
                         value: source, editingID: nil, expectedRevision: source.revision)
                     error = nil
                 }
@@ -214,7 +218,7 @@ struct ConversationTemplatesView: View {
         HStack {
             if mode != .editor {
                 Button("New Template…") {
-                    app.editTemplate(nil)
+                    app.customization.editTemplate(nil)
                     error = nil
                 }
             }
@@ -222,21 +226,22 @@ struct ConversationTemplatesView: View {
             Button(mode == .manager ? "Done" : "Cancel") {
                 error = nil
                 if mode == .editor {
-                    app.closeTemplateEditor()
+                    app.customization.closeTemplateEditor()
                 } else {
-                    app.templatePresentation = nil
-                    app.templateDraft = nil
+                    app.customization.closeTemplates()
                 }
             }.keyboardShortcut(.cancelAction)
             if mode == .picker {
                 Button("Start Conversation") {
-                    do { if let t = app.templateDraft?.value { _ = try app.startTemplateSnapshot(t) } } catch {
+                    do {
+                        if let t = app.customization.templateDraft?.value { _ = try app.startTemplateSnapshot(t) }
+                    } catch {
                         self.error =
                             (error as? AppFailure)?.message ?? String(localized: "Could not start conversation.")
                     }
                 }.keyboardShortcut(.defaultAction).disabled(validationError != nil || app.busy)
             } else if mode == .editor {
-                if app.templateDraft?.editingID != nil {
+                if app.customization.templateDraft?.editingID != nil {
                     Button("Save as New") { save(asNew: true) }.disabled(validationError != nil)
                 }
                 Button("Save") { save(asNew: false) }.keyboardShortcut(.defaultAction).disabled(
@@ -245,29 +250,24 @@ struct ConversationTemplatesView: View {
         }
     }
     private func save(asNew: Bool) {
-        guard let draft = app.templateDraft else { return }
-        var fields: [String: Any] = [
-            "title": draft.value.title, "description": draft.value.description,
-            "instructions": draft.value.instructions, "coaching": draft.value.preferences.coaching.rawValue,
-        ]
-        if let name = draft.value.characterName {
-            fields["character_name"] = name
-        } else if draft.editingID != nil && !asNew {
-            fields["clear_character_name"] = true
-        }
-        if let speed = draft.value.preferences.speed {
-            fields["speed"] = speed
-        } else if draft.editingID != nil && !asNew {
-            fields["clear_speed"] = true
-        }
+        guard let draft = app.customization.templateDraft else { return }
+        // Saving over a template clears a name or speed the draft no longer has; a new template just omits them.
+        let replacing = draft.editingID != nil && !asNew
+        let patch = ConversationTemplate.Patch(
+            title: draft.value.title, description: draft.value.description,
+            settings: ConversationSettingsPatch(
+                instructions: draft.value.instructions,
+                characterName: draft.value.characterName.map { .set($0) } ?? (replacing ? .clear : .keep),
+                speed: draft.value.preferences.speed.map { .set($0) } ?? (replacing ? .clear : .keep),
+                coaching: draft.value.preferences.coaching))
         do {
-            if !asNew, let id = draft.editingID, let revision = draft.expectedRevision {
-                _ = try app.updateTemplate(id: id, revision: revision, fields: fields)
+            if replacing, let id = draft.editingID, let revision = draft.expectedRevision {
+                _ = try app.templates.update(id: id, revision: revision, patch)
             } else {
-                _ = try app.createTemplate(fields: fields)
+                _ = try app.templates.create(patch)
             }
             error = nil
-            app.closeTemplateEditor()
+            app.customization.closeTemplateEditor()
         } catch {
             self.error =
                 (error as? AppFailure)?.message ?? String(localized: "Could not save template. Your draft is kept.")

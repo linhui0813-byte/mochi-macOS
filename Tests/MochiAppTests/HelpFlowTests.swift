@@ -12,128 +12,61 @@ final class HelpFlowTests: XCTestCase {
         let app = makeApp(root: root)
         app.draft = "An unfinished thought"
         app.startHelp()
-        XCTAssertEqual(app.meaning, "An unfinished thought")
-        app.meaning = "The original thought"
+        XCTAssertEqual(app.help.meaning, "An unfinished thought")
+        app.help.meaning = "The original thought"
         app.editEnglish("My English expression")
-        XCTAssertEqual(app.helpStage, .english)
+        XCTAssertEqual(app.help.stage, .english)
         app.beginPractice()
-        XCTAssertEqual(app.helpStage, .practice)
+        XCTAssertEqual(app.help.stage, .practice)
         app.stop()
         app.startHelp()
-        XCTAssertEqual(app.meaning, "The original thought")
-        XCTAssertEqual(app.english, "My English expression")
+        XCTAssertEqual(app.help.meaning, "The original thought")
+        XCTAssertEqual(app.help.english, "My English expression")
         app.stop()
         let reopened = makeApp(root: root)
         reopened.startHelp()
-        XCTAssertEqual(reopened.meaning, "The original thought")
-        XCTAssertEqual(reopened.english, "My English expression")
-        XCTAssertEqual(reopened.helpStage, .english)
-    }
-    @MainActor func testTranscriptRecoveryDoesNotDuplicateMessagesOrReplies() async throws {
-        let app = makeApp(demo: true)
-        app.resume()
-        var voice = Message(role: "user", text: "", audio: "saved.wav")
-        voice.transcriptionState = .failed
-        app.append(voice, to: app.selectedID!)
-        app.append(Message(role: "assistant", text: "Existing reply"), to: app.selectedID!)
-        let count = app.conversation!.messages.count
-
-        app.speech.transcribe = { _, model in
-            XCTAssertEqual(model, app.settings.modelName)
-            return "Recovered thought"
-        }
-        app.retryTranscription(voice.id)
-        await waitUntil { !app.transcribingMessageIDs.contains(voice.id) }
-        XCTAssertEqual(app.conversation!.messages.count, count)
-        XCTAssertEqual(app.conversation!.messages.first(where: { $0.id == voice.id })?.text, "Recovered thought")
-        XCTAssertEqual(app.conversation!.messages.last?.text, "Existing reply")
-    }
-    @MainActor func testManualEditOverridesLateRecovery() async throws {
-        let app = makeApp(demo: true)
-        app.resume()
-        var voice = Message(role: "user", text: "", audio: "saved.wav")
-        voice.transcriptionState = .failed
-        app.append(voice, to: app.selectedID!)
-        let gate = TestGate()
-        let started = expectation(description: "Recovery started")
-        app.speech.transcribe = { _, _ in
-            started.fulfill()
-            await gate.wait()
-            return "Late recognition"
-        }
-        app.retryTranscription(voice.id)
-        let job = try XCTUnwrap(app.transcripts.task(for: voice.id))
-        await fulfillment(of: [started], timeout: 2)
-        app.editTranscript(voice.id, text: "My correction")
-        await gate.release()
-        await job.value
-        XCTAssertEqual(app.conversation!.messages.first(where: { $0.id == voice.id })?.text, "My correction")
-        XCTAssertTrue(app.transcribingMessageIDs.isEmpty)
-    }
-    @MainActor func testDeletionAndStopRejectLateRecoveryAndKeepAudioReference() async throws {
-        let app = makeApp(demo: true)
-        app.resume()
-        var voice = Message(role: "user", text: "", audio: "saved.wav")
-        voice.transcriptionState = .failed
-        let chatID = app.selectedID!
-        app.append(voice, to: chatID)
-        let gate = TestGate()
-        let started = expectation(description: "Recovery started")
-        app.speech.transcribe = { _, _ in
-            started.fulfill()
-            await gate.wait()
-            return "Late recognition"
-        }
-        app.retryTranscription(voice.id)
-        let job = try XCTUnwrap(app.transcripts.task(for: voice.id))
-        await fulfillment(of: [started], timeout: 2)
-        app.deleteChats([chatID])
-        await gate.release()
-        await job.value
-        let deleted = app.library.conversations.first(where: { $0.id == chatID })!
-        XCTAssertTrue(deleted.isDeleted)
-        XCTAssertTrue(deleted.messages.first(where: { $0.id == voice.id })!.text.isEmpty)
-        XCTAssertTrue(app.transcribingMessageIDs.isEmpty)
-        XCTAssertTrue(app.library.referencedAudio.contains("saved.wav"))
+        XCTAssertEqual(reopened.help.meaning, "The original thought")
+        XCTAssertEqual(reopened.help.english, "My English expression")
+        XCTAssertEqual(reopened.help.stage, .english)
     }
     @MainActor func testHelpThoughtRecordingSurvivesRelaunchWithoutUpload() throws {
         let root = TestScratch.folder()
         defer { try? FileManager.default.removeItem(at: root) }
         let app = makeApp(root: root)
         app.startHelp()
-        app.thoughtRecording = "thought.wav"
-        app.meaning = "A thought to review"
+        app.help.thoughtRecording = "thought.wav"
+        app.help.meaning = "A thought to review"
         app.resume()
         let restored = makeApp(root: root)
         restored.startHelp()
-        XCTAssertEqual(restored.thoughtRecording, "thought.wav")
-        XCTAssertEqual(restored.helpStage, .thought)
+        XCTAssertEqual(restored.help.thoughtRecording, "thought.wav")
+        XCTAssertEqual(restored.help.stage, .thought)
         XCTAssertTrue(restored.library.referencedAudio.contains("thought.wav"))
         XCTAssertFalse(restored.busy)
     }
     @MainActor func testClarificationAndFailureKeepExistingEnglishAndThought() async throws {
         let app = makeApp(demo: true)
         app.startHelp()
-        app.meaning = "An ambiguous thought"
+        app.help.meaning = "An ambiguous thought"
         app.editEnglish("Existing wording")
         app.speech.textReply = { _, _ in #"{"kind":"clarification","text":"Which project do you mean?"}"# }
         app.translate()
         await waitUntil { !app.busy }
-        XCTAssertEqual(app.helpClarification, "Which project do you mean?")
-        XCTAssertEqual(app.helpStage, .thought)
-        XCTAssertEqual(app.english, "Existing wording")
+        XCTAssertEqual(app.help.clarification, "Which project do you mean?")
+        XCTAssertEqual(app.help.stage, .thought)
+        XCTAssertEqual(app.help.english, "Existing wording")
         app.speech.textReply = { _, _ in throw AppFailure("A temporary connection failure") }
         app.translate()
         await waitUntil { !app.busy }
-        XCTAssertEqual(app.meaning, "An ambiguous thought")
-        XCTAssertEqual(app.english, "Existing wording")
-        XCTAssertNil(app.helpProgress)
+        XCTAssertEqual(app.help.meaning, "An ambiguous thought")
+        XCTAssertEqual(app.help.english, "Existing wording")
+        XCTAssertNil(app.help.progress)
         XCTAssertNotNil(app.error)
     }
     @MainActor func testRegenerationIncludesPriorWordingButPreservesOriginalMeaning() async throws {
         let app = makeApp(demo: true)
         app.startHelp()
-        app.meaning = "My actual meaning"
+        app.help.meaning = "My actual meaning"
         app.editEnglish("Old wording")
         app.speech.textReply = { _, request in
             XCTAssertTrue(request.help)
@@ -142,28 +75,28 @@ final class HelpFlowTests: XCTestCase {
         }
         app.tryAnotherWording()
         await waitUntil { !app.busy }
-        XCTAssertEqual(app.meaning, "My actual meaning")
-        XCTAssertEqual(app.english, "New wording. Another sentence.")
-        XCTAssertEqual(app.helpStage, .english)
-        XCTAssertEqual(app.expression?.meaning, "My actual meaning")
+        XCTAssertEqual(app.help.meaning, "My actual meaning")
+        XCTAssertEqual(app.help.english, "New wording. Another sentence.")
+        XCTAssertEqual(app.help.stage, .english)
+        XCTAssertEqual(app.help.expression?.meaning, "My actual meaning")
     }
     @MainActor func testRecordedThoughtUsesSelectedRealtimeConnectionWithoutTranslation() async throws {
         let app = makeApp(demo: true)
         app.startHelp()
-        app.meaning = "Previous thought"
+        app.help.meaning = "Previous thought"
         app.editEnglish("Previous English")
         app.editThought()
-        app.thoughtRecording = "thought.wav"
+        app.help.thoughtRecording = "thought.wav"
         app.speech.transcribe = { _, model in
             XCTAssertEqual(model, app.settings.modelName)
             return "Recognized thought"
         }
         app.transcribeThought()
         await waitUntil { !app.busy }
-        XCTAssertEqual(app.meaning, "Previous thought")
-        XCTAssertEqual(app.recognizedThought, "Recognized thought")
-        XCTAssertEqual(app.english, "Previous English")
-        XCTAssertEqual(app.helpStage, .thought)
+        XCTAssertEqual(app.help.meaning, "Previous thought")
+        XCTAssertEqual(app.help.recognizedThought, "Recognized thought")
+        XCTAssertEqual(app.help.english, "Previous English")
+        XCTAssertEqual(app.help.stage, .thought)
         XCTAssertFalse(app.busy)
     }
     func testQuietInputWarningDoesNotTreatValidFormatAsGoodSignal() {
@@ -171,5 +104,88 @@ final class HelpFlowTests: XCTestCase {
         let clear = RecordingSignal(samples: (0..<24000).map { sin(Float($0) * 0.1) * 0.2 })
         XCTAssertTrue(quiet.isQuiet)
         XCTAssertFalse(clear.isQuiet)
+    }
+}
+
+extension HelpFlowTests {
+    @MainActor func testTranscribedThoughtRequiresExplicitAddOrReplaceAndPersistsReview() async throws {
+        let root = TestScratch.folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let app = makeApp(root: root)
+        app.startHelp()
+        app.help.meaning = "Typed thought"
+        app.editEnglish("Existing English")
+        app.editThought()
+        app.help.thoughtRecording = "thought.wav"
+        app.speech.transcribe = { _, _ in "Recognized thought" }
+        app.transcribeThought()
+        await waitUntil { !app.busy }
+        XCTAssertEqual(app.help.meaning, "Typed thought")
+        XCTAssertEqual(app.help.recognizedThought, "Recognized thought")
+        app.stop()
+        let restored = makeApp(root: root)
+        restored.startHelp()
+        XCTAssertEqual(restored.help.recognizedThought, "Recognized thought")
+        XCTAssertEqual(restored.help.stage, .thought)
+        XCTAssertEqual(restored.help.english, "Existing English")
+        restored.useRecognizedThought(replace: false)
+        XCTAssertEqual(restored.help.meaning, "Typed thought\nRecognized thought")
+        XCTAssertNil(restored.help.recognizedThought)
+        restored.help.recognizedThought = "Replacement"
+        restored.useRecognizedThought(replace: true)
+        XCTAssertEqual(restored.help.meaning, "Replacement")
+    }
+
+    @MainActor func testRecordingReplacementDiscardAndCancelCleanUpButKeepSharedFile() throws {
+        let root = TestScratch.folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let app = makeApp(root: root)
+        app.startHelp()
+        for name in ["old.wav", "new.wav", "shared.wav", "canceled.wav"] {
+            try Data([1]).write(to: root.appendingPathComponent(name))
+        }
+        app.help.thoughtRecording = "old.wav"
+        // A recording the earlier copy still names waits for the launch sweep; any other is removed at once.
+        func removedUnlessEarlierCopyNames(_ name: String, line: UInt = #line) {
+            XCTAssertFalse(app.library.referencedAudio.contains(name), line: line)
+            XCTAssertEqual(
+                FileManager.default.fileExists(atPath: root.appendingPathComponent(name).path),
+                app.store.previousReferencedAudio().contains(name), line: line)
+        }
+        app.help.thoughtRecording = "new.wav"
+        removedUnlessEarlierCopyNames("old.wav")
+        app.discardThoughtRecording()
+        removedUnlessEarlierCopyNames("new.wav")
+        app.append(Message(role: "user", text: "Shared", audio: "shared.wav"), to: app.selectedID!)
+        app.help.thoughtRecording = "shared.wav"
+        app.discardThoughtRecording()
+        XCTAssertTrue(FileManager.default.fileExists(atPath: root.appendingPathComponent("shared.wav").path))
+        app.media.stopRecording = { root.appendingPathComponent("canceled.wav") }
+        app.cancelRecording()
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("canceled.wav").path))
+    }
+
+    @MainActor func testCompletedHelpSeedsNextComposerAndDeletesOnlyUnreferencedAudio() throws {
+        let root = TestScratch.folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let app = makeApp(root: root)
+        app.startHelp()
+        try Data([1]).write(to: root.appendingPathComponent("thought.wav"))
+        app.help.meaning = "Finished thought"
+        app.help.thoughtRecording = "thought.wav"
+        app.editEnglish("Finished English")
+        app.resume()
+        XCTAssertNil(app.conversation?.helpDraft)
+        XCTAssertFalse(app.library.referencedAudio.contains("thought.wav"))
+        // A recording the earlier copy still names waits for the launch sweep; any other is removed at once.
+        XCTAssertEqual(
+            FileManager.default.fileExists(atPath: root.appendingPathComponent("thought.wav").path),
+            app.store.previousReferencedAudio().contains("thought.wav"))
+        app.draft = "Next thought"
+        app.startHelp()
+        XCTAssertEqual(app.help.meaning, "Next thought")
+        XCTAssertEqual(app.help.english, "")
+        XCTAssertEqual(app.help.stage, .thought)
+        XCTAssertEqual(app.library.expressions.first?.english, "Finished English")
     }
 }

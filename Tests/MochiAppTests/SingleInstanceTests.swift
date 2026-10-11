@@ -116,3 +116,20 @@ final class SingleInstanceTests: XCTestCase {
         XCTAssertThrowsError(try ProcessInstanceLock(url: root))
     }
 }
+
+extension SingleInstanceTests {
+    func testBundleMetadataIsTrustedOnlyWhenItPredatesTheProcess() throws {
+        let folder = TestScratch.folder("instance")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let file = folder.appendingPathComponent("Info.plist")
+        let started = try XCTUnwrap(SingleInstanceController.startTime(getpid()))
+        XCTAssertLessThanOrEqual(started.tv_sec, time(nil))
+        try Data("x".utf8).write(to: file)
+        // Written after this process started: an upgrade replaced it, so it does not describe the process.
+        XCTAssertFalse(SingleInstanceController.unchangedSince(started, [file]))
+        var now = timespec()
+        clock_gettime(CLOCK_REALTIME, &now)
+        XCTAssertTrue(SingleInstanceController.unchangedSince(now, [file]))
+        XCTAssertFalse(SingleInstanceController.unchangedSince(now, [folder.appendingPathComponent("missing")]))
+    }
+}

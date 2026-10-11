@@ -1,4 +1,5 @@
 import AVFoundation
+import Darwin
 import MochiCore
 import MochiKernel
 import XCTest
@@ -18,34 +19,6 @@ final class MediaAndFilesModelTests: XCTestCase {
         return url
     }
 
-    // MARK: Microphone interruption (M7)
-
-    @MainActor func testMicrophoneThatStopsMidTakeEndsTheRecordingWithAnExplanation() async throws {
-        let root = makeTemporaryFolder()
-        let app = makeApp(root: root)
-        var recorded: URL?
-        var active = true
-        app.media.permission = { true }
-        app.media.record = { url in
-            recorded = url
-            try Data([1, 2, 3]).write(to: url)
-        }
-        app.media.stopRecording = {
-            defer { recorded = nil }
-            return recorded
-        }
-        app.media.recordingActive = { active }
-        app.recordingSleep = { _ in await Task.yield() }
-        app.toggleRecord()
-        await waitUntil { app.turn.activity == .recording }
-        let file = try XCTUnwrap(recorded)
-        active = false
-        await waitUntil { app.turn.activity == .idle }
-        XCTAssertTrue(app.error?.contains("microphone disconnected") == true, app.error ?? "no error")
-        XCTAssertFalse(FileManager.default.fileExists(atPath: file.path))
-        XCTAssertTrue(app.conversation?.messages.isEmpty == true)
-    }
-
     // MARK: Practice attempts (M15)
 
     @MainActor func testPracticeAttemptIsSavedWithItsPitch() async throws {
@@ -62,8 +35,8 @@ final class MediaAndFilesModelTests: XCTestCase {
         await waitUntil { app.turn.activity == .recording }
         app.finishRecording()
         await waitUntil { !app.busy }
-        XCTAssertEqual(app.expression?.attempts.map(\.file), ["attempt.wav"])
-        XCTAssertTrue(app.attemptPitch.contains { $0.hz != nil })
+        XCTAssertEqual(app.help.expression?.attempts.map(\.file), ["attempt.wav"])
+        XCTAssertTrue(app.help.attemptPitch.contains { $0.hz != nil })
         XCTAssertEqual(try LibraryStore(root: root).load().expressions.first?.attempts.count, 1)
     }
 
@@ -76,10 +49,10 @@ final class MediaAndFilesModelTests: XCTestCase {
         app.beginPractice()
         app.importReference(from: fixtureURL("reference.mp3"))
         await waitUntil { !app.busy }
-        let name = try XCTUnwrap(app.expression?.reference)
+        let name = try XCTUnwrap(app.help.expression?.reference)
         XCTAssertTrue(name.hasPrefix("import-"))
-        XCTAssertEqual(app.expression?.referenceKind, "Imported reference")
-        XCTAssertFalse(app.referencePitch.isEmpty)
+        XCTAssertEqual(app.help.expression?.referenceKind, "Imported reference")
+        XCTAssertFalse(app.help.referencePitch.isEmpty)
         XCTAssertTrue(FileManager.default.fileExists(atPath: app.store.root.appendingPathComponent(name).path))
     }
     @MainActor func testBackupRoundTripRunsInTheBackgroundAndKeepsEditsMadeMeanwhile() async throws {
@@ -133,7 +106,7 @@ final class MediaAndFilesModelTests: XCTestCase {
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         app.exportChats([id], json: false, to: url)
         XCTAssertTrue(try String(contentsOf: url).contains("Exported words"))
-        XCTAssertEqual(app.historyFeedback, "Transcript exported.")
+        XCTAssertEqual(app.history.feedback, "Transcript exported.")
     }
 
     // MARK: Launch migration (M8)
@@ -167,5 +140,46 @@ final class MediaAndFilesModelTests: XCTestCase {
         XCTAssertTrue(app.error?.contains("already contains other files") == true, app.error ?? "no error")
         XCTAssertEqual(app.dataFolder.path, mochi.path)
         XCTAssertEqual(app.store.root.path, mochi.path)
+    }
+}
+
+extension MediaAndFilesModelTests {
+    @MainActor func testExportKeepsRecordingsDeletedWhileItRuns() async throws {
+        let app = makeApp(root: makeTemporaryFolder())
+        let name = "recording-\(UUID().uuidString).wav"
+        let recording = app.store.root.appendingPathComponent(name)
+        try Data([1, 2, 3]).write(to: recording)
+        app.append(Message(role: "user", text: "Voice", audio: name), to: try XCTUnwrap(app.selectedID))
+        let package = makeTemporaryFolder().appendingPathComponent("Backup.mochilibrary")
+        let export = try XCTUnwrap(app.libraryController.exportBackup(to: package))
+        try FileManager.default.removeItem(at: recording)
+        try await export.value
+        XCTAssertEqual(try Data(contentsOf: package.appendingPathComponent(name)), Data([1, 2, 3]))
+        XCTAssertFalse(
+            try FileManager.default.contentsOfDirectory(atPath: app.store.root.path).contains {
+                $0.hasPrefix(LibraryStore.exportStagingPrefix)
+            })
+    }
+
+    @MainActor func testCancellingTheImportTaskChangesNothing() async throws {
+        let source = makeApp(root: makeTemporaryFolder())
+        source.append(Message(role: "user", text: "From the backup"), to: try XCTUnwrap(source.selectedID))
+        let package = makeTemporaryFolder().appendingPathComponent("Backup.mochilibrary")
+        await source.exportLibraryBackup(to: package)?.value
+        XCTAssertNil(source.error)
+
+        let target = makeApp(root: makeTemporaryFolder())
+        let before = target.library
+        let task = try XCTUnwrap(target.importLibraryBackup(from: package))
+        task.cancel()
+        await task.value
+        await waitUntil { target.libraryTransfer == nil }
+        XCTAssertNil(target.error)
+        XCTAssertNil(target.history.feedback)
+        XCTAssertEqual(target.library.conversations.map(\.id), before.conversations.map(\.id))
+        XCTAssertFalse(
+            target.library.conversations.contains { $0.messages.contains { $0.text == "From the backup" } })
+        let onDisk = try LibraryStore(root: target.store.root).load()
+        XCTAssertEqual(onDisk.conversations.map(\.id), before.conversations.map(\.id))
     }
 }

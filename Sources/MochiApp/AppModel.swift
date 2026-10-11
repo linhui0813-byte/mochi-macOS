@@ -2,7 +2,6 @@ import AppKit
 import MochiCore
 import MochiKernel
 
-enum HelpStage { case thought, english, practice }
 struct MessageDeletionUndo {
     let conversationID: UUID
     let message: Message
@@ -32,12 +31,8 @@ struct MessageDeletionUndo {
     func updateLibraryQuietly(_ change: (inout Library) -> Void) { libraryController.updateQuietly(change) }
     @ObservationIgnored var deferredToolAction: (() -> Void)?
     @ObservationIgnored var revealWorkspace: (() -> Void)?
-    var templatePresentation: TemplatePresentation?
-    var templateDraft: TemplateEditorDraft?
-    @ObservationIgnored var templateReturnTo: TemplatePresentation?
-    @ObservationIgnored var templateReturnDraft: TemplateEditorDraft?
-    var retainedInstructionsDraft: ConversationSettingsDraft?
-    var instructionsID: UUID?
+    /// The instructions or template sheet, and the drafts it edits.
+    var customization = CustomizationSheet()
     var externalControlEnabled: Bool {
         get { settings.externalControlEnabled }
         set {
@@ -48,57 +43,24 @@ struct MessageDeletionUndo {
     /// The local control server and the caches that make tool calls safe to retry.
     let automation = AutomationController()
     @ObservationIgnored var allowDemoAutomation = false
-    var selectedID: UUID? { didSet { if oldValue != selectedID { closeConversationSearch() } } }
-    var conversationQuery = "" { didSet { refreshConversationMatches(reset: true) } }
-    var conversationSearchOpen = false
-    var conversationSearchFocusRequest = 0
-    private(set) var conversationMatchID: UUID?
-    private(set) var conversationMatchIDs: [UUID] = []
-    private(set) var conversationMatchSet: Set<UUID> = []
-    var conversationMatchIndex: Int { conversationMatchID.flatMap { conversationMatchIDs.firstIndex(of: $0) } ?? 0 }
-    private func refreshConversationMatches(reset: Bool = false) {
-        let previousIndex = conversationMatchIndex
-        let ids = conversation?.matchingMessageIDs(conversationQuery) ?? []
-        conversationMatchIDs = ids
-        conversationMatchSet = Set(ids)
-        if reset || conversationMatchID == nil || !conversationMatchSet.contains(conversationMatchID!) {
-            conversationMatchID = ids.isEmpty ? nil : ids[min(reset ? 0 : previousIndex, ids.count - 1)]
-        }
-    }
+    var selectedID: UUID? { didSet { if oldValue != selectedID { find.close() } } }
+    /// Find in the open conversation.
+    let find = ConversationFind()
     var canFindInConversation: Bool {
-        !practice && renameID == nil && permanentDeleteIDs.isEmpty
-            && (managerOpen || (!showExpressions && conversation != nil))
+        !practice && history.renameID == nil && history.permanentDeleteIDs.isEmpty
+            && (history.managerOpen || (!showExpressions && conversation != nil))
     }
     func findInConversation() {
         guard canFindInConversation else { return }
-        if managerOpen { searchFocusRequest += 1 } else { openConversationSearch() }
+        if history.managerOpen { history.searchFocusRequest += 1 } else { openConversationSearch() }
     }
     func openConversationSearch() {
         guard conversation != nil, !showExpressions, !practice else { return }
-        conversationSearchOpen = true
-        conversationSearchFocusRequest += 1
-    }
-    func closeConversationSearch() {
-        conversationQuery = ""
-        conversationSearchOpen = false
-    }
-    func moveConversationMatch(_ direction: Int) {
-        let count = conversationMatchIDs.count
-        guard count > 0 else {
-            conversationMatchID = nil
-            return
-        }
-        conversationMatchID = conversationMatchIDs[((conversationMatchIndex + direction) % count + count) % count]
+        find.open()
     }
     var showExpressions = false
-    var search = ""
-    var searchOpen = false
-    var searchFocusRequest = 0
-    var historyScope: HistoryScope = .active
-    var managerOpen = false
-    var renameID: UUID?
-    var permanentDeleteIDs: Set<UUID> = []
-    var historyFeedback: String?
+    /// The history list and the edit in progress in its manager.
+    var history = HistoryBrowser()
     var draft = "" {
         didSet {
             guard let i = library.conversations.firstIndex(where: { $0.id == selectedID }),
@@ -108,29 +70,8 @@ struct MessageDeletionUndo {
             scheduleSave()
         }
     }
-    var meaning = "" { didSet { persistHelpDraft(typing: true) } }
-    var english = "" { didSet { persistHelpDraft(typing: true) } }
-    var helpStage: HelpStage = .thought
-    var thoughtRecording: String? {
-        didSet {
-            guard !restoringHelp else { return }
-            if isSavedPractice {
-                if oldValue != thoughtRecording { removeUnreferencedRecording(oldValue) }
-                return
-            }
-            if oldValue != thoughtRecording, recognizedThought != nil {
-                // One save below covers both fields, so the previous-copy snapshot keeps the state before this change.
-                restoringHelp = true
-                recognizedThought = nil
-                restoringHelp = false
-            }
-            if persistHelpDraft(), oldValue != thoughtRecording { removeUnreferencedRecording(oldValue) }
-        }
-    }
-    var recognizedThought: String? { didSet { persistHelpDraft() } }
-    var isSavedPractice = false
-    var helpProgress: String?
-    var helpClarification: String?
+    /// Help Me Say This, as it is being worked on.
+    let help = HelpSession()
     var recordingLevel: Float = -80
     var recordingWarning: String?
     var transcripts = TranscriptJobs()
@@ -143,8 +84,6 @@ struct MessageDeletionUndo {
     var greetingActive = false
     @ObservationIgnored var recordingNow: () -> Date = Date.init
     @ObservationIgnored var recordingSleep: (UInt64) async throws -> Void = { try await Task.sleep(nanoseconds: $0) }
-    @ObservationIgnored var restoringHelp = false
-    var expression: PracticeExpression?
     var turn = TurnMachine()
     var error: String?
     var notice: String? {
@@ -180,8 +119,6 @@ struct MessageDeletionUndo {
             self.notice = nil
         }
     }
-    var referencePitch: [PitchPoint] = []
-    var attemptPitch: [PitchPoint] = []
     var playbackFile: String?
     /// The turn a voice preview owns, first while it is generated, then while it plays.
     var previewEpoch: UUID?
@@ -211,7 +148,7 @@ struct MessageDeletionUndo {
     @ObservationIgnored var chooseFile: @MainActor (PanelRequest) -> URL? = FilePanels.choose
     var conversation: Conversation? { library.conversations.first { $0.id == selectedID } }
     var writableConversation: Bool { conversation.map { !$0.archived && !$0.isDeleted } ?? false }
-    var visibleChats: [Conversation] { library.history(in: historyScope, query: search) }
+    var visibleChats: [Conversation] { library.history(in: history.scope, query: history.query) }
     var busy: Bool { turn.activity != .idle }
     var practice: Bool { turn.mode == .practice }
     var status: String {
@@ -264,7 +201,10 @@ struct MessageDeletionUndo {
         libraryController = LibraryController(root: root, demo: demo)
         libraryController.selection = { [weak self] in self?.selectedID }
         libraryController.report = { [weak self] in self?.error = $0 }
-        libraryController.onChange = { [weak self] in self?.refreshConversationMatches() }
+        libraryController.onChange = { [weak self] in self?.find.refresh() }
+        find.matching = { [weak self] in self?.conversation?.matchingMessageIDs($0) ?? [] }
+        help.persist = { [weak self] typing in self?.persistHelpDraft(typing: typing) ?? false }
+        help.removeRecording = { [weak self] in self?.removeUnreferencedRecording($0) }
         libraryController.open(managedIn: managed ? support : nil, isolated: libraryRoot != nil) { [weak self] in
             self?.libraryOpened()
         }
@@ -286,7 +226,7 @@ struct MessageDeletionUndo {
                 library.conversations.contains(where: { $0.id == id }) ? id : nil
             } ?? library.history(in: .active).first?.id
         if let chat = conversation {
-            historyScope = chat.isDeleted ? .deleted : chat.archived ? .archived : .active
+            history.scope = chat.isDeleted ? .deleted : chat.archived ? .archived : .active
             draft = chat.draft
         }
         // A first launch writes its library at once, so the data folder never holds only caches.
@@ -310,7 +250,7 @@ struct MessageDeletionUndo {
                     library.conversations.contains(where: { $0.id == id }) ? id : nil
                 } ?? library.history(in: .active).first?.id
             if let chat = conversation {
-                historyScope = chat.isDeleted ? .deleted : chat.archived ? .archived : .active
+                history.scope = chat.isDeleted ? .deleted : chat.archived ? .archived : .active
             }
             draft = conversation?.draft ?? ""
             notice = String(
@@ -377,21 +317,21 @@ struct MessageDeletionUndo {
         playbackFile = nil
         speaking = false
         recordingMeaning = false
-        helpProgress = nil
+        help.progress = nil
         recordingLevel = -80
         turn.stop()
         return recording
     }
     func leavePractice() {
-        if isSavedPractice {
-            let temporary = thoughtRecording
-            restoringHelp = true
-            thoughtRecording = nil
-            recognizedThought = nil
-            restoringHelp = false
+        if help.isSavedPractice {
+            let temporary = help.thoughtRecording
+            help.restoring {
+                help.thoughtRecording = nil
+                help.recognizedThought = nil
+            }
             removeUnreferencedRecording(temporary)
         }
-        isSavedPractice = false
+        help.isSavedPractice = false
         turn.resume()
     }
     /// A cancellable job that owns the turn. `isCurrent()` turns false once Stop or a newer job supersedes it;
@@ -409,12 +349,12 @@ struct MessageDeletionUndo {
         let progress = progress.map { String(localized: $0) }
         let token = turn.begin(.generating)
         error = nil
-        if let progress { helpProgress = progress }
+        if let progress { help.progress = progress }
         let job = ExclusiveJob(
             isCurrent: { [weak self] in !Task.isCancelled && self?.turn.epoch == token },
             finish: { [weak self] in
                 guard let self, self.turn.epoch == token else { return }
-                if progress != nil { self.helpProgress = nil }
+                if progress != nil { self.help.progress = nil }
                 _ = self.turn.finish(token)
             })
         let handle = Task { [weak self] in
@@ -453,7 +393,7 @@ struct MessageDeletionUndo {
         greetingActive = false
         speaking = false
         recordingMeaning = false
-        helpProgress = nil
+        help.progress = nil
         recordingLevel = -80
         guard !(failure is CancellationError) else { return }
         MochiLog.failure(MochiLog.app, context, failure)
@@ -473,18 +413,18 @@ struct MessageDeletionUndo {
         ]
         selectedID = chat.id
         turn.pause()
-        helpStage = .practice
-        meaning = "I know what I mean. I just need the words."
-        english = "I keep putting it off because I don't know where to start."
-        var item = PracticeExpression(conversationID: chat.id, meaning: meaning, english: english)
+        help.stage = .practice
+        help.meaning = "I know what I mean. I just need the words."
+        help.english = "I keep putting it off because I don't know where to start."
+        var item = PracticeExpression(conversationID: chat.id, meaning: help.meaning, english: help.english)
         item.referenceKind = "Preview · illustrative contours"
-        expression = item
-        referencePitch = (0..<180).map { i in
+        help.expression = item
+        help.referencePitch = (0..<180).map { i in
             let t = Double(i)
             let frequency: Double = 145 + 24 * sin(t * 0.07) + 7 * sin(t * 0.25)
             return PitchPoint(time: t * 0.025, hz: i % 37 < 4 ? nil : frequency)
         }
-        attemptPitch = (0..<180).map { i in
+        help.attemptPitch = (0..<180).map { i in
             let t = Double(i)
             let frequency: Double = 151 + 16 * sin(t * 0.07 + 0.3)
             return PitchPoint(time: t * 0.027, hz: i % 39 < 5 ? nil : frequency)

@@ -1,5 +1,6 @@
 import Foundation
 import MochiCore
+import MochiProviders
 
 /// True inside an XCTest process. Live services must never run there: a test that forgets a fake
 /// would otherwise reach the network or the microphone silently.

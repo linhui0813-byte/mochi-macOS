@@ -1,7 +1,7 @@
 import AppKit
-import MochiAutomation
 import MochiCore
 import MochiKernel
+import MochiProviders
 
 /// The conversation itself: sending text and voice, replies, transcription and the spoken greeting.
 extension AppModel {
@@ -91,7 +91,7 @@ extension AppModel {
         }
         let token = turn.begin(.generating)
         let chat = library.conversations.first { $0.id == conversationID }
-        let instructions = MochiTools.boundedInstructions(chat?.instructions ?? "")
+        let instructions = ConversationInstructions.bounded(chat?.instructions ?? "")
         let preferences = chat?.preferences ?? ConversationPreferences()
         let characterName = chat?.characterName
         let speakerName = chat?.displayCharacterName ?? "Mochi"
@@ -132,7 +132,7 @@ extension AppModel {
                     tool: { [weak self] name, args, _ in
                         guard let self, !Task.isCancelled, self.turn.epoch == token, self.selectedID == conversationID
                         else { throw CancellationError() }
-                        return try self.executeVoiceTool(name, arguments: args, operationID: operationID)
+                        return try self.tools.executeVoice(name, arguments: args, operationID: operationID)
                     })
                 let request = ConversationRequest(
                     history: history, text: text, pcm: pcm, spoken: audioFile != nil, instructions: instructions,

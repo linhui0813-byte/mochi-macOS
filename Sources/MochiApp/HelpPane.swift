@@ -16,18 +16,20 @@ struct PracticePane: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
-                        if app.helpStage == .thought {
+                        if app.help.stage == .thought {
                             meaningInput
                         } else {
                             thoughtSummary
-                            if app.helpStage == .english { englishReview } else { sentencePractice }
+                            if app.help.stage == .english { englishReview } else { sentencePractice }
                         }
                     }.padding(.horizontal, 24).padding(.bottom, 16).frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .onChange(of: app.recognizedThought) { _, text in
+                .onChange(of: app.help.recognizedThought) { _, text in
                     if text != nil { proxy.scrollTo("recognized-thought", anchor: .center) }
                 }
-                .onAppear { if app.recognizedThought != nil { proxy.scrollTo("recognized-thought", anchor: .center) } }
+                .onAppear {
+                    if app.help.recognizedThought != nil { proxy.scrollTo("recognized-thought", anchor: .center) }
+                }
             }
             activityFeedback
             if let notice = app.notice {
@@ -41,12 +43,12 @@ struct PracticePane: View {
             Divider()
             footer
         }.background(Color(nsColor: .windowBackgroundColor))
-            .onAppear { thoughtFocused = app.helpStage == .thought }
-            .onChange(of: app.helpStage) { _, stage in thoughtFocused = stage == .thought }
+            .onAppear { thoughtFocused = app.help.stage == .thought }
+            .onChange(of: app.help.stage) { _, stage in thoughtFocused = stage == .thought }
             .onChange(of: app.busy) { _, busy in
                 if busy {
                     refocusThought = thoughtFocused
-                } else if refocusThought, app.helpStage == .thought {
+                } else if refocusThought, app.help.stage == .thought {
                     refocusThought = false
                     DispatchQueue.main.async { thoughtFocused = true }
                 }
@@ -55,17 +57,17 @@ struct PracticePane: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text(app.helpStage == .practice ? "Practise Your Expression" : "Help Me Say This").font(.title2)
+                Text(app.help.stage == .practice ? "Practise Your Expression" : "Help Me Say This").font(.title2)
                     .fontWeight(.semibold)
                 Spacer()
                 Text("Conversation paused").font(.caption).foregroundStyle(.secondary)
             }
             HStack(spacing: 14) {
-                stage("1  Your thought", active: app.helpStage == .thought)
+                stage("1  Your thought", active: app.help.stage == .thought)
                 Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.tertiary)
-                stage("2  Your English", active: app.helpStage == .english)
+                stage("2  Your English", active: app.help.stage == .english)
                 Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.tertiary)
-                stage("3  Optional practice", active: app.helpStage == .practice)
+                stage("3  Optional practice", active: app.help.stage == .practice)
             }.font(.caption)
         }.padding(24)
     }
@@ -77,7 +79,7 @@ struct PracticePane: View {
                 } else {
                     HStack {
                         ProgressView().controlSize(.small)
-                        Text(app.helpProgress ?? app.status).font(.callout)
+                        Text(app.help.progress ?? app.status).font(.callout)
                         Spacer()
                         Button("Cancel", action: app.cancelHelpWork)
                     }
@@ -90,24 +92,24 @@ struct PracticePane: View {
     private var footer: some View {
         VStack(spacing: 8) {
             HStack {
-                if app.helpStage == .thought {
+                if app.help.stage == .thought {
                     Button("Back to Conversation", action: app.resume).keyboardShortcut(.cancelAction)
                     Spacer()
                     Button("Find the English", action: app.translate).buttonStyle(.borderedProminent)
                         .keyboardShortcut(.return, modifiers: .command)
-                        .disabled(app.busy || app.meaning.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                } else if app.helpStage == .english {
+                        .disabled(app.busy || app.help.meaning.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                } else if app.help.stage == .english {
                     Button("Return to Conversation", action: app.resume).keyboardShortcut(.cancelAction)
                     Spacer()
                     Button("Listen & Practise", action: app.beginPractice).buttonStyle(.borderedProminent)
-                        .disabled(app.busy || app.english.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .disabled(app.busy || app.help.english.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 } else {
                     PracticeActions(app: app)
                 }
             }
-            if !app.english.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            if !app.help.english.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 Text(
-                    app.thoughtRecording != nil && !app.isSavedPractice
+                    app.help.thoughtRecording != nil && !app.help.isSavedPractice
                         ? "Returning saves the expression and removes its thought recording. Practice is optional."
                         : "Returning saves this expression to My Expressions. Practice is optional."
                 )
@@ -116,7 +118,7 @@ struct PracticePane: View {
         }.padding(20)
     }
     private func englishEditor(_ placeholder: LocalizedStringKey, lines: ClosedRange<Int>) -> some View {
-        TextField(placeholder, text: Binding(get: { app.english }, set: app.editEnglish), axis: .vertical)
+        TextField(placeholder, text: Binding(get: { app.help.english }, set: app.editEnglish), axis: .vertical)
             .font(.system(size: 22, weight: .medium)).textFieldStyle(.roundedBorder).lineLimit(lines).disabled(app.busy)
     }
     /// Reference kinds are stored in English; the ones Mochi writes are translated for display.
@@ -144,9 +146,11 @@ struct PracticePane: View {
                 Spacer()
                 Button("Edit thought", action: app.editThought).buttonStyle(.link).disabled(app.busy)
             }
-            Text(app.meaning.isEmpty ? String(localized: "Your English sentence") : app.meaning).font(.callout)
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            Text(app.help.meaning.isEmpty ? String(localized: "Your English sentence") : app.help.meaning).font(
+                .callout
+            )
+            .textSelection(.enabled)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }.padding(12).background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
     }
     private var meaningInput: some View {
@@ -155,22 +159,22 @@ struct PracticePane: View {
             Text("Type your thought in your own language or in English, or record it first.").font(.callout)
                 .foregroundStyle(
                     .secondary)
-            if let question = app.helpClarification {
+            if let question = app.help.clarification {
                 Label(question, systemImage: "questionmark.bubble").font(.callout).foregroundStyle(Color.accentColor)
             }
-            TextField("Your thought", text: $app.meaning, axis: .vertical)
+            TextField("Your thought", text: Bindable(app.help).meaning, axis: .vertical)
                 .textFieldStyle(.roundedBorder).lineLimit(3...6).disabled(app.busy).focused($thoughtFocused)
             HStack {
-                if !app.isSavedPractice {
+                if !app.help.isSavedPractice {
                     Button(action: app.recordMeaning) {
                         Label(
                             app.turn.activity == .recording ? "Finish & Review" : "Record Thought",
                             systemImage: app.turn.activity == .recording ? "stop.fill" : "mic")
                     }.disabled(app.busy && app.turn.activity != .recording)
                 }
-                if !app.english.isEmpty { Button("Review English", action: app.reviewEnglish).disabled(app.busy) }
+                if !app.help.english.isEmpty { Button("Review English", action: app.reviewEnglish).disabled(app.busy) }
             }
-            if let file = app.thoughtRecording {
+            if let file = app.help.thoughtRecording {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Recorded thought · saved on this Mac").font(.caption).foregroundStyle(.secondary)
                     HStack {
@@ -192,7 +196,7 @@ struct PracticePane: View {
                 }.padding(12).background(
                     Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
             }
-            if let recognized = app.recognizedThought {
+            if let recognized = app.help.recognizedThought {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Recognized words").font(.headline)
                     Text(recognized).textSelection(.enabled)
@@ -201,7 +205,7 @@ struct PracticePane: View {
                     HStack {
                         Button("Add to thought") { app.useRecognizedThought(replace: false) }
                         Button("Replace thought") { app.useRecognizedThought(replace: true) }
-                        Button("Keep typed thought") { app.recognizedThought = nil }
+                        Button("Keep typed thought") { app.help.recognizedThought = nil }
                     }.disabled(app.busy)
                 }.padding(12).background(
                     Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 10)
@@ -225,10 +229,10 @@ struct PracticePane: View {
                 .font(.callout).foregroundStyle(.secondary)
             HStack {
                 Button("Try another wording", action: app.tryAnotherWording).disabled(
-                    app.busy || app.meaning.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    app.busy || app.help.meaning.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 Button {
                     NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(app.english, forType: .string)
+                    NSPasteboard.general.setString(app.help.english, forType: .string)
                 } label: {
                     Label("Copy", systemImage: "doc.on.doc")
                 }
@@ -243,18 +247,18 @@ struct PracticePane: View {
                     PracticeVoiceControls(app: app).disabled(app.busy)
                 }
             }
-            if app.expression?.reference != nil {
-                Text("Saved example: \(Self.referenceKindLabel(app.expression?.referenceKind))").font(.caption)
+            if app.help.expression?.reference != nil {
+                Text("Saved example: \(Self.referenceKindLabel(app.help.expression?.referenceKind))").font(.caption)
                     .foregroundStyle(
                         .secondary)
             }
             HStack {
                 Button {
-                    if let file = app.expression?.reference { app.play(file) } else { app.render() }
+                    if let file = app.help.expression?.reference { app.play(file) } else { app.render() }
                 } label: {
                     Label(
-                        app.expression?.reference == nil ? "Create Example" : "Play Example",
-                        systemImage: app.expression?.reference == nil ? "waveform" : "play.fill")
+                        app.help.expression?.reference == nil ? "Create Example" : "Play Example",
+                        systemImage: app.help.expression?.reference == nil ? "waveform" : "play.fill")
                 }.disabled(app.busy)
                 Picker("Speed", selection: $app.slow) {
                     Text("1×").tag(false)
@@ -263,7 +267,9 @@ struct PracticePane: View {
                 Spacer()
                 Menu {
                     Button("Import Reference…", action: app.importReference).disabled(!app.canImportReference)
-                    if app.expression?.reference != nil { Button("Regenerate Example") { app.render(force: true) } }
+                    if app.help.expression?.reference != nil {
+                        Button("Regenerate Example") { app.render(force: true) }
+                    }
                 } label: {
                     Label("Reference Options", systemImage: "ellipsis")
                 }.menuStyle(.borderlessButton).fixedSize().disabled(app.busy)
@@ -277,9 +283,10 @@ struct PracticePane: View {
                             Spacer()
                             Text(app.demo ? "Illustrative preview" : "Unscored").foregroundStyle(.secondary)
                         }.font(.caption)
-                        if !app.referencePitch.isEmpty || !app.attemptPitch.isEmpty {
+                        if !app.help.referencePitch.isEmpty || !app.help.attemptPitch.isEmpty {
                             PitchChart(
-                                reference: app.referencePitch, attempt: app.attemptPitch, normalized: normalized,
+                                reference: app.help.referencePitch, attempt: app.help.attemptPitch,
+                                normalized: normalized,
                                 smoothed: smoothPitch
                             ).frame(height: 150)
                         } else {

@@ -3,6 +3,7 @@ import MochiTestSupport
 import XCTest
 
 @testable import MochiApp
+@testable import MochiProviders
 
 final class MessageDeletionTests: XCTestCase {
     private func temporary() -> URL { TestScratch.folder() }
@@ -16,10 +17,10 @@ final class MessageDeletionTests: XCTestCase {
         let reply = Message(role: "assistant", text: "A response")
         let last = Message(role: "user", text: "Keep this phrase")
         for message in [first, reply, last] { app.append(message, to: id) }
-        app.conversationQuery = "Forget"
+        app.find.query = "Forget"
         app.deleteMessage(first.id)
         XCTAssertEqual(app.conversation?.messages.map(\.id), [reply.id, last.id])
-        XCTAssertTrue(app.conversationMatchIDs.isEmpty)
+        XCTAssertTrue(app.find.matchIDs.isEmpty)
         XCTAssertEqual(app.conversation?.title, "Keep this phrase")
         XCTAssertTrue(app.library.history(in: .active, query: "Forget").isEmpty)
         let reopened = makeApp(root: root)

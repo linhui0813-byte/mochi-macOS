@@ -4,32 +4,32 @@ import SwiftUI
 struct ConversationSearchControl: View {
     @Bindable var app: AppModel
     var body: some View {
-        if app.conversationSearchOpen {
+        if app.find.isOpen {
             HStack(spacing: 6) {
                 ConversationSearchField(app: app).frame(width: 180)
                 Text(
-                    app.conversationQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    app.find.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                         ? ""
-                        : app.conversationMatchIDs.isEmpty
+                        : app.find.matchIDs.isEmpty
                             ? "No matches"
-                            : "\(min(app.conversationMatchIndex+1,app.conversationMatchIDs.count))/\(app.conversationMatchIDs.count)"
+                            : "\(min(app.find.matchIndex+1,app.find.matchIDs.count))/\(app.find.matchIDs.count)"
                 )
                 .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                 .lineLimit(1).frame(width: 64, alignment: .trailing)
                 Button {
-                    app.moveConversationMatch(-1)
+                    app.find.move(-1)
                 } label: {
                     Image(systemName: "chevron.up")
                 }
                 .help("Previous Match (⇧⌘G)").accessibilityLabel("Previous Match").disabled(
-                    app.conversationMatchIDs.isEmpty)
+                    app.find.matchIDs.isEmpty)
                 Button {
-                    app.moveConversationMatch(1)
+                    app.find.move(1)
                 } label: {
                     Image(systemName: "chevron.down")
                 }
-                .help("Next Match (⌘G)").accessibilityLabel("Next Match").disabled(app.conversationMatchIDs.isEmpty)
-                Button(action: app.closeConversationSearch) { Image(systemName: "xmark") }
+                .help("Next Match (⌘G)").accessibilityLabel("Next Match").disabled(app.find.matchIDs.isEmpty)
+                Button(action: app.find.close) { Image(systemName: "xmark") }
                     .help("Close Search (Escape)").accessibilityLabel("Close conversation search")
             }
         } else {
@@ -54,9 +54,9 @@ private struct ConversationSearchField: NSViewRepresentable {
     }
     func updateNSView(_ field: FocusableSearchField, context: Context) {
         context.coordinator.app = app
-        if field.stringValue != app.conversationQuery { field.stringValue = app.conversationQuery }
-        if context.coordinator.focusRequest != app.conversationSearchFocusRequest {
-            context.coordinator.focusRequest = app.conversationSearchFocusRequest
+        if field.stringValue != app.find.query { field.stringValue = app.find.query }
+        if context.coordinator.focusRequest != app.find.focusRequest {
+            context.coordinator.focusRequest = app.find.focusRequest
             field.wantsFocus = true
             DispatchQueue.main.async { field.focusIfNeeded() }
         }
@@ -78,7 +78,7 @@ private struct ConversationSearchField: NSViewRepresentable {
         var focusRequest: Int?
         init(app: AppModel) { self.app = app }
         @objc func searchChanged(_ field: NSSearchField) {
-            if app.conversationQuery != field.stringValue { app.conversationQuery = field.stringValue }
+            if app.find.query != field.stringValue { app.find.query = field.stringValue }
         }
         func controlTextDidChange(_ notification: Notification) {
             guard let field = notification.object as? NSSearchField else { return }
@@ -86,11 +86,11 @@ private struct ConversationSearchField: NSViewRepresentable {
         }
         func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
             if commandSelector == #selector(NSResponder.cancelOperation(_:)) {
-                app.closeConversationSearch()
+                app.find.close()
                 return true
             }
             if commandSelector == #selector(NSResponder.insertNewline(_:)) {
-                app.moveConversationMatch(NSApp.currentEvent?.modifierFlags.contains(.shift) == true ? -1 : 1)
+                app.find.move(NSApp.currentEvent?.modifierFlags.contains(.shift) == true ? -1 : 1)
                 return true
             }
             return false

@@ -1,4 +1,5 @@
 import MochiCore
+import MochiProviders
 import SwiftUI
 
 struct BuiltInVoicePicker: View {

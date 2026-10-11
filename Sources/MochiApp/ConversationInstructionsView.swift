@@ -1,4 +1,3 @@
-import MochiAutomation
 import MochiCore
 import MochiKernel
 import SwiftUI
@@ -13,7 +12,7 @@ struct ConversationInstructionsView: View {
     private var validationError: String? {
         do {
             if instructions != app.library.conversations.first(where: { $0.id == id })?.instructions {
-                try MochiTools.validateInstructions(instructions)
+                try ConversationInstructions.validate(instructions)
             }
             try ConversationTemplate.validateName(characterName?.trimmingCharacters(in: .whitespacesAndNewlines))
             try preferences.validate()
@@ -28,7 +27,7 @@ struct ConversationInstructionsView: View {
             )
             .lineLimit(1)
             Text(
-                "Tell \(MochiTools.boundedText(characterName ?? "Mochi",characters:80,bytes:1024)) how you want to practise. These settings apply to future replies."
+                "Tell \((characterName ?? "Mochi").bounded(characters: 80, bytes: 1024)) how you want to practise. These settings apply to future replies."
             ).font(.callout).foregroundStyle(.secondary)
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
@@ -52,16 +51,16 @@ struct ConversationInstructionsView: View {
                 }.disabled(app.busy)
                 Spacer()
                 Button("Cancel") {
-                    app.instructionsID = nil
-                    app.retainedInstructionsDraft = nil
+                    app.customization.instructionsID = nil
+                    app.customization.retainedInstructionsDraft = nil
                 }.keyboardShortcut(.cancelAction)
                 Button("Save") {
                     let existingError = app.error
                     if app.setConversationInstructions(
                         id, instructions: instructions, preferences: preferences, characterName: characterName)
                     {
-                        app.instructionsID = nil
-                        app.retainedInstructionsDraft = nil
+                        app.customization.instructionsID = nil
+                        app.customization.retainedInstructionsDraft = nil
                     } else {
                         saveError = app.error
                     }
@@ -73,7 +72,7 @@ struct ConversationInstructionsView: View {
             .onChange(of: characterName) { saveError = nil }
             .onChange(of: preferences) { saveError = nil }
             .onAppear {
-                if let draft = app.retainedInstructionsDraft, draft.id == id {
+                if let draft = app.customization.retainedInstructionsDraft, draft.id == id {
                     instructions = draft.instructions
                     characterName = draft.characterName
                     preferences = draft.preferences

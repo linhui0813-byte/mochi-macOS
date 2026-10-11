@@ -40,17 +40,17 @@ import SwiftUI
                 CommandMenu("Conversation") {
                     Button("Find in Conversation", action: model.findInConversation).keyboardShortcut("f").disabled(
                         !model.canFindInConversation)
-                    Button("Next Match") { model.moveConversationMatch(1) }.keyboardShortcut("g").disabled(
-                        model.conversationMatchIDs.isEmpty)
-                    Button("Previous Match") { model.moveConversationMatch(-1) }.keyboardShortcut(
+                    Button("Next Match") { model.find.move(1) }.keyboardShortcut("g").disabled(
+                        model.find.matchIDs.isEmpty)
+                    Button("Previous Match") { model.find.move(-1) }.keyboardShortcut(
                         "g", modifiers: [.command, .shift]
-                    ).disabled(model.conversationMatchIDs.isEmpty)
+                    ).disabled(model.find.matchIDs.isEmpty)
                     Button("Search All Conversations") {
-                        model.searchOpen = true
-                        model.searchFocusRequest += 1
+                        model.history.searchOpen = true
+                        model.history.searchFocusRequest += 1
                     }.keyboardShortcut("f", modifiers: [.command, .shift]).disabled(
-                        model.practice || model.renameID != nil || !model.permanentDeleteIDs.isEmpty)
-                    Button("Manage Conversations…") { model.managerOpen = true }.keyboardShortcut(
+                        model.practice || model.history.renameID != nil || !model.history.permanentDeleteIDs.isEmpty)
+                    Button("Manage Conversations…") { model.history.managerOpen = true }.keyboardShortcut(
                         "m", modifiers: [.command, .shift]
                     ).disabled(model.automationModal)
                     if let chat = model.conversation { ChatActions(app: model, chat: chat).disabled(model.practice) }
@@ -64,7 +64,7 @@ import SwiftUI
                         "h", modifiers: [.command, .shift]
                     ).disabled(!model.writableConversation || model.automationModal)
                     Button("Stop") {
-                        if model.conversationSearchOpen { model.closeConversationSearch() } else { model.stop() }
+                        if model.find.isOpen { model.find.close() } else { model.stop() }
                     }.keyboardShortcut(.escape, modifiers: [])
                 }
             }

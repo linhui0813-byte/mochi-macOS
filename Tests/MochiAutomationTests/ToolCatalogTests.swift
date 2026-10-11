@@ -1,0 +1,159 @@
+import MochiKernel
+import XCTest
+
+@testable import MochiAutomation
+
+final class ToolCatalogTests: XCTestCase {
+    func testEveryToolIsDeclaredOnceWithConsistentRouting() {
+        let external = MochiTools.catalog(origin: .external)
+        let voice = MochiTools.catalog(origin: .voice)
+        XCTAssertEqual(external.map(\.name), MochiToolName.allCases)
+        XCTAssertEqual(
+            Set(voice.map(\.name)),
+            [
+                .getSession, .getMessages, .prepareExpression, .startPractice, .saveExpression, .searchExpressions,
+                .playAudio, .seekAudio, .setConversationPreferences,
+            ])
+        for tool in external {
+            XCTAssertEqual(tool.properties["conversation_id"] != nil, tool.scope == .conversation, tool.name.rawValue)
+            XCTAssertEqual(
+                tool.properties["expected_revision"] != nil, !tool.readOnly && tool.scope != .catalog,
+                tool.name.rawValue)
+            XCTAssertEqual(
+                tool.scope == .catalog,
+                tool.name.rawValue.hasSuffix("_conversation_template") || tool.name == .listConversationTemplates,
+                tool.name.rawValue)
+            if tool.readOnly {
+                XCTAssertTrue(tool.idempotent, tool.name.rawValue)
+                XCTAssertFalse(tool.destructive, tool.name.rawValue)
+            }
+        }
+        XCTAssertEqual(
+            Set(external.filter(\.deferredDuringVoiceReply).map(\.name)),
+            [.prepareExpression, .startPractice, .playAudio, .seekAudio])
+        XCTAssertEqual(
+            Set(external.filter(\.destructive).map(\.name)),
+            [
+                .setConversationInstructions, .setConversationPreferences, .updateConversationTemplate,
+                .deleteConversationTemplate,
+            ])
+    }
+
+    func testTypedArgumentsFailAsErrorsNotCrashes() {
+        XCTAssertThrowsError(try MochiTools.decode(ConversationSettingsArguments.self, from: ["coaching": "shouting"]))
+        { error in
+            XCTAssertTrue(error is AppFailure)
+        }
+        XCTAssertThrowsError(try MochiTools.decode(ExpressionArguments.self, from: [:]))
+        let audio = try? MochiTools.decode(
+            AudioArguments.self, from: ["message_id": UUID().uuidString, "seconds": 2.5])
+        XCTAssertEqual(audio?.seconds, 2.5)
+        XCTAssertNotNil(audio?.messageID)
+    }
+
+    func testCatalogValidatesArgumentsAndRestrictsVoiceTools() throws {
+        XCTAssertFalse(MochiTools.catalog(origin: .voice).contains { $0.name == .setConversationInstructions })
+        XCTAssertTrue(MochiTools.catalog(origin: .external).contains { $0.name == .setConversationInstructions })
+        XCTAssertThrowsError(try MochiTools.validate(name: "delete_message", arguments: [:], origin: .external))
+        XCTAssertThrowsError(
+            try MochiTools.validate(name: "get_messages", arguments: ["conversation_id": "bad"], origin: .external))
+        XCTAssertThrowsError(
+            try MochiTools.validate(name: "search_expressions", arguments: ["query": "", "limit": 101], origin: .voice))
+    }
+
+    func testNumericBoundsBooleansAndInstructionLimits() throws {
+        let id = UUID().uuidString
+        XCTAssertThrowsError(
+            try MochiTools.validate(
+                name: "get_messages", arguments: ["conversation_id": id, "limit": 0], origin: .voice))
+        XCTAssertThrowsError(
+            try MochiTools.validate(
+                name: "get_messages", arguments: ["conversation_id": id, "limit": true], origin: .voice))
+        XCTAssertThrowsError(
+            try MochiTools.validate(
+                name: "get_messages", arguments: ["conversation_id": id, "limit": 1.5], origin: .voice))
+        _ = try MochiTools.validate(
+            name: "seek_audio", arguments: ["conversation_id": id, "message_id": id, "seconds": 3600], origin: .voice)
+        XCTAssertThrowsError(
+            try MochiTools.validate(
+                name: "seek_audio", arguments: ["conversation_id": id, "message_id": id, "seconds": 3601],
+                origin: .voice))
+        XCTAssertThrowsError(try ConversationInstructions.validate(String(repeating: "x", count: 8001)))
+        XCTAssertThrowsError(
+            try MochiTools.validate(
+                name: "play_audio", arguments: ["conversation_id": id, "message_id": id, "expression_id": id],
+                origin: .voice))
+    }
+
+    func testSchemaLimitsAndRulesStillApplyAfterSplittingValidation() {
+        XCTAssertThrowsError(
+            try MochiTools.validate(
+                name: "save_expression",
+                arguments: [
+                    "conversation_id": UUID().uuidString, "english": String(repeating: "a", count: 8001),
+                ], origin: .voice))
+        XCTAssertThrowsError(
+            try MochiTools.validate(
+                name: "save_expression", arguments: ["conversation_id": UUID().uuidString, "english": "  "],
+                origin: .voice))
+        XCTAssertNoThrow(
+            try MochiTools.validate(
+                name: "save_expression",
+                arguments: ["conversation_id": UUID().uuidString, "english": String(repeating: "a", count: 8000)],
+                origin: .voice))
+        let advertised = MochiTools.catalog(origin: .external).first { $0.name == .saveExpression }
+        XCTAssertEqual(advertised?.properties["english"]?["maxLength"] as? Int, ConversationInstructions.maxCharacters)
+        XCTAssertEqual(
+            advertised?.properties["expected_revision"]?["maxLength"] as? Int, ConversationInstructions.maxCharacters)
+    }
+
+    func testPauseResumeAreExternalOnly() throws {
+        for name in ["pause_audio", "resume_audio"] {
+            XCTAssertFalse(MochiTools.catalog(origin: .voice).contains { $0.name.rawValue == name })
+            XCTAssertTrue(MochiTools.catalog(origin: .external).contains { $0.name.rawValue == name })
+            XCTAssertThrowsError(
+                try MochiTools.validate(name: name, arguments: ["conversation_id": UUID().uuidString], origin: .voice))
+        }
+    }
+
+    func testToolBooleanOriginAndRevisionSchemas() throws {
+        for bad: Any in [1, "true", NSNull()] {
+            XCTAssertThrowsError(
+                try MochiTools.validate(
+                    name: "update_conversation_template",
+                    arguments: [
+                        "template_id": UUID().uuidString, "expected_template_revision": "r", "clear_speed": bad,
+                    ], origin: .external))
+        }
+        let tool = try MochiTools.validate(
+            name: "create_conversation_template", arguments: ["title": "Loki", "character_name": "Loki"],
+            origin: .external)
+        XCTAssertFalse(tool.required.contains("expected_revision"))
+        XCTAssertThrowsError(
+            try MochiTools.validate(
+                name: "create_conversation_template", arguments: ["title": "Loki", "character_name": "Loki"],
+                origin: .voice))
+        _ = try MochiTools.validate(name: "list_conversation_templates", arguments: ["offset": 200], origin: .external)
+        XCTAssertThrowsError(
+            try MochiTools.validate(
+                name: "update_conversation_template",
+                arguments: [
+                    "template_id": UUID().uuidString, "expected_template_revision": "r", "clear_speed": true,
+                    "speed": 1,
+                ], origin: .external))
+    }
+
+    func testTemplateMCPAnnotationsAndDiscoveryInstructions() throws {
+        let tools = MochiTools.catalog(origin: .external)
+        for name in ["update_conversation_template", "delete_conversation_template"] {
+            let value = try XCTUnwrap(tools.first(where: { $0.name.rawValue == name }))
+            let a = value.mcp["annotations"] as! [String: Any]
+            XCTAssertEqual(a["destructiveHint"] as? Bool, true)
+            XCTAssertEqual(a["idempotentHint"] as? Bool, false)
+        }
+        for name in ["list_conversation_templates", "get_conversation_template"] {
+            let a = tools.first(where: { $0.name.rawValue == name })!.mcp["annotations"] as! [String: Any]
+            XCTAssertEqual(a["readOnlyHint"] as? Bool, true)
+        }
+    }
+}

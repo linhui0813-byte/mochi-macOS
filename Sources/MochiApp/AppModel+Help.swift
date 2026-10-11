@@ -1,14 +1,15 @@
 import AppKit
 import MochiCore
 import MochiKernel
+import MochiProviders
 
 /// Help Me Say This: from a thought to English, an example to listen to, and practice attempts.
 extension AppModel {
     func openExpressions() {
-        closeConversationSearch()
+        find.close()
         cancelHelpWork()
         leavePractice()
-        expression = nil
+        help.expression = nil
         showExpressions = true
     }
     func startHelp() {
@@ -18,24 +19,24 @@ extension AppModel {
         error = nil
         turn.pause()
         showExpressions = false
-        isSavedPractice = false
+        help.isSavedPractice = false
         let saved = conversation?.helpDraft
-        restoringHelp = true
-        meaning = saved?.meaning ?? draft
-        english = saved?.english ?? ""
-        thoughtRecording = saved?.recording
-        helpClarification = saved?.clarification
-        recognizedThought = saved?.transcriptReview
-        expression = saved?.expressionID.flatMap { id in library.expressions.first(where: { $0.id == id }) }
-        restoringHelp = false
-        helpStage = english.isEmpty || recognizedThought != nil ? .thought : .english
-        referencePitch = []
-        attemptPitch = []
+        help.restoring {
+            help.meaning = saved?.meaning ?? draft
+            help.english = saved?.english ?? ""
+            help.thoughtRecording = saved?.recording
+            help.clarification = saved?.clarification
+            help.recognizedThought = saved?.transcriptReview
+            help.expression = saved?.expressionID.flatMap { id in library.expressions.first(where: { $0.id == id }) }
+        }
+        help.stage = help.english.isEmpty || help.recognizedThought != nil ? .thought : .english
+        help.referencePitch = []
+        help.attemptPitch = []
         notice =
             cancelledReply
             ? String(localized: "Your pending reply was cancelled. You can retry it when you return.") : nil
         recordingWarning = nil
-        if let thoughtRecording { warnIfQuiet(thoughtRecording) }
+        if let recording = help.thoughtRecording { warnIfQuiet(recording) }
         persistHelpDraft()
     }
     /// Decodes the restored thought off the main actor; the warning applies only if that recording is still current.
@@ -46,7 +47,7 @@ extension AppModel {
                 guard let samples = try? AudioFile.samples(url).samples else { return false }
                 return RecordingSignal(samples: samples).isQuiet
             }.value
-            guard let self, quiet, thoughtRecording == recording, turn.activity != .recording else { return }
+            guard let self, quiet, help.thoughtRecording == recording, turn.activity != .recording else { return }
             recordingWarning = String(
                 localized: "This recording is very quiet. Listen before transcribing, or record it again.")
         }
@@ -70,31 +71,32 @@ extension AppModel {
     }
     /// The help draft to keep and its conversation, or nil when there is none.
     private func currentHelpDraft() -> (Int, HelpDraft)? {
-        guard !restoringHelp, !isSavedPractice, practice, writableConversation,
+        guard !help.isRestoring, !help.isSavedPractice, practice, writableConversation,
             let ci = library.conversations.firstIndex(where: { $0.id == selectedID })
         else { return nil }
         var draft = HelpDraft(
-            meaning: meaning, english: english, recording: thoughtRecording, expressionID: expression?.id)
-        draft.clarification = helpClarification
-        draft.transcriptReview = recognizedThought
+            meaning: help.meaning, english: help.english, recording: help.thoughtRecording,
+            expressionID: help.expression?.id)
+        draft.clarification = help.clarification
+        draft.transcriptReview = help.recognizedThought
         return (ci, draft)
     }
     func editThought() {
-        helpStage = .thought
+        help.stage = .thought
         error = nil
     }
     func beginPractice() {
-        guard !english.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        guard !help.english.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         ensureExpression()
-        helpStage = .practice
+        help.stage = .practice
         persistHelpDraft()
     }
-    func reviewEnglish() { if !english.isEmpty { helpStage = .english } }
+    func reviewEnglish() { if !help.english.isEmpty { help.stage = .english } }
     func transcribeThought() {
-        guard !busy, let thoughtRecording else { return }
+        guard !busy, let recording = help.thoughtRecording else { return }
         let transcribe = speech.transcribe
         let model = settings.effectiveModelName
-        let url = store.root.appendingPathComponent(thoughtRecording)
+        let url = store.root.appendingPathComponent(recording)
         runExclusive("Transcribe thought", progress: "Transcribing your thought…") { [weak self] job in
             guard let self else { return }
             let text = try await transcribe(url, model)
@@ -103,37 +105,37 @@ extension AppModel {
             guard !clean.isEmpty else {
                 throw AppFailure("No clear speech was recognized. Your thought is saved; listen or record again.")
             }
-            if meaning.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                meaning = clean
+            if help.meaning.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                help.meaning = clean
             } else {
-                recognizedThought = clean
+                help.recognizedThought = clean
             }
             job.finish()
             notice = String(localized: "Check the recognized thought before finding the English.")
         }
     }
     func useRecognizedThought(replace: Bool) {
-        guard !busy, let recognizedThought else { return }
-        meaning =
-            replace || meaning.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            ? recognizedThought : meaning + "\n" + recognizedThought
-        self.recognizedThought = nil
+        guard !busy, let recognized = help.recognizedThought else { return }
+        help.meaning =
+            replace || help.meaning.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? recognized : help.meaning + "\n" + recognized
+        help.recognizedThought = nil
         notice = String(localized: "Check your thought before finding the English.")
     }
     func discardThoughtRecording() {
-        thoughtRecording = nil
+        help.thoughtRecording = nil
         recordingWarning = nil
     }
     func translate() { findEnglish(alternative: false) }
     func tryAnotherWording() { findEnglish(alternative: true) }
     private func findEnglish(alternative: Bool) {
-        let input = meaning.trimmingCharacters(in: .whitespacesAndNewlines)
+        let input = help.meaning.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !input.isEmpty, !busy, let id = selectedID else { return }
         let history = conversation?.messages ?? []
         let service = settings.conversationService()
         let requestText =
-            alternative && !english.isEmpty
-            ? "Intended thought: \(input)\nPrevious English wording: \(english)\nOffer a different natural wording with exactly the same meaning."
+            alternative && !help.english.isEmpty
+            ? "Intended thought: \(input)\nPrevious English wording: \(help.english)\nOffer a different natural wording with exactly the same meaning."
             : input
         let textReply = speech.textReply
         runExclusive("Find the English", progress: "Finding the English…") { [weak self] job in
@@ -143,58 +145,59 @@ extension AppModel {
             guard job.isCurrent() else { return }
             let suggestion = try HelpSuggestion.parse(result)
             if suggestion.kind == .clarification {
-                helpClarification = suggestion.text
-                helpStage = .thought
+                help.clarification = suggestion.text
+                help.stage = .thought
             } else {
-                english = suggestion.text.trimmingCharacters(in: .whitespacesAndNewlines)
-                expression = PracticeExpression(conversationID: id, meaning: input, english: english)
-                referencePitch = []
-                attemptPitch = []
-                helpClarification = nil
-                helpStage = .english
+                help.english = suggestion.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                help.expression = PracticeExpression(conversationID: id, meaning: input, english: help.english)
+                help.referencePitch = []
+                help.attemptPitch = []
+                help.clarification = nil
+                help.stage = .english
             }
-            helpProgress = nil
+            help.progress = nil
             persistHelpDraft()
         }
     }
     func editEnglish(_ text: String) {
-        english = text
-        if expression?.english != text {
-            expression = nil
-            referencePitch = []
-            attemptPitch = []
+        help.english = text
+        if help.expression?.english != text {
+            help.expression = nil
+            help.referencePitch = []
+            help.attemptPitch = []
         }
-        if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && helpStage == .thought {
-            helpStage = .english
+        if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && help.stage == .thought {
+            help.stage = .english
         }
         persistHelpDraft()
     }
     func ensureExpression() {
         guard let id = selectedID else { return }
-        if expression == nil {
-            expression = PracticeExpression(
-                conversationID: id, meaning: meaning, english: english.trimmingCharacters(in: .whitespacesAndNewlines))
+        if help.expression == nil {
+            help.expression = PracticeExpression(
+                conversationID: id, meaning: help.meaning,
+                english: help.english.trimmingCharacters(in: .whitespacesAndNewlines))
         }
     }
     @discardableResult func saveExpression() -> Bool {
         ensureExpression()
         // The thought can be edited after the expression was created; save what the user now sees.
-        let thought = meaning.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let current = expression, current.meaning != thought { expression?.meaning = thought }
-        guard let expression, !expression.english.isEmpty else { return false }
-        if let index = library.expressions.firstIndex(where: { $0.id == expression.id }) {
-            library.expressions[index] = expression
+        let thought = help.meaning.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let current = help.expression, current.meaning != thought { help.expression?.meaning = thought }
+        guard let saved = help.expression, !saved.english.isEmpty else { return false }
+        if let index = library.expressions.firstIndex(where: { $0.id == saved.id }) {
+            library.expressions[index] = saved
         } else {
-            library.expressions.insert(expression, at: 0)
+            library.expressions.insert(saved, at: 0)
         }
         persistHelpDraft()
         return save()
     }
     func render(force: Bool = false) {
-        guard !busy, !english.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        guard !busy, !help.english.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         ensureExpression()
 
-        let text = english
+        let text = help.english
         let label = settings.practiceVoiceLabel
         let root = store.root
         let referenceAudio = speech.referenceAudio
@@ -204,9 +207,9 @@ extension AppModel {
             let url = try await referenceAudio(text, service, root, force)
             let pitch = try await AudioFile.pitchInBackground(url)
             guard job.isCurrent() else { return }
-            expression?.reference = url.lastPathComponent
-            expression?.referenceKind = label
-            referencePitch = pitch
+            help.expression?.reference = url.lastPathComponent
+            help.expression?.referenceKind = label
+            help.referencePitch = pitch
             saveExpression()
             job.finish()
             notice = String(localized: "Your reference is ready. Listen, then try saying it yourself.")
@@ -228,7 +231,7 @@ extension AppModel {
             if playbackFile == url.lastPathComponent { previewEpoch = turn.epoch }
         }
     }
-    var canImportReference: Bool { !busy && !english.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    var canImportReference: Bool { !busy && !help.english.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     func importReference() {
         guard canImportReference, let source = chooseFile(.importReference) else { return }
         importReference(from: source)
@@ -243,30 +246,30 @@ extension AppModel {
             guard job.isCurrent() else { return }
             let name = "import-\(UUID().uuidString).\(source.pathExtension)"
             try FileManager.default.copyItem(at: source, to: store.root.appendingPathComponent(name))
-            expression?.reference = name
-            expression?.referenceKind = "Imported reference"
-            referencePitch = pitch
+            help.expression?.reference = name
+            help.expression?.referenceKind = "Imported reference"
+            help.referencePitch = pitch
             saveExpression()
         }
     }
     func resume() {
         cancelHelpWork()
-        let completed = !english.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && saveExpression()
-        if completed, !isSavedPractice, let ci = library.conversations.firstIndex(where: { $0.id == selectedID }) {
+        let completed = !help.english.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && saveExpression()
+        if completed, !help.isSavedPractice, let ci = library.conversations.firstIndex(where: { $0.id == selectedID }) {
             let saved = library.conversations[ci].helpDraft
             library.conversations[ci].helpDraft = nil
             if save() {
-                restoringHelp = true
-                thoughtRecording = nil
-                recognizedThought = nil
-                restoringHelp = false
+                help.restoring {
+                    help.thoughtRecording = nil
+                    help.recognizedThought = nil
+                }
                 removeUnreferencedRecording(saved?.recording)
             } else {
                 library.conversations[ci].helpDraft = saved
             }
         }
         leavePractice()
-        expression = nil
+        help.expression = nil
         notice =
             completed
             ? String(localized: "Saved to My Expressions. Say the thought in your own words when you're ready.")
@@ -290,23 +293,23 @@ extension AppModel {
         }
         if sourceID == selectedID { cancelHelpWork() } else { stop() }
         leavePractice()
-        isSavedPractice = true
+        help.isSavedPractice = true
         selectedID = sourceID
-        historyScope = .active
-        search = ""
+        history.scope = .active
+        history.query = ""
         draft = conversation?.draft ?? ""
         showExpressions = false
         turn.pause()
-        restoringHelp = true
-        expression = item
-        english = item.english
-        meaning = item.meaning
-        thoughtRecording = nil
-        recognizedThought = nil
-        restoringHelp = false
-        helpStage = .practice
-        referencePitch = []
-        attemptPitch = []
+        help.restoring {
+            help.expression = item
+            help.english = item.english
+            help.meaning = item.meaning
+            help.thoughtRecording = nil
+            help.recognizedThought = nil
+        }
+        help.stage = .practice
+        help.referencePitch = []
+        help.attemptPitch = []
         let root = store.root
         let reference = item.reference
         let attempt = item.attempts.last?.file
@@ -318,7 +321,7 @@ extension AppModel {
                 do {
                     let points = try await AudioFile.pitchInBackground(root.appendingPathComponent(name))
                     guard job.isCurrent() else { return }
-                    referencePitch = points
+                    help.referencePitch = points
                 } catch {
                     guard job.isCurrent() else { return }
                     failure = error
@@ -328,7 +331,7 @@ extension AppModel {
                 do {
                     let points = try await AudioFile.pitchInBackground(root.appendingPathComponent(name))
                     guard job.isCurrent() else { return }
-                    attemptPitch = points
+                    help.attemptPitch = points
                 } catch {
                     guard job.isCurrent() else { return }
                     failure = failure ?? error

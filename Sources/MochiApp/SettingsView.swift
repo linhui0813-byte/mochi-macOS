@@ -56,7 +56,7 @@ struct SettingsView: View {
                     ).foregroundStyle(.secondary)
                 }
                 feedback
-                if let feedback = app.historyFeedback { Text(feedback).font(.callout).foregroundStyle(.secondary) }
+                if let feedback = app.history.feedback { Text(feedback).font(.callout).foregroundStyle(.secondary) }
             }.formStyle(.grouped)
                 .tabItem { Label("Data & Privacy", systemImage: "hand.raised") }.tag("privacy")
 

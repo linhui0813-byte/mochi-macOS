@@ -1,0 +1,50 @@
+import Foundation
+import MochiCore
+
+enum HelpStage { case thought, english, practice }
+
+/// Help Me Say This, as it is being worked on: the thought, its English, the example and the practice attempts.
+/// Each edit is written to the conversation's help draft through `persist`. Changes made inside `restoring` are
+/// not written one by one, so a half-restored draft never reaches the disk and a later single write covers them.
+@MainActor @Observable final class HelpSession {
+    var meaning = "" { didSet { _ = persist(true) } }
+    var english = "" { didSet { _ = persist(true) } }
+    var stage: HelpStage = .thought
+    var thoughtRecording: String? {
+        didSet {
+            guard !isRestoring else { return }
+            if isSavedPractice {
+                if oldValue != thoughtRecording { removeRecording(oldValue) }
+                return
+            }
+            if oldValue != thoughtRecording, recognizedThought != nil {
+                // One save below covers both fields, so the previous-copy snapshot keeps the state before this change.
+                restoring { recognizedThought = nil }
+            }
+            // A replaced recording is removed only once the draft that no longer names it is saved.
+            if persist(false), oldValue != thoughtRecording { removeRecording(oldValue) }
+        }
+    }
+    var recognizedThought: String? { didSet { _ = persist(false) } }
+    /// Practising a saved expression rather than working on this conversation's draft.
+    var isSavedPractice = false
+    var progress: String?
+    var clarification: String?
+    var expression: PracticeExpression?
+    var referencePitch: [PitchPoint] = []
+    var attemptPitch: [PitchPoint] = []
+    /// True while `restoring` runs.
+    @ObservationIgnored private(set) var isRestoring = false
+    /// Writes the help draft; `typing` lets typing in an existing draft be written after a pause.
+    /// Returns false when nothing was written.
+    @ObservationIgnored var persist: (_ typing: Bool) -> Bool = { _ in false }
+    /// Removes a recording if nothing references it any more.
+    @ObservationIgnored var removeRecording: (String?) -> Void = { _ in }
+    /// Makes several changes as one: none of them is written or cleans up a recording on its own.
+    func restoring(_ change: () -> Void) {
+        let outer = isRestoring
+        isRestoring = true
+        change()
+        isRestoring = outer
+    }
+}
