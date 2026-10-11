@@ -61,8 +61,7 @@ final class MediaAndFilesModelTests: XCTestCase {
         app.toggleRecord()
         await waitUntil { app.turn.activity == .recording }
         app.finishRecording()
-        // Pitch analysis is CPU-bound; the generous ceiling covers sanitizer builds and loaded machines.
-        await waitUntil(timeout: 30) { !app.busy }
+        await waitUntil { !app.busy }
         XCTAssertEqual(app.expression?.attempts.map(\.file), ["attempt.wav"])
         XCTAssertTrue(app.attemptPitch.contains { $0.hz != nil })
         XCTAssertEqual(try LibraryStore(root: root).load().expressions.first?.attempts.count, 1)

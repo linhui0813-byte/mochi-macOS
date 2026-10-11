@@ -80,8 +80,10 @@ extension XCTestCase {
         return app
     }
     /// Polls on the main actor until `condition` holds or the timeout passes, then asserts it.
+    /// The timeout is a ceiling, not a speed check: a passing wait returns as soon as the condition holds. Audio
+    /// decoding and pitch analysis run several times slower under the thread sanitizer and parallel workers.
     @MainActor func waitUntil(
-        timeout: TimeInterval = 5, file: StaticString = #filePath, line: UInt = #line, _ condition: () -> Bool
+        timeout: TimeInterval = 30, file: StaticString = #filePath, line: UInt = #line, _ condition: () -> Bool
     ) async {
         let deadline = Date().addingTimeInterval(timeout)
         while !condition() && Date() < deadline { try? await Task.sleep(nanoseconds: 1_000_000) }

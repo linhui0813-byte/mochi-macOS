@@ -199,7 +199,7 @@ final class AuditFixG3Tests: XCTestCase {
         item.attempts = [Attempt(file: "attempt.wav")]
         app.library.expressions = [item]
         app.openExpression(item)
-        await waitUntil(timeout: 30) { !app.busy }
+        await waitUntil { !app.busy }
         XCTAssertTrue(app.referencePitch.isEmpty)
         XCTAssertFalse(app.attemptPitch.isEmpty)
         XCTAssertNotNil(app.error)
