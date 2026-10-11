@@ -26,6 +26,8 @@ extension AVAudioPlayer: PlaybackPlayer {}
     @ObservationIgnored private var failure: (() -> Void)?
     /// Set when the recorder reports an error or the microphone it started on disconnects.
     @ObservationIgnored private(set) var recordingInterrupted = false
+    /// Set when the recorder reports that it stopped successfully at its time limit.
+    @ObservationIgnored private(set) var recordingFinished = false
     @ObservationIgnored private var recordingDevice: String?
     @ObservationIgnored private var disconnectObserver: NSObjectProtocol?
     /// False once recording ends for any reason other than `stopRecording()`.
@@ -53,6 +55,7 @@ extension AVAudioPlayer: PlaybackPlayer {}
         }
         recorder = r
         recordingInterrupted = false
+        recordingFinished = false
         recordingDevice = AVCaptureDevice.default(for: .audio)?.uniqueID
         disconnectObserver = NotificationCenter.default.addObserver(
             forName: AVCaptureDevice.wasDisconnectedNotification, object: nil, queue: .main
@@ -85,9 +88,14 @@ extension AVAudioPlayer: PlaybackPlayer {}
     }
     nonisolated func audioRecorderDidFinishRecording(_ recorder: AVAudioRecorder, successfully flag: Bool) {
         Task { @MainActor in
-            guard self.recorder === recorder, !flag else { return }
-            MochiLog.audio.notice("The recorder stopped unsuccessfully")
-            self.recordingInterrupted = true
+            // `stopRecording()` releases the recorder first, so only a stop the recorder chose itself arrives here.
+            guard self.recorder === recorder else { return }
+            guard flag else {
+                MochiLog.audio.notice("The recorder stopped unsuccessfully")
+                self.recordingInterrupted = true
+                return
+            }
+            self.recordingFinished = true
         }
     }
     func play(url: URL, rate: Float = 1, failed: (() -> Void)? = nil, completed: @escaping () -> Void) throws {
@@ -168,7 +176,12 @@ extension AVAudioPlayer: PlaybackPlayer {}
 enum AudioFile {
     /// Decodes a whole file to mono samples. One `read(into:)` can stop short of the end, so reading
     /// continues until the file is exhausted; for uncompressed audio the decoded length must match exactly.
-    static func samples(_ url: URL, maxDuration: Double = 65) throws -> (samples: [Float], rate: Double) {
+    /// Cancelling the calling task stops decoding with `CancellationError`.
+    static func samples(_ url: URL, maxDuration: Double = 65, isCancelled: () -> Bool = { Task.isCancelled }) throws
+        -> (
+            samples: [Float], rate: Double
+        )
+    {
         let file = try AVAudioFile(forReading: url)
         let format = file.processingFormat
         guard file.length > 0, Double(file.length) / format.sampleRate <= maxDuration else {
@@ -181,6 +194,7 @@ enum AudioFile {
         var samples = [Float]()
         samples.reserveCapacity(Int(file.length))
         while file.framePosition < file.length {
+            if isCancelled() { throw CancellationError() }
             try file.read(into: chunk)
             let count = Int(chunk.frameLength)
             guard count > 0 else { break }
@@ -196,38 +210,78 @@ enum AudioFile {
         {
             throw AppFailure("This recording could not be read completely. Record it again.")
         }
+        if isCancelled() { throw CancellationError() }
         return (samples, format.sampleRate)
     }
+    /// Mono little-endian 16-bit PCM at 24 kHz. Cancelling the calling task stops with `CancellationError`.
     static func pcm(_ url: URL) throws -> Data {
         let (samples, rate) = try samples(url)
         let count = Int(Double(samples.count) * 24000 / rate)
         guard count >= 2400 else {
             throw AppFailure("That recording was too short. Speak for at least a moment, then finish.")
         }
+        let resampled = rate == 24000 ? samples : try resample(samples, from: rate, frames: count)
+        try Task.checkCancellation()
         var data = Data(capacity: count * 2)
         for i in 0..<count {
-            let position = Double(i) * rate / 24000
-            let index = min(Int(position), samples.count - 1)
-            let next = min(index + 1, samples.count - 1)
-            let fraction = Float(position - Double(index))
-            let mixed = samples[index] * (1 - fraction) + samples[next] * fraction
-            let sample = mixed.isFinite ? mixed : 0
-            var value = Int16(max(-32767, min(32767, Int(sample * 32767)))).littleEndian
+            let mixed = i < resampled.count ? resampled[i] : 0
+            // Clamp before scaling: a huge finite sample would overflow the integer conversion.
+            let sample = mixed.isFinite ? max(-1, min(1, mixed)) : 0
+            var value = Int16(sample * 32767).littleEndian
             withUnsafeBytes(of: &value) { data.append(contentsOf: $0) }
         }
         return data
     }
+    /// Band-limited conversion to 24 kHz. Recordings restored from a backup can have any rate; the converter
+    /// filters out what 24 kHz cannot carry instead of folding it back into the audible band.
+    private static func resample(_ samples: [Float], from rate: Double, frames: Int) throws -> [Float] {
+        let failure = AppFailure("This recording could not be converted. Record it again.")
+        guard
+            let input = AVAudioFormat(
+                commonFormat: .pcmFormatFloat32, sampleRate: rate, channels: 1, interleaved: false),
+            let output = AVAudioFormat(
+                commonFormat: .pcmFormatFloat32, sampleRate: 24000, channels: 1, interleaved: false),
+            let converter = AVAudioConverter(from: input, to: output),
+            let source = AVAudioPCMBuffer(pcmFormat: input, frameCapacity: AVAudioFrameCount(samples.count)),
+            let target = AVAudioPCMBuffer(pcmFormat: output, frameCapacity: AVAudioFrameCount(frames + 4096)),
+            let sourceData = source.floatChannelData, let targetData = target.floatChannelData
+        else { throw failure }
+        converter.sampleRateConverterQuality = AVAudioQuality.max.rawValue
+        converter.sampleRateConverterAlgorithm = AVSampleRateConverterAlgorithm_Mastering
+        source.frameLength = AVAudioFrameCount(samples.count)
+        for i in samples.indices { sourceData[0][i] = samples[i].isFinite ? samples[i] : 0 }
+        var supplied = false
+        var error: NSError?
+        let status = converter.convert(to: target, error: &error) { _, state in
+            guard !supplied else {
+                state.pointee = .endOfStream
+                return nil
+            }
+            supplied = true
+            state.pointee = .haveData
+            return source
+        }
+        guard status != .error, error == nil else { throw AppFailure(failure.message, underlying: error) }
+        return Array(UnsafeBufferPointer(start: targetData[0], count: Int(target.frameLength)))
+    }
+    /// Cancelling the calling task stops with `CancellationError`, never a partial or empty contour.
     static func pitch(_ url: URL) throws -> [PitchPoint] {
         let (samples, rate) = try samples(url)
-        return PitchAnalyzer.analyze(samples: samples, sampleRate: rate)
+        let points = PitchAnalyzer.analyze(samples: samples, sampleRate: rate)
+        // The analyzer stops early on cancellation; its partial result must not look like a finished one.
+        try Task.checkCancellation()
+        return points
     }
     /// Analyses off the main actor; cancelling the caller stops the analysis instead of letting it run on.
     static func pitchInBackground(_ url: URL) async throws -> [PitchPoint] {
-        let work = Task.detached(priority: .userInitiated) { try pitch(url) }
-        return try await withTaskCancellationHandler {
+        let work = Task.detached(priority: .userInitiated) { try AudioFile.pitch(url) }
+        let points = try await withTaskCancellationHandler {
             try await work.value
         } onCancel: {
             work.cancel()
         }
+        // The detached work can finish just before the caller is cancelled; that result is no longer wanted.
+        try Task.checkCancellation()
+        return points
     }
 }

@@ -136,13 +136,12 @@ struct LegacyInstance {
                 if let pid = ProcessInstanceLock.ownerPID(at: directory.appendingPathComponent("instance.lock")),
                     pid != getpid(), kill(pid, 0) == 0,
                     let owner = NSRunningApplication(processIdentifier: pid), let url = owner.bundleURL,
-                    owner.bundleIdentifier == AppIdentity.bundleIdentifier
+                    owner.bundleIdentifier == AppIdentity.bundleIdentifier, try !Self.reopen(url)
                 {
-                    let reopen = Process()
-                    reopen.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-                    reopen.arguments = ["-a", url.path]
-                    try reopen.run()
-                    reopen.waitUntilExit()
+                    InstanceEvidence.record("duplicate-reopen-failed")
+                    Self.fail(
+                        "Mochi is already running, but its window could not be shown. Click Mochi in the menu bar to open it."
+                    )
                 }
                 InstanceEvidence.record("duplicate-exit")
                 exit(EXIT_SUCCESS)
@@ -150,13 +149,93 @@ struct LegacyInstance {
             InstanceEvidence.record("lock-acquired")
             if fixtureID == nil, try handOffToLegacyOwner() { exit(EXIT_SUCCESS) }
         } catch {
-            // NSApplication must exist before presenting startup failures.
-            _ = NSApplication.shared
-            let alert = NSAlert()
-            alert.messageText = "Mochi couldn’t start safely"
-            alert.informativeText = "Unable to establish exclusive access to Mochi. \(error.localizedDescription)"
-            alert.runModal()
-            exit(EXIT_FAILURE)
+            Self.fail("Unable to establish exclusive access to Mochi. \(error.localizedDescription)")
+        }
+    }
+
+    private static func fail(_ explanation: String) -> Never {
+        // NSApplication must exist before presenting startup failures.
+        _ = NSApplication.shared
+        let alert = NSAlert()
+        alert.messageText = "Mochi couldn’t start safely"
+        alert.informativeText = explanation
+        alert.runModal()
+        exit(EXIT_FAILURE)
+    }
+
+    /// Asks Launch Services to reopen a running copy. False when `open` fails or does not finish in time.
+    static func reopen(_ url: URL, timeout: TimeInterval = 10) throws -> Bool {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+        process.arguments = ["-a", url.path]
+        let finished = DispatchSemaphore(value: 0)
+        process.terminationHandler = { _ in finished.signal() }
+        try process.run()
+        guard finished.wait(timeout: .now() + timeout) == .success else {
+            process.terminate()
+            return false
+        }
+        return process.terminationReason == .exit && process.terminationStatus == 0
+    }
+
+    /// A process of a lock-aware build resolves itself through the instance lock; any other may become an owner.
+    /// An upgrade can replace the bundle under a running legacy process, so its on-disk metadata is trusted
+    /// only when the bundle, its Info.plist and its executable all predate the process.
+    private static func lockAware(_ app: NSRunningApplication) -> Bool {
+        guard let bundle = trustedBundle(app) else { return false }
+        return bundle.object(forInfoDictionaryKey: "MochiSingleInstanceProtocol") as? Bool == true
+    }
+
+    /// The process's bundle, only if the bundle, its Info.plist and its executable all predate the process,
+    /// so its metadata describes the code actually running.
+    private static func trustedBundle(_ app: NSRunningApplication) -> Bundle? {
+        guard let url = app.bundleURL, let bundle = Bundle(url: url), let executable = bundle.executableURL,
+            let started = startTime(app.processIdentifier),
+            unchangedSince(started, [url, url.appendingPathComponent("Contents/Info.plist"), executable])
+        else { return nil }
+        return bundle
+    }
+
+    /// True when every path exists and its inode last changed no later than `start`.
+    /// The inode change time cannot be preserved by a copy or set by a tool, unlike the modification time.
+    nonisolated static func unchangedSince(_ start: timespec, _ paths: [URL]) -> Bool {
+        paths.allSatisfy { url in
+            var info = stat()
+            guard stat(url.path, &info) == 0 else { return false }
+            let changed = info.st_ctimespec
+            return changed.tv_sec < start.tv_sec || (changed.tv_sec == start.tv_sec && changed.tv_nsec <= start.tv_nsec)
+        }
+    }
+
+    /// The kernel's record of when a process started, independent of how it was launched.
+    nonisolated static func startTime(_ pid: pid_t) -> timespec? {
+        var info = kinfo_proc()
+        var size = MemoryLayout<kinfo_proc>.stride
+        var name: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, pid]
+        guard sysctl(&name, u_int(name.count), &info, &size, nil, 0) == 0, size > 0, info.kp_proc.p_pid == pid else {
+            return nil
+        }
+        let started = info.kp_proc.p_un.__p_starttime
+        return timespec(tv_sec: started.tv_sec, tv_nsec: Int(started.tv_usec) * 1000)
+    }
+
+    /// Waits for Mochi processes that are still launching, so a legacy build cannot finish starting unseen.
+    private static func awaitLaunching(_ identifiers: [String], timeout: TimeInterval = 5) throws {
+        let deadline = ProcessInfo.processInfo.systemUptime + timeout
+        func launching() -> Bool {
+            identifiers.contains { identifier in
+                NSRunningApplication.runningApplications(withBundleIdentifier: identifier).contains {
+                    $0.processIdentifier != getpid() && !$0.isFinishedLaunching && !$0.isTerminated
+                        && kill($0.processIdentifier, 0) == 0 && !lockAware($0)
+                }
+            }
+        }
+        while launching() {
+            guard ProcessInfo.processInfo.systemUptime < deadline else {
+                throw AppFailure("Another copy of Mochi is still starting. Quit it, then open Mochi again.")
+            }
+            // NSRunningApplication refreshes its launch state as the main run loop runs.
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
         }
     }
 
@@ -167,24 +246,29 @@ struct LegacyInstance {
             let distribution = true
         #endif
         let identifiers = [AppIdentity.bundleIdentifier] + AppIdentity.legacyBundleIdentifiers
+        try Self.awaitLaunching(identifiers)
         for identifier in identifiers {
             for existing in NSRunningApplication.runningApplications(withBundleIdentifier: identifier)
             where existing.processIdentifier != getpid() {
-                guard let url = existing.bundleURL, let bundle = Bundle(url: url),
+                // A distribution owner is recognised by its running process alone; an upgrade may have removed its bundle.
+                // A bundle replaced after the process started says nothing about the running code, so that process is
+                // treated like a distribution owner too.
+                let bundle = Self.trustedBundle(existing)
+                guard
                     LegacyInstance.eligible(
-                        build: bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String,
-                        guarded: bundle.object(forInfoDictionaryKey: "MochiSingleInstanceProtocol") as? Bool == true,
+                        build: bundle?.object(forInfoDictionaryKey: "CFBundleVersion") as? String,
+                        guarded: bundle?.object(forInfoDictionaryKey: "MochiSingleInstanceProtocol") as? Bool == true,
                         finished: existing.isFinishedLaunching && !existing.isTerminated,
-                        alive: kill(existing.processIdentifier, 0) == 0, distribution: distribution)
+                        alive: kill(existing.processIdentifier, 0) == 0, distribution: distribution || bundle == nil)
                 else { continue }
-                let reopen = Process()
-                reopen.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-                reopen.arguments = ["-a", url.path]
-                try reopen.run()
-                reopen.waitUntilExit()
+                // Without a bundle to reopen, fail closed rather than run beside it.
+                guard let url = existing.bundleURL else {
+                    throw AppFailure("Another copy of Mochi is running. Quit it, then open Mochi again.")
+                }
+                let reopened = try Self.reopen(url)
                 // A dead legacy owner must not swallow the new launch. Continue as owner.
                 guard kill(existing.processIdentifier, 0) == 0, !existing.isTerminated else { continue }
-                guard reopen.terminationStatus == 0 else {
+                guard reopened else {
                     throw AppFailure("The running Mochi window could not be reopened.")
                 }
                 InstanceEvidence.record("legacy-handoff")

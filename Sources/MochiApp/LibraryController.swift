@@ -195,14 +195,31 @@ import MochiKernel
     }
     /// Copies a snapshot of the library and its recordings off the main thread. The transfer is claimed at once,
     /// so a second request cannot start alongside it; nil means another transfer is running or the library is closed.
+    /// The snapshot's recordings are hard-linked first, so deleting or replacing one meanwhile cannot fail the backup.
     func exportBackup(to url: URL) -> Task<Void, Error>? {
         guard readable, transfer == nil else { return nil }
         transfer = "Exporting your library backup…"
         let snapshot = library
-        let root = store.root
+        let staging = store.root.appendingPathComponent("\(LibraryStore.exportStagingPrefix)\(UUID().uuidString)")
+        let retained = Result { try Self.link(snapshot.referencedAudio, from: store.root, into: staging) }
         return Task { [weak self] in
-            defer { self?.transfer = nil }
-            try await Task.detached { try LibraryBackup.write(snapshot, from: root, to: url) }.value
+            defer {
+                self?.transfer = nil
+                try? FileManager.default.removeItem(at: staging)
+            }
+            try retained.get()
+            try await Task.detached { try LibraryBackup.write(snapshot, from: staging, to: url) }.value
+        }
+    }
+    private static func link(_ names: Set<String>, from root: URL, into staging: URL) throws {
+        try FileManager.default.createDirectory(
+            at: staging, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
+        for name in names {
+            let source = root.appendingPathComponent(name)
+            // A missing or unsafe recording is left out, so the backup refuses it with its usual message.
+            let values = try? source.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
+            guard values?.isRegularFile == true, values?.isSymbolicLink != true else { continue }
+            try FileManager.default.linkItem(at: source, to: staging.appendingPathComponent(name))
         }
     }
     /// Reads a backup and copies its recordings off the main thread, then merges into the library as it is by then,
@@ -214,19 +231,27 @@ import MochiKernel
         let root = store.root
         return Task { [weak self] in
             defer { self?.transfer = nil }
-            let (imported, prepared) = try await Task.detached { () throws -> (Library, LibraryBackup.PreparedImport) in
+            let preparation = Task.detached { () throws -> (Library, LibraryBackup.PreparedImport) in
                 let imported = try LibraryBackup.read(url)
                 return (imported, try LibraryBackup.prepareMerge(imported, from: url, into: snapshot, root: root))
-            }.value
-            guard let self else {
-                LibraryBackup.discard(prepared, keeping: Library())
+            }
+            let (imported, prepared) = try await withTaskCancellationHandler {
+                try await preparation.value
+            } onCancel: {
+                preparation.cancel()
+            }
+            guard let self, !Task.isCancelled else {
+                LibraryBackup.discard(prepared, keeping: self?.library ?? Library())
                 throw CancellationError()
             }
             let templateIDsBeforeImport = Set(library.conversationTemplates.map(\.id))
             var candidate = library
             do {
                 let count = try LibraryBackup.apply(prepared, to: &candidate)
+                // The last point a cancelled import can stop; after the commit the import is part of the library.
+                try Task.checkCancellation()
                 try commit(candidate)
+                LibraryBackup.discard(prepared, keeping: library)
                 return ConversationTemplate.importSummary(
                     conversations: count, imported: imported.conversationTemplates,
                     merged: candidate.conversationTemplates, localIDs: templateIDsBeforeImport)

@@ -33,25 +33,25 @@ extension AppModel {
         attemptPitch = []
         notice = cancelledReply ? "Your pending reply was cancelled. You can retry it when you return." : nil
         recordingWarning = nil
-        if let thoughtRecording,
-            let samples = try? AudioFile.samples(store.root.appendingPathComponent(thoughtRecording)).samples
-        {
-            recordingWarning =
-                RecordingSignal(samples: samples).isQuiet
-                ? "This recording is very quiet. Listen before transcribing, or record it again." : nil
-        }
+        if let thoughtRecording { warnIfQuiet(thoughtRecording) }
         persistHelpDraft()
+    }
+    /// Decodes the restored thought off the main actor; the warning applies only if that recording is still current.
+    private func warnIfQuiet(_ recording: String) {
+        let url = store.root.appendingPathComponent(recording)
+        Task { [weak self] in
+            let quiet = await Task.detached(priority: .utility) { () -> Bool in
+                guard let samples = try? AudioFile.samples(url).samples else { return false }
+                return RecordingSignal(samples: samples).isQuiet
+            }.value
+            guard let self, quiet, thoughtRecording == recording, turn.activity != .recording else { return }
+            recordingWarning = "This recording is very quiet. Listen before transcribing, or record it again."
+        }
     }
     /// Typing in an existing draft is written after a pause; every other change is written at once,
     /// because callers such as recording replacement delete files only after the new state is saved.
     @discardableResult func persistHelpDraft(typing: Bool = false) -> Bool {
-        guard !restoringHelp, !isSavedPractice, practice, writableConversation,
-            let ci = library.conversations.firstIndex(where: { $0.id == selectedID })
-        else { return false }
-        var draft = HelpDraft(
-            meaning: meaning, english: english, recording: thoughtRecording, expressionID: expression?.id)
-        draft.clarification = helpClarification
-        draft.transcriptReview = recognizedThought
+        guard case (let ci, let draft)? = currentHelpDraft() else { return false }
         if typing, library.conversations[ci].helpDraft != nil {
             updateLibraryQuietly { $0.conversations[ci].helpDraft = draft }
             scheduleSave()
@@ -59,6 +59,22 @@ extension AppModel {
         }
         library.conversations[ci].helpDraft = draft
         return save()
+    }
+    /// Puts the help draft into the library without writing it, for a caller that saves once afterwards.
+    func stageHelpDraft() {
+        guard case (let ci, let draft)? = currentHelpDraft() else { return }
+        library.conversations[ci].helpDraft = draft
+    }
+    /// The help draft to keep and its conversation, or nil when there is none.
+    private func currentHelpDraft() -> (Int, HelpDraft)? {
+        guard !restoringHelp, !isSavedPractice, practice, writableConversation,
+            let ci = library.conversations.firstIndex(where: { $0.id == selectedID })
+        else { return nil }
+        var draft = HelpDraft(
+            meaning: meaning, english: english, recording: thoughtRecording, expressionID: expression?.id)
+        draft.clarification = helpClarification
+        draft.transcriptReview = recognizedThought
+        return (ci, draft)
     }
     func editThought() {
         helpStage = .thought
@@ -74,7 +90,7 @@ extension AppModel {
     func transcribeThought() {
         guard !busy, let thoughtRecording else { return }
         let transcribe = speech.transcribe
-        let model = settings.modelName
+        let model = settings.effectiveModelName
         let url = store.root.appendingPathComponent(thoughtRecording)
         runExclusive("Transcribe thought", progress: "Transcribing your thought…") { [weak self] job in
             guard let self else { return }
@@ -129,6 +145,8 @@ extension AppModel {
             } else {
                 english = suggestion.text.trimmingCharacters(in: .whitespacesAndNewlines)
                 expression = PracticeExpression(conversationID: id, meaning: input, english: english)
+                referencePitch = []
+                attemptPitch = []
                 helpClarification = nil
                 helpStage = .english
             }
@@ -157,6 +175,9 @@ extension AppModel {
     }
     @discardableResult func saveExpression() -> Bool {
         ensureExpression()
+        // The thought can be edited after the expression was created; save what the user now sees.
+        let thought = meaning.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let current = expression, current.meaning != thought { expression?.meaning = thought }
         guard let expression, !expression.english.isEmpty else { return false }
         if let index = library.expressions.firstIndex(where: { $0.id == expression.id }) {
             library.expressions[index] = expression
@@ -195,20 +216,23 @@ extension AppModel {
         let service = settings.practiceService(voice: voice, options: options)
         let root = store.root
         let referenceAudio = speech.referenceAudio
-        runExclusive("Preview voice") { [weak self] job in
+        previewEpoch = runExclusive("Preview voice") { [weak self] job in
             guard let self else { return }
             let url = try await referenceAudio(ReferenceSpeech.preview, service, root, false)
             guard job.isCurrent() else { return }
             job.finish()
             play(url.lastPathComponent)
+            if playbackFile == url.lastPathComponent { previewEpoch = turn.epoch }
         }
     }
+    var canImportReference: Bool { !busy && !english.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     func importReference() {
-        guard !busy, let source = chooseFile(.importReference) else { return }
+        guard canImportReference, let source = chooseFile(.importReference) else { return }
         importReference(from: source)
     }
     func importReference(from source: URL) {
-        guard !busy else { return }
+        // An expression without English cannot be saved, so the copied file would be left unreferenced.
+        guard canImportReference else { return }
         ensureExpression()
         runExclusive("Import reference") { [weak self] job in
             guard let self else { return }
@@ -244,13 +268,19 @@ extension AppModel {
             completed
             ? "Saved to My Expressions. Say the thought in your own words when you're ready." : "Help draft saved."
     }
-    func openExpression(_ item: PracticeExpression) {
+    func openExpression(_ opened: PracticeExpression) {
+        var item = opened
         var sourceID = item.conversationID
         if !library.conversations.contains(where: { $0.id == sourceID && !$0.isDeleted && !$0.archived }) {
             var candidate = library
             let chat = Conversation(title: "Practice: " + String(item.english.prefix(42)))
             candidate.conversations.insert(chat, at: 0)
             candidate.selectedConversationID = chat.id
+            // Point the expression at its new home, so reopening it does not create yet another conversation.
+            item.conversationID = chat.id
+            if let index = candidate.expressions.firstIndex(where: { $0.id == item.id }) {
+                candidate.expressions[index].conversationID = chat.id
+            }
             guard commitHistory(candidate) else { return }
             sourceID = chat.id
         }
@@ -274,20 +304,33 @@ extension AppModel {
         referencePitch = []
         attemptPitch = []
         let root = store.root
+        let reference = item.reference
+        let attempt = item.attempts.last?.file
         runExclusive("Open saved expression") { [weak self] job in
             guard let self else { return }
-            if let name = item.reference {
-                let url = root.appendingPathComponent(name)
-                let points = try await AudioFile.pitchInBackground(url)
-                guard job.isCurrent() else { return }
-                referencePitch = points
+            // Each contour is analysed on its own, so one unreadable file does not hide the other.
+            var failure: Error?
+            if let name = reference {
+                do {
+                    let points = try await AudioFile.pitchInBackground(root.appendingPathComponent(name))
+                    guard job.isCurrent() else { return }
+                    referencePitch = points
+                } catch {
+                    guard job.isCurrent() else { return }
+                    failure = error
+                }
             }
-            if let name = item.attempts.last?.file {
-                let url = root.appendingPathComponent(name)
-                let points = try await AudioFile.pitchInBackground(url)
-                guard job.isCurrent() else { return }
-                attemptPitch = points
+            if let name = attempt {
+                do {
+                    let points = try await AudioFile.pitchInBackground(root.appendingPathComponent(name))
+                    guard job.isCurrent() else { return }
+                    attemptPitch = points
+                } catch {
+                    guard job.isCurrent() else { return }
+                    failure = failure ?? error
+                }
             }
+            if let failure { throw failure }
         }
     }
 }

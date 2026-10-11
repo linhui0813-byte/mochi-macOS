@@ -1,6 +1,7 @@
 import MochiAutomation
 import MochiCore
 import MochiKernel
+import MochiTestSupport
 import XCTest
 
 @testable import MochiApp
@@ -16,7 +17,7 @@ private final class AutomationPlayer: PlaybackPlayer {
 }
 final class AutomationTests: XCTestCase {
     @MainActor func testConversationSettingsPersistAndRejectArchivedChanges() throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let root = TestScratch.folder()
         defer { try? FileManager.default.removeItem(at: root) }
         let app = makeApp(root: root, preferences: makePreferences(named: "automation-tests-" + root.lastPathComponent))
         let id = try XCTUnwrap(app.selectedID)
@@ -30,7 +31,7 @@ final class AutomationTests: XCTestCase {
         XCTAssertFalse(app.setConversationInstructions(id, instructions: "No", preferences: preferences))
     }
     @MainActor func testRevisionAndScopeGuardAndExpressionPersistence() throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let root = TestScratch.folder()
         defer { try? FileManager.default.removeItem(at: root) }
         let app = makeApp(root: root, preferences: makePreferences(named: "automation-tests-" + root.lastPathComponent))
         let id = try XCTUnwrap(app.selectedID)
@@ -55,7 +56,7 @@ final class AutomationTests: XCTestCase {
         XCTAssertThrowsError(try app.executeTool("get_session", arguments: [:], origin: .external))
     }
     @MainActor func testVoiceNavigationIsDeferredAndCancelledWithTurn() throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let root = TestScratch.folder()
         defer { try? FileManager.default.removeItem(at: root) }
         let app = makeApp(root: root, preferences: makePreferences(named: "automation-tests-" + root.lastPathComponent))
         let id = try XCTUnwrap(app.selectedID)
@@ -75,7 +76,7 @@ final class AutomationTests: XCTestCase {
         XCTAssertFalse(app.practice)
     }
     @MainActor func testAtomicFailureDoesNotChangeInstructionsOrExpressions() throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let root = TestScratch.folder()
         defer { try? FileManager.default.removeItem(at: root) }
         let app = makeApp(root: root, preferences: makePreferences(named: "automation-tests-" + root.lastPathComponent))
         let id = try XCTUnwrap(app.selectedID)
@@ -88,7 +89,7 @@ final class AutomationTests: XCTestCase {
         XCTAssertTrue(app.library.expressions.isEmpty)
     }
     @MainActor func testRequestUsesConversationInstructionsAndCustomizedEmptyChatIsNotReused() async throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let root = TestScratch.folder()
         defer { try? FileManager.default.removeItem(at: root) }
         let app = makeApp(root: root, preferences: makePreferences())
         let id = try XCTUnwrap(app.selectedID)
@@ -120,7 +121,7 @@ final class AutomationTests: XCTestCase {
         app.stop()
     }
     @MainActor func testExternalBusyAndModalWritesAreRejected() throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let root = TestScratch.folder()
         defer { try? FileManager.default.removeItem(at: root) }
         let app = makeApp(root: root, preferences: makePreferences())
         app.externalControlEnabled = true
@@ -155,7 +156,7 @@ final class AutomationTests: XCTestCase {
         app.stop()
     }
     @MainActor func testControlReplayCacheAndChangedArguments() throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let root = TestScratch.folder()
         defer { try? FileManager.default.removeItem(at: root) }
         let app = makeApp(root: root, preferences: makePreferences())
         app.externalControlEnabled = true
@@ -182,7 +183,7 @@ final class AutomationTests: XCTestCase {
         XCTAssertEqual(disabled["ok"] as? Bool, false)
     }
     @MainActor func testReadsAreBoundedAndWrongConversationCannotBeRead() throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let root = TestScratch.folder()
         defer { try? FileManager.default.removeItem(at: root) }
         let app = makeApp(root: root, preferences: makePreferences())
         let id = try XCTUnwrap(app.selectedID)
@@ -208,7 +209,7 @@ final class AutomationTests: XCTestCase {
                 origin: .voice))
     }
     @MainActor func testDeferredPracticeOnlyRunsAfterReplyAndRejectsSecondNavigation() throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let root = TestScratch.folder()
         defer { try? FileManager.default.removeItem(at: root) }
         let app = makeApp(root: root, preferences: makePreferences())
         let id = try XCTUnwrap(app.selectedID)
@@ -232,7 +233,7 @@ final class AutomationTests: XCTestCase {
 
     @MainActor func testVoiceAcknowledgmentPlaysBeforePracticeAndStopCancelsNavigation() async throws {
         for cancel in [false, true] {
-            let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            let root = TestScratch.folder()
             defer { try? FileManager.default.removeItem(at: root) }
             let app = makeApp(root: root, preferences: makePreferences())
             let id = try XCTUnwrap(app.selectedID)

@@ -36,8 +36,10 @@ final class AudioFileTests: XCTestCase {
         let url = try wav(rate: 48000, channels: 2, frames: 48000) { _, i in tone[i] }
         let pcm = try AudioFile.pcm(url)
         XCTAssertEqual(pcm.count, 24000 * 2)
-        for k in [0, 1, 100, 12345, 23999] {
-            XCTAssertEqual(value(pcm, at: k), Int16(Int(tone[2 * k] * 32767)), "sample \(k)")
+        // Band-limited resampling keeps an in-band tone intact; samples near the clip edges carry filter ringing.
+        for k in [100, 101, 12345, 23899] {
+            let expected = sin(2 * Double.pi * 440 * Double(k) / 24000) * 0.5 * 32767
+            XCTAssertEqual(Double(value(pcm, at: k)), expected, accuracy: 20, "sample \(k)")
         }
     }
     func testOtherRatesAreResampledToTheRightLength() throws {

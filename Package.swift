@@ -15,6 +15,10 @@ let package = Package(
             name: "MochiApp", dependencies: ["MochiKernel", "MochiAutomation", "MochiCore"],
             resources: [.process("Resources")],
             swiftSettings: [.define("MOCHI_DEVELOPMENT", .when(configuration: .debug))]),
-        .testTarget(name: "MochiCoreTests", dependencies: ["MochiKernel", "MochiAutomation", "MochiCore"]),
-        .testTarget(name: "MochiAppTests", dependencies: ["MochiKernel", "MochiAutomation", "MochiApp", "MochiCore"]),
+        .target(name: "MochiTestSupport", path: "Tests/MochiTestSupport"),
+        .testTarget(
+            name: "MochiCoreTests", dependencies: ["MochiKernel", "MochiAutomation", "MochiCore", "MochiTestSupport"]),
+        .testTarget(
+            name: "MochiAppTests",
+            dependencies: ["MochiKernel", "MochiAutomation", "MochiApp", "MochiCore", "MochiTestSupport"]),
     ])

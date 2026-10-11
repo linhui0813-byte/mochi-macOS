@@ -97,6 +97,8 @@ extension AppModel {
             do {
                 let file = store.root.appendingPathComponent("recording-\(UUID().uuidString).wav")
                 try media.record(file)
+                // The recorder's own time limit runs from here, not from after the save below.
+                let started = recordingNow()
                 if !practice, let index = library.conversations.firstIndex(where: { $0.id == selectedID }) {
                     library.conversations[index].voiceIntroduced = true
                     save()
@@ -105,34 +107,50 @@ extension AppModel {
                 _ = turn.startRecording()
                 recordingSeconds = 0
                 recordingWarning = nil
-                startRecordingFeedback(token: turn.epoch)
+                startRecordingFeedback(token: turn.epoch, started: started)
             } catch { fail(error, token: token, context: "Start recording") }
         }
     }
     func updateRecordingFeedback(elapsed: Double, level: Float) {
-        recordingSeconds = Int(max(0, min(60, elapsed.isFinite ? elapsed : 0)))
+        recordingSeconds = Int(max(0, min(Self.recordingLimit, elapsed.isFinite ? elapsed : 0)))
         recordingLevel = level.isFinite ? min(0, max(-80, level)) : -80
         recordingWarning =
             recordingSeconds >= 1 && recordingLevel < -48
             ? "Input is very quiet. Check your microphone or speak closer." : nil
     }
-    func startRecordingFeedback(token: UUID) {
+    func startRecordingFeedback(token: UUID, started: Date? = nil) {
         recordingClock?.cancel()
-        let started = recordingNow()
+        let started = started ?? recordingNow()
         recordingClock = Task {
             while !Task.isCancelled {
                 do { try await recordingSleep(100_000_000) } catch { return }
                 guard !Task.isCancelled, turn.epoch == token else { return }
-                updateRecordingFeedback(elapsed: recordingNow().timeIntervalSince(started), level: media.meter())
-                if recordingSeconds >= 60 {
+                let elapsed = recordingNow().timeIntervalSince(started)
+                updateRecordingFeedback(elapsed: elapsed, level: media.meter())
+                if elapsed >= Self.recordingLimit || !media.recordingActive() {
                     finishRecording()
                     return
                 }
-                if !media.recordingActive() {
-                    recordingInterrupted()
+            }
+        }
+    }
+    /// The recorder stopped without being asked. Its outcome arrives asynchronously, so wait briefly for it:
+    /// the take is kept only once the recorder confirms a successful stop, and silence counts as an interruption.
+    private func awaitStoppedTake() {
+        recordingClock?.cancel()
+        let token = turn.epoch
+        recordingClock = Task {
+            for _ in 0..<20 {
+                guard !Task.isCancelled, turn.epoch == token else { return }
+                if media.recordingInterrupted() { break }
+                if media.recordingFinished() {
+                    finishRecording()
                     return
                 }
+                do { try await Task.sleep(nanoseconds: 50_000_000) } catch { return }
             }
+            guard !Task.isCancelled, turn.epoch == token else { return }
+            recordingInterrupted()
         }
     }
     /// The microphone stopped mid-take. A partial take is discarded rather than sent as if complete.
@@ -142,6 +160,18 @@ extension AppModel {
             "Recording stopped because the microphone disconnected or stopped responding. Check your microphone, then record again."
     }
     func finishRecording() {
+        // A recorder that already stopped (time limit, disconnect, failure) is judged by its reported outcome,
+        // never by elapsed time; Finish can be pressed before that outcome or the clock's next tick arrives.
+        if turn.activity == .recording, !media.recordingActive() {
+            if media.recordingInterrupted() {
+                recordingInterrupted()
+                return
+            }
+            if !media.recordingFinished() {
+                awaitStoppedTake()
+                return
+            }
+        }
         guard let url = media.stopRecording() else {
             stop()
             return
@@ -152,39 +182,88 @@ extension AppModel {
         recordingLevel = -80
         if recordingMeaning {
             recordingMeaning = false
-            thoughtRecording = url.lastPathComponent
-            if let samples = try? AudioFile.samples(url).samples {
-                recordingWarning =
-                    RecordingSignal(samples: samples).isQuiet
-                    ? "This recording is very quiet. Listen before transcribing, or record it again." : nil
-            }
-            notice = "Your thought is recorded locally. Listen, then choose Transcribe."
-            persistHelpDraft()
+            finishThoughtRecording(url)
         } else if practice {
-            runExclusive("Analyse practice attempt") { [weak self] job in
-                guard let self else { return }
-                let pitch = try await AudioFile.pitchInBackground(url)
-                guard job.isCurrent() else { return }
-                expression?.attempts.append(Attempt(file: url.lastPathComponent))
-                attemptPitch = pitch
-                saveExpression()
-                job.finish()
-                notice =
-                    pitch.contains(where: { $0.hz != nil })
-                    ? "Try comparing one phrase at a time. These contours are unscored."
-                    : "No clear voiced pitch detected. Try speaking closer to the microphone."
-            }
+            finishPracticeAttempt(url)
         } else if let id = selectedID {
-            do {
-                let pcm = try AudioFile.pcm(url)
-                requestReply(
-                    history: conversation?.messages ?? [], text: "", pcm: pcm, audioFile: url.lastPathComponent,
-                    conversationID: id)
-            } catch {
-                MochiLog.failure(MochiLog.audio, "Read finished recording", error)
-                self.error = AppFailure.message(
-                    for: error, fallback: "This recording could not be read. Record your message again.")
+            sendRecording(url, conversationID: id)
+        } else {
+            removeUnreferencedRecording(url.lastPathComponent)
+        }
+    }
+    /// Decodes off the main actor; cancelling the job stops decoding. A take that cannot be decoded, or whose job
+    /// was superseded, is removed.
+    private func decodeTake<T: Sendable>(
+        _ url: URL, job: ExclusiveJob, fallback: String, _ decode: @escaping @Sendable (URL) throws -> T
+    ) async throws -> T? {
+        let work = Task.detached(priority: .userInitiated) { try decode(url) }
+        let value: T
+        do {
+            value = try await withTaskCancellationHandler {
+                try await work.value
+            } onCancel: {
+                work.cancel()
             }
+        } catch {
+            removeUnreferencedRecording(url.lastPathComponent)
+            guard job.isCurrent() else { return nil }
+            throw AppFailure(AppFailure.message(for: error, fallback: fallback), underlying: error)
+        }
+        guard job.isCurrent() else {
+            removeUnreferencedRecording(url.lastPathComponent)
+            return nil
+        }
+        return value
+    }
+    private func finishThoughtRecording(_ url: URL) {
+        runExclusive(
+            "Read thought recording", progress: "Checking your recording…",
+            onFailure: { [weak self] in self?.recordingWarning = nil },
+            { [weak self] job in
+                guard let self else { return }
+                // The signal check runs with the decode, off the main actor.
+                guard
+                    let quiet = try await decodeTake(
+                        url, job: job, fallback: "This recording could not be read. Record your thought again.",
+                        { RecordingSignal(samples: try AudioFile.samples($0).samples).isQuiet })
+                else { return }
+                // Assigning the recording saves the help draft and removes the one it replaces.
+                thoughtRecording = url.lastPathComponent
+                recordingWarning =
+                    quiet ? "This recording is very quiet. Listen before transcribing, or record it again." : nil
+                job.finish()
+                notice = "Your thought is recorded locally. Listen, then choose Transcribe."
+            })
+    }
+    private func finishPracticeAttempt(_ url: URL) {
+        runExclusive("Analyse practice attempt") { [weak self] job in
+            guard let self else { return }
+            guard
+                let pitch = try await decodeTake(
+                    url, job: job, fallback: "This attempt could not be read. Record it again.",
+                    { try AudioFile.pitch($0) })
+            else { return }
+            expression?.attempts.append(Attempt(file: url.lastPathComponent))
+            attemptPitch = pitch
+            saveExpression()
+            job.finish()
+            notice =
+                pitch.contains(where: { $0.hz != nil })
+                ? "Try comparing one phrase at a time. These contours are unscored."
+                : "No clear voiced pitch detected. Try speaking closer to the microphone."
+        }
+    }
+    private func sendRecording(_ url: URL, conversationID id: UUID) {
+        runExclusive("Read finished recording") { [weak self] job in
+            guard let self else { return }
+            guard
+                let pcm = try await decodeTake(
+                    url, job: job, fallback: "This recording could not be read. Record your message again.",
+                    { try AudioFile.pcm($0) })
+            else { return }
+            requestReply(
+                history: library.conversations.first(where: { $0.id == id })?.messages ?? [], text: "", pcm: pcm,
+                audioFile: url.lastPathComponent, conversationID: id)
         }
     }
 }

@@ -9,8 +9,9 @@ struct TranscriptJobs {
     var isIdle: Bool { tokens.isEmpty && tasks.isEmpty }
     func task(for messageID: UUID) -> Task<Void, Never>? { tasks[messageID] }
     func isCurrent(_ messageID: UUID, _ token: UUID) -> Bool { tokens[messageID] == token }
-    /// Starts the job for a message, replacing any token it had.
+    /// Starts the job for a message, cancelling any job it replaces so no handle is lost while still running.
     mutating func begin(_ messageID: UUID) -> UUID {
+        tasks.removeValue(forKey: messageID)?.cancel()
         let token = UUID()
         tokens[messageID] = token
         messageIDs.insert(messageID)

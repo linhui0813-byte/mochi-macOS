@@ -39,28 +39,28 @@ public struct ConversationSettingsPatch: Equatable {
         coaching = arguments.coaching
     }
     public var isEmpty: Bool { self == ConversationSettingsPatch() }
-    /// Applies every change or none: on failure `settings` is left untouched.
+    /// Applies every change or none: everything is validated before `settings` is touched, even for class conformers.
     public func apply<Settings: ConversationSettingsHolder>(to settings: inout Settings) throws {
-        var next = settings
-        if let instructions {
-            try MochiTools.validateInstructions(instructions)
-            next.instructions = instructions.trimmingCharacters(in: .whitespacesAndNewlines)
-        }
+        if let instructions { try MochiTools.validateInstructions(instructions) }
+        let name: String??
         switch characterName {
-        case .keep: break
-        case .clear: next.characterName = nil
-        case .set(let name):
-            let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        case .keep: name = nil
+        case .clear: name = .some(nil)
+        case .set(let value):
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
             try ConversationTemplate.validateName(trimmed)
-            next.characterName = trimmed
+            name = trimmed
         }
+        var preferences = settings.preferences
         switch speed {
         case .keep: break
-        case .clear: next.preferences.speed = nil
-        case .set(let value): next.preferences.speed = value
+        case .clear: preferences.speed = nil
+        case .set(let value): preferences.speed = value
         }
-        if let coaching { next.preferences.coaching = coaching }
-        try next.preferences.validate()
-        settings = next
+        if let coaching { preferences.coaching = coaching }
+        try preferences.validate()
+        if let instructions { settings.instructions = instructions.trimmingCharacters(in: .whitespacesAndNewlines) }
+        if let name { settings.characterName = name }
+        settings.preferences = preferences
     }
 }

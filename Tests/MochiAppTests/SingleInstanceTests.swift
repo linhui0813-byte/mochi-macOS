@@ -1,11 +1,12 @@
 import Darwin
+import MochiTestSupport
 import XCTest
 
 @testable import MochiApp
 
 final class SingleInstanceTests: XCTestCase {
     private func root() throws -> URL {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let root = TestScratch.folder()
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         return root
     }

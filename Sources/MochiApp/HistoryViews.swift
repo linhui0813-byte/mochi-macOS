@@ -83,28 +83,7 @@ struct HistoryManagerView: View {
                     .font(.callout).foregroundStyle(.secondary).padding(.horizontal, 20).padding(.bottom, 12)
             }
             List(selection: $selection) {
-                ForEach(chats) { chat in
-                    HStack(alignment: .top, spacing: 12) {
-                        Image(
-                            systemName: chat.isDeleted
-                                ? "trash" : chat.archived ? "archivebox" : chat.pinned ? "pin.fill" : "bubble.left"
-                        )
-                        .foregroundStyle(.secondary).frame(width: 20)
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(chat.title).fontWeight(.medium).lineLimit(1)
-                            Text(chat.matchingMessage(query)?.text ?? chat.messages.last?.text ?? "No messages")
-                                .foregroundStyle(.secondary).lineLimit(1)
-                        }
-                        Spacer()
-                        VStack(alignment: .trailing, spacing: 4) {
-                            Text(chat.deletedAt ?? chat.updatedAt, format: .dateTime.month(.abbreviated).day())
-                                .foregroundStyle(.secondary)
-                            Text("\(chat.messages.count) \(chat.messages.count == 1 ? "message" : "messages")").font(
-                                .caption
-                            ).foregroundStyle(.secondary)
-                        }
-                    }.padding(.vertical, 5).tag(chat.id)
-                }
+                ForEach(chats) { chat in HistoryRow(chat: chat, query: query).tag(chat.id) }
             }.listStyle(.inset)
                 .overlay {
                     if chats.isEmpty {
@@ -133,17 +112,7 @@ struct HistoryManagerView: View {
                 Text(feedback).font(.caption).foregroundStyle(.secondary).padding(.horizontal, 20).padding(.top, 6)
             }
             HStack(spacing: 10) {
-                if scope == .deleted {
-                    Button("Recover") { app.restoreChats(selection) }.disabled(selection.isEmpty)
-                    Button("Delete Permanently…", role: .destructive) { app.permanentDeleteIDs = selection }.disabled(
-                        selection.isEmpty)
-                } else {
-                    Button(scope == .archived ? "Move to Conversations" : "Archive") {
-                        if scope == .archived { app.restoreChats(selection) } else { app.archiveChats(selection) }
-                    }.disabled(selection.isEmpty)
-                    Button("Move to Recently Deleted", role: .destructive) { app.deleteChats(selection) }.disabled(
-                        selection.isEmpty)
-                }
+                HistorySelectionActions(app: app, ids: selection, scope: scope)
                 Spacer()
                 Menu("Export") {
                     Button("Selected as Markdown…") { app.exportChats(selection) }
@@ -167,16 +136,62 @@ struct HistoryManagerView: View {
         if ids.count == 1, let chat = app.library.conversations.first(where: { ids.contains($0.id) }) {
             ChatActions(app: app, chat: chat)
         } else if !ids.isEmpty {
-            if scope == .deleted {
-                Button("Recover") { app.restoreChats(ids) }
-                Button("Delete Permanently…", role: .destructive) { app.permanentDeleteIDs = ids }
-            } else {
-                Button(scope == .archived ? "Move to Conversations" : "Archive") {
-                    if scope == .archived { app.restoreChats(ids) } else { app.archiveChats(ids) }
-                }
-                Button("Move to Recently Deleted", role: .destructive) { app.deleteChats(ids) }
-            }
+            HistorySelectionActions(app: app, ids: ids, scope: scope)
         }
+    }
+}
+
+private struct HistoryRow: View {
+    var chat: Conversation
+    var query: String
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(
+                systemName: chat.isDeleted
+                    ? "trash" : chat.archived ? "archivebox" : chat.pinned ? "pin.fill" : "bubble.left"
+            )
+            .foregroundStyle(.secondary).frame(width: 20)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(chat.title).fontWeight(.medium).lineLimit(1)
+                Text(chat.matchingMessage(query)?.text ?? chat.messages.last?.text ?? "No messages")
+                    .foregroundStyle(.secondary).lineLimit(1)
+            }
+            Spacer()
+            VStack(alignment: .trailing, spacing: 4) {
+                Text(chat.deletedAt ?? chat.updatedAt, format: .dateTime.month(.abbreviated).day())
+                    .foregroundStyle(.secondary)
+                Text("\(chat.messages.count) \(chat.messages.count == 1 ? "message" : "messages")").font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }.padding(.vertical, 5)
+    }
+}
+
+/// The bulk actions shared by the manager's footer and its context menu. A search in the active collection also
+/// lists archived conversations, so Archive and Move to Conversations follow what is actually selected.
+struct HistorySelectionActions: View {
+    @Bindable var app: AppModel
+    var ids: Set<UUID>
+    var scope: HistoryScope
+    var body: some View {
+        if scope == .deleted {
+            Button("Recover") { app.restoreChats(ids) }.disabled(ids.isEmpty)
+            Button("Delete Permanently…", role: .destructive) { app.permanentDeleteIDs = ids }.disabled(ids.isEmpty)
+        } else {
+            let targets = Self.targets(ids, in: app.library)
+            if !targets.archive.isEmpty || scope != .archived {
+                Button("Archive") { app.archiveChats(targets.archive) }.disabled(targets.archive.isEmpty)
+            }
+            if !targets.restore.isEmpty || scope == .archived {
+                Button("Move to Conversations") { app.restoreChats(targets.restore) }.disabled(targets.restore.isEmpty)
+            }
+            Button("Move to Recently Deleted", role: .destructive) { app.deleteChats(ids) }.disabled(ids.isEmpty)
+        }
+    }
+    /// Splits a selection of undeleted conversations into those that can be archived and those that can be restored.
+    static func targets(_ ids: Set<UUID>, in library: Library) -> (archive: Set<UUID>, restore: Set<UUID>) {
+        let selected = library.conversations.filter { ids.contains($0.id) && !$0.isDeleted }
+        return (Set(selected.filter { !$0.archived }.map(\.id)), Set(selected.filter(\.archived).map(\.id)))
     }
 }
 

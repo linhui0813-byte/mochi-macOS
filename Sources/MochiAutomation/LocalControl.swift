@@ -8,10 +8,15 @@ enum FrameError: Error { case ended, timedOut, oversized }
 /// Private, same-user IPC. The MCP process is stdio; this socket is only its app bridge.
 public enum LocalControl {
     public static let maxFrame = 262144
-    /// How long the server waits for a request line, and for the app to start and finish handling it.
+    /// The server's whole budget for one connection, from accept: reading, handling and replying.
     public static let serverTimeout: TimeInterval = 5
     /// The client waits longer than the server's whole budget, so a reply is never lost to a race.
     public static let clientTimeout: TimeInterval = 8
+    /// Seconds left until a monotonic deadline; zero once it has passed.
+    static func seconds(until deadline: DispatchTime) -> TimeInterval {
+        let now = DispatchTime.now()
+        return deadline > now ? Double(deadline.uptimeNanoseconds - now.uptimeNanoseconds) / 1e9 : 0
+    }
     public static func path(forLibraryRoot root: URL) -> String {
         let digest = SHA256.hash(data: Data(root.standardizedFileURL.path.utf8)).prefix(12).map {
             String(format: "%02x", $0)
@@ -146,7 +151,10 @@ public enum LocalControl {
     }
 }
 public final class LocalControlServer {
+    /// Guards the clients, whether requests are accepted, and the generation they belong to.
     private let lock = NSLock()
+    /// Serializes start and stop, and guards the listener and endpoint they replace.
+    private let lifecycle = NSLock()
     private var active = false
     private var clients = Set<Int32>()
     private var generation = UUID()
@@ -162,13 +170,65 @@ public final class LocalControlServer {
         return clients.count
     }
     public var endpointAvailable: Bool {
+        lifecycle.lock()
+        let path = self.path
+        let inode = self.inode
+        lifecycle.unlock()
         guard let path else { return false }
         var info = stat()
         return lstat(path, &info) == 0 && info.st_ino == inode && info.st_uid == getuid()
             && info.st_mode & S_IFMT == S_IFSOCK && info.st_mode & 0o077 == 0
     }
     public func start(path: String, handler: @escaping @MainActor (Data) -> Data) throws {
+        lifecycle.lock()
+        defer { lifecycle.unlock() }
         guard source == nil else { return }
+        let fd = try Self.listen(at: path)
+        var info = stat()
+        _ = lstat(path, &info)
+        inode = info.st_ino
+        self.path = path
+        let generation = UUID()
+        lock.lock()
+        active = true
+        self.generation = generation
+        lock.unlock()
+        let timeout = self.timeout
+        let source = DispatchSource.makeReadSource(
+            fileDescriptor: fd, queue: DispatchQueue(label: "mochi.control.accept"))
+        source.setEventHandler { [weak self] in
+            guard let self else { return }
+            while true {
+                let client = accept(fd, nil, nil)
+                if client < 0 { break }
+                let accepted = DispatchTime.now()
+                self.lock.lock()
+                let allowed = self.active && self.clients.count < 8
+                if allowed { self.clients.insert(client) }
+                self.lock.unlock()
+                guard allowed else {
+                    close(client)
+                    continue
+                }
+                // Utility work gets timer leeway large enough to consume the reply's share of the budget.
+                DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                    guard let self else {
+                        close(client)
+                        return
+                    }
+                    self.serve(
+                        client, generation: generation, deadline: accepted + timeout, timeout: timeout,
+                        handler: handler)
+                }
+            }
+        }
+        source.setCancelHandler { close(fd) }
+        self.source = source
+        source.resume()
+    }
+    /// Protects the folder, retires a stale socket and returns a listening descriptor.
+    /// Starters are serialized across processes, so one never unlinks a socket another has just bound.
+    private static func listen(at path: String) throws -> Int32 {
         let directory = URL(fileURLWithPath: path).deletingLastPathComponent().path
         var info = stat()
         if lstat(directory, &info) == 0 {
@@ -184,6 +244,17 @@ public final class LocalControlServer {
         } else {
             try FileManager.default.createDirectory(
                 atPath: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        }
+        // Never unlinked: removing a held lock file would let a second starter lock a different inode.
+        let guardFD = Darwin.open(path + ".lock", O_CREAT | O_RDWR | O_CLOEXEC | O_NOFOLLOW, 0o600)
+        guard guardFD >= 0 else { throw AppFailure("Could not prepare the automation folder.") }
+        defer { close(guardFD) }
+        let lockDeadline = DispatchTime.now() + 2
+        while flock(guardFD, LOCK_EX | LOCK_NB) != 0 {
+            guard [EINTR, EWOULDBLOCK].contains(errno), DispatchTime.now() < lockDeadline else {
+                throw AppFailure("Another Mochi instance owns external control.")
+            }
+            usleep(10_000)
         }
         if lstat(path, &info) == 0 {
             guard info.st_uid == getuid(), info.st_mode & S_IFMT == S_IFSOCK else {
@@ -217,7 +288,7 @@ public final class LocalControlServer {
             close(fd)
             throw AppFailure("Could not bind local control socket.")
         }
-        guard chmod(path, 0o600) == 0, listen(fd, 8) == 0 else {
+        guard chmod(path, 0o600) == 0, Darwin.listen(fd, 8) == 0 else {
             close(fd)
             unlink(path)
             throw AppFailure("Could not protect local control socket.")
@@ -227,107 +298,87 @@ public final class LocalControlServer {
             unlink(path)
             throw AppFailure("Could not configure the control listener.")
         }
-        _ = lstat(path, &info)
-        inode = info.st_ino
-        self.path = path
-        let generation = UUID()
-        lock.lock()
-        active = true
-        self.generation = generation
-        lock.unlock()
-        let source = DispatchSource.makeReadSource(
-            fileDescriptor: fd, queue: DispatchQueue(label: "mochi.control.accept"))
-        source.setEventHandler { [weak self] in
-            guard let self else { return }
-            while true {
-                let client = accept(fd, nil, nil)
-                if client < 0 { break }
-                self.lock.lock()
-                let allowed = self.active && self.clients.count < 8
-                if allowed { self.clients.insert(client) }
-                self.lock.unlock()
-                guard allowed else {
-                    close(client)
-                    continue
-                }
-                let timeout = self.timeout
-                DispatchQueue.global(qos: .utility).async { [weak self] in
-                    guard let self else {
-                        close(client)
-                        return
-                    }
-                    let activity = ProcessInfo.processInfo.beginActivity(
-                        options: [.userInitiated, .latencyCritical], reason: "Handle a local Mochi control request")
-                    defer {
-                        ProcessInfo.processInfo.endActivity(activity)
-                        self.lock.lock()
-                        self.clients.remove(client)
-                        self.lock.unlock()
-                        close(client)
-                    }
-                    func reply(_ message: String) {
-                        if let data = try? JSONSerialization.data(withJSONObject: MochiTools.error(message)) {
-                            try? LocalControl.sendFrame(data, fd: client, timeout: timeout)
-                        }
-                    }
-                    do { try LocalControl.configure(client) } catch {
-                        MochiLog.failure(MochiLog.automation, "Configure control connection", error, level: .info)
-                        return
-                    }
-                    var uid: uid_t = 0
-                    var gid: gid_t = 0
-                    guard getpeereid(client, &uid, &gid) == 0, uid == getuid() else {
-                        MochiLog.automation.error("Refused a control connection from another macOS user")
-                        return
-                    }
-                    let data: Data
-                    do { data = try LocalControl.receiveFrame(fd: client, timeout: timeout) } catch {
-                        MochiLog.failure(MochiLog.automation, "Read control request", error, level: .info)
-                        // A client that left cannot read a reply; one that is slow or too large is told why.
-                        if (error as? AppFailure)?.underlying as? FrameError != .ended {
-                            reply(AppFailure.message(for: error, fallback: "The control request could not be read."))
-                        }
-                        return
-                    }
-                    // The app must start within 80% of the budget; the rest is for finishing and replying.
-                    let deadline = Date().addingTimeInterval(timeout * 0.8)
-                    let complete = DispatchSemaphore(value: 0)
-                    let result = ControlReplyBox()
-                    Task { @MainActor [weak self] in
-                        guard let self else {
-                            complete.signal()
-                            return
-                        }
-                        if !self.isActive(generation) {
-                            result.finish(.inactive)
-                        } else if Date() >= deadline {
-                            result.finish(.missedStart)
-                        } else {
-                            result.start()
-                            result.finish(.reply(handler(data)))
-                        }
-                        complete.signal()
-                    }
-                    if complete.wait(timeout: .now() + timeout) == .timedOut {
-                        MochiLog.automation.notice("A control request did not finish within its deadline")
-                        reply(
-                            result.started
-                                ? "Mochi is still working on this request and may complete it. Read get_session before retrying."
-                                : "Mochi was busy and did not start this request. Retry in a moment.")
-                        return
-                    }
-                    switch result.outcome {
-                    case .reply(let response)?: try? LocalControl.sendFrame(response, fd: client, timeout: timeout)
-                    case .inactive?:
-                        reply("Mochi stopped accepting external control. Enable it again in Settings → Automation.")
-                    case .missedStart?, nil: reply("Mochi was busy and did not start this request. Retry in a moment.")
-                    }
-                }
+        return fd
+    }
+    /// Reads one request, runs it on the main actor within the budget, and always answers a client still listening.
+    /// One monotonic deadline covers the whole exchange, so the reply is sent inside the client's wait.
+    /// The last fifth of the budget is kept for the reply; the handler must start within the first 60%.
+    private func serve(
+        _ client: Int32, generation: UUID, deadline end: DispatchTime, timeout: TimeInterval,
+        handler: @escaping @MainActor (Data) -> Data
+    ) {
+        let handled = end - timeout * 0.2
+        let startBy = end - timeout * 0.4
+        let activity = ProcessInfo.processInfo.beginActivity(
+            options: [.userInitiated, .latencyCritical], reason: "Handle a local Mochi control request")
+        defer {
+            ProcessInfo.processInfo.endActivity(activity)
+            lock.lock()
+            clients.remove(client)
+            lock.unlock()
+            close(client)
+        }
+        func send(_ data: Data) {
+            // A late wake-up must not leave the reply no time at all; its share of the budget is always available,
+            // and the client's wait is longer than the whole budget.
+            let remaining = max(LocalControl.seconds(until: end), timeout * 0.2)
+            do { try LocalControl.sendFrame(data, fd: client, timeout: remaining) } catch {
+                MochiLog.failure(MochiLog.automation, "Send control reply", error, level: .info)
             }
         }
-        source.setCancelHandler { close(fd) }
-        self.source = source
-        source.resume()
+        func reply(_ message: String) {
+            guard let data = try? JSONSerialization.data(withJSONObject: MochiTools.error(message)) else { return }
+            send(data)
+        }
+        do { try LocalControl.configure(client) } catch {
+            MochiLog.failure(MochiLog.automation, "Configure control connection", error, level: .info)
+            return
+        }
+        var uid: uid_t = 0
+        var gid: gid_t = 0
+        guard getpeereid(client, &uid, &gid) == 0, uid == getuid() else {
+            MochiLog.automation.error("Refused a control connection from another macOS user")
+            return
+        }
+        let data: Data
+        do { data = try LocalControl.receiveFrame(fd: client, timeout: LocalControl.seconds(until: handled)) } catch {
+            MochiLog.failure(MochiLog.automation, "Read control request", error, level: .info)
+            // A client that left cannot read a reply; one that is slow or too large is told why.
+            if (error as? AppFailure)?.underlying as? FrameError != .ended {
+                reply(AppFailure.message(for: error, fallback: "The control request could not be read."))
+            }
+            return
+        }
+        // Monotonic time, so a clock change cannot admit a request the client was told never started.
+        let complete = DispatchSemaphore(value: 0)
+        let result = ControlReplyBox()
+        Task { @MainActor [weak self] in
+            defer { complete.signal() }
+            guard let self else { return }
+            if !self.isActive(generation) {
+                result.finish(.inactive)
+            } else if DispatchTime.now() >= startBy || !result.start() {
+                result.finish(.missedStart)
+            } else {
+                result.finish(.reply(handler(data)))
+            }
+        }
+        if complete.wait(timeout: handled) == .timedOut {
+            MochiLog.automation.notice("A control request did not finish within its deadline")
+            reply(
+                result.abandon()
+                    ? "Mochi is still working on this request and may complete it. Read get_session before retrying."
+                    : "Mochi was busy and did not start this request. Retry in a moment.")
+            return
+        }
+        switch result.outcome {
+        case .reply(let response)? where response.count > LocalControl.maxFrame:
+            MochiLog.automation.error("A control reply exceeded the size limit and was not sent")
+            reply("Mochi's reply exceeded the size limit and was not sent. Request less data.")
+        case .reply(let response)?: send(response)
+        case .inactive?: reply("Mochi stopped accepting external control. Enable it again in Settings → Automation.")
+        case .missedStart?, nil: reply("Mochi was busy and did not start this request. Retry in a moment.")
+        }
     }
     private func isActive(_ expected: UUID) -> Bool {
         lock.lock()
@@ -335,6 +386,8 @@ public final class LocalControlServer {
         return active && generation == expected
     }
     public func stop() {
+        lifecycle.lock()
+        defer { lifecycle.unlock() }
         lock.lock()
         active = false
         generation = UUID()
@@ -357,21 +410,26 @@ private final class ControlReplyBox {
         case inactive, missedStart
     }
     private let lock = NSLock()
-    private var began = false, value: Outcome?
-    func start() {
+    private var began = false, abandoned = false, value: Outcome?
+    /// Admits the handler unless the socket side has already given up and told the client so.
+    func start() -> Bool {
         lock.lock()
+        defer { lock.unlock() }
+        guard !abandoned else { return false }
         began = true
-        lock.unlock()
+        return true
+    }
+    /// Gives up waiting and reports whether the handler had started; a handler not yet started never will.
+    func abandon() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        abandoned = true
+        return began
     }
     func finish(_ outcome: Outcome) {
         lock.lock()
         value = outcome
         lock.unlock()
-    }
-    var started: Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        return began
     }
     var outcome: Outcome? {
         lock.lock()

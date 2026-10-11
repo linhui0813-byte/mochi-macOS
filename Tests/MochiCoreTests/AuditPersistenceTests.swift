@@ -1,5 +1,6 @@
 import MochiAutomation
 import MochiKernel
+import MochiTestSupport
 import XCTest
 
 @testable import MochiCore
@@ -18,7 +19,7 @@ final class AuditPersistenceTests: XCTestCase {
         chat.instructions = String(repeating: "x", count: 8001)
         library.conversations = [chat]
         try library.validate()
-        let root = URL(fileURLWithPath: "/tmp/mochi-invalid-\(UUID())")
+        let root = TestScratch.folder("mochi-invalid")
         defer { try? FileManager.default.removeItem(at: root) }
         let store = LibraryStore(root: root)
         try store.prepare()
@@ -31,7 +32,7 @@ final class AuditPersistenceTests: XCTestCase {
         XCTAssertThrowsError(try MochiTools.validateInstructions(chat.instructions))
     }
     func testPreInstructionsBackupAndConservativeOrphanSweep() throws {
-        let root = URL(fileURLWithPath: "/tmp/mochi-library-\(UUID())")
+        let root = TestScratch.folder("mochi-library")
         defer { try? FileManager.default.removeItem(at: root) }
         let store = LibraryStore(root: root)
         try store.prepare()

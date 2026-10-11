@@ -1,4 +1,3 @@
-import AppKit
 import MochiCore
 import SwiftUI
 
@@ -16,7 +15,7 @@ struct BuiltInVoicePicker: View {
                 app.previewBuiltIn(selection, options: options)
             } label: {
                 Label("Preview", systemImage: "play.fill")
-            }.disabled(app.busy)
+            }
         }.disabled(app.busy)
     }
 }
@@ -46,7 +45,8 @@ struct VoiceSettingsView: View {
                 Text("Saved recordings keep their original voice.").font(.caption).foregroundStyle(.secondary)
             }
             if let error = app.error { Text(error).font(.callout).foregroundStyle(.red) }
-            if app.turn.activity != .idle { Button("Stop Preview", action: app.stop) }
+            // Stop Preview ends only the preview's own turn; other activity keeps the main Stop.
+            if app.previewActive { Button("Stop Preview") { app.stopPreview() } }
         }.formStyle(.grouped)
     }
 }

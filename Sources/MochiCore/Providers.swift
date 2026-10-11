@@ -69,12 +69,7 @@ public enum Credentials {
         return folder
     }
     static func token(in file: URL, now: Date) throws -> String {
-        var info = stat()
-        guard lstat(file.path, &info) == 0 else { throw errno == ENOENT ? SignIn.missing : SignIn.unreadable }
-        guard info.st_mode & S_IFMT == S_IFREG, info.st_uid == getuid() else { throw SignIn.notOwned }
-        guard info.st_size < maximumFileSize, let data = FileManager.default.contents(atPath: file.path) else {
-            throw SignIn.unreadable
-        }
+        let data = try signInData(file)
         guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw SignIn.unrecognized
         }
@@ -85,6 +80,38 @@ public enum Credentials {
         guard let token = tokens["access_token"] as? String, !token.isEmpty else { throw SignIn.unrecognized }
         if let expiry = expiry(of: token), expiry <= now { throw SignIn.expired }
         return token
+    }
+    /// Opens once without following symlinks, then checks and reads that same descriptor, so the file
+    /// cannot be swapped or grown between the ownership check and the read.
+    private static func signInData(_ file: URL) throws -> Data {
+        let descriptor = open(file.path, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
+        guard descriptor >= 0 else {
+            switch errno {
+            case ENOENT: throw SignIn.missing
+            case ELOOP: throw SignIn.notOwned
+            default: throw SignIn.unreadable
+            }
+        }
+        defer { close(descriptor) }
+        var info = stat()
+        guard fstat(descriptor, &info) == 0 else { throw SignIn.unreadable }
+        guard info.st_mode & S_IFMT == S_IFREG, info.st_uid == getuid() else { throw SignIn.notOwned }
+        guard info.st_size < maximumFileSize else { throw SignIn.unreadable }
+        var buffer = [UInt8](repeating: 0, count: maximumFileSize)
+        var count = 0
+        while count < maximumFileSize {
+            let chunk = buffer.withUnsafeMutableBytes {
+                Darwin.read(descriptor, $0.baseAddress! + count, maximumFileSize - count)
+            }
+            if chunk == 0 { break }
+            if chunk < 0 {
+                if errno == EINTR { continue }
+                throw SignIn.unreadable
+            }
+            count += chunk
+        }
+        guard count < maximumFileSize else { throw SignIn.unreadable }
+        return Data(buffer[..<count])
     }
     /// The `exp` claim of a JWT access token; nil for opaque tokens.
     static func expiry(of token: String) -> Date? {
@@ -170,6 +197,8 @@ public enum ServiceHTTP {
             }
             return data
         } catch let error as AppFailure { throw error } catch is CancellationError { throw CancellationError() } catch {
+            // Cancelling the task surfaces from URLSession as URLError.cancelled.
+            if Task.isCancelled { throw CancellationError() }
             throw transportFailure(error, provider: provider)
         }
     }
@@ -241,7 +270,10 @@ public struct RealtimeAccumulator {
             }
             text += delta
         case "response.output_audio.delta", "response.audio.delta":
-            if let encoded = event["delta"] as? String, let chunk = Data(base64Encoded: encoded) { audio.append(chunk) }
+            guard let encoded = event["delta"] as? String, let chunk = Data(base64Encoded: encoded) else {
+                throw AppFailure("Mochi's response audio arrived damaged. Please retry.")
+            }
+            audio.append(chunk)
             guard audio.count < 16_000_000 else { throw AppFailure("Mochi's response exceeded the audio limit.") }
         case "input_audio_buffer.committed": inputItemID = event["item_id"] as? String
         case "conversation.item.input_audio_transcription.completed",
@@ -346,7 +378,8 @@ public struct RealtimeService {
             return url
         }
         let result = try await replying(ConversationRequest(history: [], text: text, spoken: true, reference: true))
-        guard !result.audio.isEmpty, ReferenceSpeech.matches(text, result.text) else {
+        // A reply cut off at the output limit may end mid-sentence even when its transcript looks complete.
+        guard !result.audio.isEmpty, !result.truncated, ReferenceSpeech.matches(text, result.text) else {
             throw AppFailure(
                 "The example did not match the sentence exactly. Generate it again; your sentence has not been changed."
             )
@@ -430,6 +463,9 @@ public struct RealtimeService {
         try MochiTools.validateInstructions(input.instructions)
         try input.preferences.validate()
         if !input.help && !input.reference { try ConversationTemplate.validateName(input.characterName) }
+        if let pcm = input.pcm, !Self.isRecordedAudio(pcm) {
+            throw AppFailure("Choose a voice message between a moment and 65 seconds long, then send it again.")
+        }
         let token = try await credential()
         try Task.checkCancellation()
         let channel = connect(realtimeRequest(token: token))
@@ -545,8 +581,7 @@ public struct RealtimeService {
     ) async throws -> RealtimeAccumulator {
         var accumulator = initial
         var rounds = 0
-        var toolBytes = 0
-        var outputs: [String: String] = [:]
+        var budget = ToolBudget()
         while !accumulator.done {
             try Task.checkCancellation()
             let before = accumulator.transcriptionState
@@ -554,81 +589,97 @@ public struct RealtimeService {
             try Task.checkCancellation()
             try accumulator.accept(event)
             if before != accumulator.transcriptionState, let onTranscription { await onTranscription(accumulator) }
-            if accumulator.done,
-                let response = event["response"] as? [String: Any],
+            guard accumulator.done, let response = event["response"] as? [String: Any],
                 let items = response["output"] as? [[String: Any]]
-            {
-                let calls = items.filter { $0["type"] as? String == "function_call" }
-                if !calls.isEmpty {
-                    guard let send, let onTool, rounds < 8, calls.count <= 8 else {
-                        throw AppFailure("Mochi's tool request limit was reached. Please retry.")
-                    }
-                    rounds += 1
-                    // A response may contain speech plus tools; retain it until the final reply.
-                    var delivered = Set<String>()
-                    for call in calls {
-                        try Task.checkCancellation()
-                        guard let id = call["call_id"] as? String, !id.isEmpty, id.count <= 200,
-                            let name = call["name"] as? String
-                        else { throw AppFailure("Mochi returned an invalid tool call.") }
-                        // Repeated provider events must never repeat app side effects.
-                        if !delivered.insert(id).inserted { continue }
-                        if let cached = outputs[id] {
-                            guard toolBytes + cached.utf8.count <= 20000 else {
-                                throw AppFailure("Mochi's tool context limit was reached. Please retry.")
-                            }
-                            toolBytes += cached.utf8.count
-                            try await send([
-                                "type": "conversation.item.create",
-                                "item": ["type": "function_call_output", "call_id": id, "output": cached],
-                            ])
-                            continue
-                        }
-                        let result: [String: Any]
-                        do {
-                            guard let raw = call["arguments"] as? String, raw.utf8.count <= 32768,
-                                let arguments = try JSONSerialization.jsonObject(with: Data(raw.utf8)) as? [String: Any]
-                            else { throw AppFailure("Invalid tool arguments.") }
-                            _ = try MochiTools.validate(name: name, arguments: arguments, origin: .voice)
-                            guard toolBytes < 12000 else {
-                                throw AppFailure(
-                                    "The tool context budget is reached. Answer using the information already returned."
-                                )
-                            }
-                            result = try await onTool(name, arguments, id)
-                        } catch is CancellationError { throw CancellationError() } catch {
-                            result = MochiTools.error(
-                                (error as? AppFailure)?.message ?? "The app action could not be completed.")
-                        }
-                        try Task.checkCancellation()
-                        var encoded = try MochiTools.encode(result)
-                        if encoded.utf8.count > 8000 || toolBytes + encoded.utf8.count > 20000 {
-                            encoded = try MochiTools.encode(
-                                MochiTools.error(
-                                    "Tool result exceeded the conversation context budget. Request fewer items."))
-                        }
-                        guard toolBytes + encoded.utf8.count <= 20000 else {
-                            throw AppFailure("Mochi's tool context limit was reached. Please retry.")
-                        }
-                        toolBytes += encoded.utf8.count
-                        outputs[id] = encoded
-                        try await send([
-                            "type": "conversation.item.create",
-                            "item": ["type": "function_call_output", "call_id": id, "output": encoded],
-                        ])
-                    }
-                    accumulator.beginNextRound()
-                    try await send([
-                        "type": "response.create", "response": ["max_output_tokens": Self.maximumOutputTokens],
-                    ])
-                }
+            else { continue }
+            let calls = items.filter { $0["type"] as? String == "function_call" }
+            guard !calls.isEmpty else { continue }
+            guard let send, let onTool, rounds < 8, calls.count <= 8 else {
+                throw AppFailure("Mochi's tool request limit was reached. Please retry.")
             }
+            rounds += 1
+            // A response may contain speech plus tools; retain it until the final reply.
+            try await runToolCalls(
+                calls, responseTruncated: accumulator.truncated, budget: &budget, onTool: onTool, send: send)
+            accumulator.beginNextRound()
+            try await send([
+                "type": "response.create", "response": ["max_output_tokens": Self.maximumOutputTokens],
+            ])
         }
         guard !accumulator.text.isEmpty || !accumulator.audio.isEmpty else {
             throw AppFailure("Mochi returned an empty response. Please retry.")
         }
         if let onResponse { try await onResponse(accumulator) }
         return accumulator
+    }
+    /// Tool output already sent this reply, and its total size against the context budget.
+    private struct ToolBudget {
+        var bytes = 0
+        var outputs: [String: String] = [:]
+    }
+    /// Answers one round of tool calls. Repeated provider events must never repeat app side effects.
+    private static func runToolCalls(
+        _ calls: [[String: Any]], responseTruncated: Bool, budget: inout ToolBudget,
+        onTool: @MainActor (String, [String: Any], String) throws -> [String: Any],
+        send: ([String: Any]) async throws -> Void
+    ) async throws {
+        var delivered = Set<String>()
+        for call in calls {
+            try Task.checkCancellation()
+            guard let id = call["call_id"] as? String, !id.isEmpty, id.count <= 200,
+                let name = call["name"] as? String
+            else { throw AppFailure("Mochi returned an invalid tool call.") }
+            if !delivered.insert(id).inserted { continue }
+            let output: String
+            if let cached = budget.outputs[id] {
+                output = cached
+            } else {
+                // A call the provider did not finish is answered without running it.
+                let status = call["status"] as? String
+                let finished = status.map { $0 == "completed" } ?? !responseTruncated
+                output = try await toolOutput(
+                    call, name: name, id: id, finished: finished, usedBytes: budget.bytes, onTool: onTool)
+                budget.outputs[id] = output
+            }
+            guard budget.bytes + output.utf8.count <= 20000 else {
+                throw AppFailure("Mochi's tool context limit was reached. Please retry.")
+            }
+            budget.bytes += output.utf8.count
+            try await send([
+                "type": "conversation.item.create",
+                "item": ["type": "function_call_output", "call_id": id, "output": output],
+            ])
+        }
+    }
+    /// Validates and runs one call, returning its encoded result or a tool error that fits the budget.
+    private static func toolOutput(
+        _ call: [String: Any], name: String, id: String, finished: Bool, usedBytes: Int,
+        onTool: @MainActor (String, [String: Any], String) throws -> [String: Any]
+    ) async throws -> String {
+        let result: [String: Any]
+        do {
+            guard finished else {
+                throw AppFailure("The tool call was cut off before it finished, so it was not run.")
+            }
+            guard let raw = call["arguments"] as? String, raw.utf8.count <= 32768,
+                let arguments = try JSONSerialization.jsonObject(with: Data(raw.utf8)) as? [String: Any]
+            else { throw AppFailure("Invalid tool arguments.") }
+            _ = try MochiTools.validate(name: name, arguments: arguments, origin: .voice)
+            guard usedBytes < 12000 else {
+                throw AppFailure(
+                    "The tool context budget is reached. Answer using the information already returned.")
+            }
+            result = try await onTool(name, arguments, id)
+        } catch is CancellationError { throw CancellationError() } catch {
+            result = MochiTools.error((error as? AppFailure)?.message ?? "The app action could not be completed.")
+        }
+        try Task.checkCancellation()
+        let encoded = try MochiTools.encode(result)
+        if encoded.utf8.count > 8000 || usedBytes + encoded.utf8.count > 20000 {
+            return try MochiTools.encode(
+                MochiTools.error("Tool result exceeded the conversation context budget. Request fewer items."))
+        }
+        return encoded
     }
 
 }

@@ -1,5 +1,6 @@
 import MochiCore
 import MochiKernel
+import MochiTestSupport
 import XCTest
 
 @testable import MochiApp
@@ -188,9 +189,9 @@ final class VoiceIdentityModelTests: XCTestCase {
         }
     }
     @MainActor func testIntroductionAndRecentGreetingsSurviveRelaunch() async throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let root = TestScratch.folder()
         let suite = "mochi-greeting-persistence-\(UUID())"
-        let prefs = UserDefaults(suiteName: suite)!
+        let prefs = TestScratch.preferences(named: suite)
         defer {
             try? FileManager.default.removeItem(at: root)
             prefs.removePersistentDomain(forName: suite)

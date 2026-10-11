@@ -98,7 +98,7 @@ Conversations, templates, saved expressions, and practice recordings are stored 
 
 Use **Export Library Backup…** to keep a portable copy of your library, and **Import Library Backup…** to restore or merge one.
 
-Each save keeps the library as it was just before as `library.previous.json` in the data folder. If the library ever cannot be opened, **Settings → Storage** offers **Restore Earlier Copy**, which reinstates that copy and keeps the unreadable file beside it.
+Each save keeps the library as it was just before as `library.previous.json` in the data folder. If the library ever cannot be opened, **Settings → Data & Privacy** offers **Restore Earlier Copy**, which reinstates that copy and keeps the unreadable file beside it.
 
 Version 0.4.0 upgrades the library format to **version 3**. Before replacing an older library, Mochi preserves its original bytes in a private `library-before-character-templates-v3*.json` backup. Keep a full current library export before downgrading. An older app cannot open a v3 library and requires restoration of a compatible backup.
 

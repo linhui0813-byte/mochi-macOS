@@ -94,7 +94,7 @@ extension AppModel {
         // Commit first. A disk failure must not stop playback or cancel an active reply.
         stop()
         removeUnreferencedRecording(previous?.message.audio)
-        notice = "Message deleted."
+        showMessageDeletedNotice()
     }
     func undoMessageDeletion() {
         guard canUndoMessageDeletion, let undo = messageDeletionUndo,
@@ -171,6 +171,8 @@ extension AppModel {
             expression = nil
             selectedID = next.selectedConversationID
             draft = conversation?.draft ?? ""
+            // stop() saved while the old conversation was still selected; record the replacement selection.
+            save()
         }
         historyFeedback = nil
         return true
@@ -184,9 +186,12 @@ extension AppModel {
         permanentDeleteIDs = []
         var failed = false
         for name in removedAudio {
-            let url = store.root.appendingPathComponent(name)
-            if FileManager.default.fileExists(atPath: url.path) {
-                do { try FileManager.default.removeItem(at: url) } catch { failed = true }
+            // The message held for Undo may share a recording with a deleted conversation; keep it.
+            do {
+                try libraryController.removeUnreferencedRecording(name, protected: messageDeletionUndo?.message.audio)
+            } catch {
+                MochiLog.failure(MochiLog.library, "Remove permanently deleted recording", error, level: .info)
+                failed = true
             }
         }
         historyFeedback =
@@ -245,9 +250,16 @@ extension AppModel {
         guard let transfer = libraryController.importBackup(from: url) else { return nil }
         return Task { [weak self] in
             do {
-                let summary = try await transfer.value
+                // Cancelling the returned task cancels the transfer, so a cancelled import never changes the library.
+                let summary = try await withTaskCancellationHandler {
+                    try await transfer.value
+                } onCancel: {
+                    transfer.cancel()
+                }
                 self?.historyFeedback = summary
                 self?.error = nil
+            } catch is CancellationError {
+                return
             } catch {
                 guard let self else { return }
                 self.error = persistenceMessage(

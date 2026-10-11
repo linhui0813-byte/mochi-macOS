@@ -30,15 +30,22 @@ public struct ConversationTemplate: Codable, Identifiable, Equatable {
     public var isBuiltin: Bool { Self.reservedIDs.contains(id) }
     public var needsReview: Bool { (try? validateForWrite()) == nil }
     public static let userLimit = 200
-    public static let reservedIDs: Set<UUID> = Set(
-        (1...6).map { UUID(uuidString: String(format: "DAF3D003-0000-4000-8000-%012d", $0))! })
+    public typealias FieldLimit = (characters: Int, bytes: Int)
+    public static let titleLimit: FieldLimit = (160, 2048)
+    public static let descriptionLimit: FieldLimit = (500, 4096)
+    public static let nameLimit: FieldLimit = (80, 1024)
+    public static let instructionsLimit: FieldLimit = (MochiTools.maxInstructions, MochiTools.maxInstructionBytes)
+    public static let reservedIDs: Set<UUID> = Set(builtins.map(\.id))
+    private static func builtinID(_ number: Int) -> UUID {
+        UUID(uuidString: String(format: "DAF3D003-0000-4000-8000-%012d", number))!
+    }
     public static func validateName(_ name: String?) throws {
         guard let name else { return }
-        guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, name.count <= 80, name.utf8.count <= 1024,
-            !name.unicodeScalars.contains(where: Self.forbiddenInName)
+        guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, name.count <= nameLimit.characters,
+            name.utf8.count <= nameLimit.bytes, !name.unicodeScalars.contains(where: Self.forbiddenInName)
         else {
             throw AppFailure(
-                "Character name must contain 1–80 characters, at most 1 KB, without line breaks, control characters or text-direction overrides."
+                "Character name must contain 1–\(nameLimit.characters) characters, at most \(nameLimit.bytes / 1024) KB, without line breaks, control characters or text-direction overrides."
             )
         }
     }
@@ -61,8 +68,12 @@ public struct ConversationTemplate: Codable, Identifiable, Equatable {
         }
     }
     public func validateForWrite() throws {
-        try Self.validateText(title, field: "Template title", characters: 160, bytes: 2048, required: true)
-        try Self.validateText(description, field: "Description", characters: 500, bytes: 4096)
+        try Self.validateText(
+            title, field: "Template title", characters: Self.titleLimit.characters, bytes: Self.titleLimit.bytes,
+            required: true)
+        try Self.validateText(
+            description, field: "Description", characters: Self.descriptionLimit.characters,
+            bytes: Self.descriptionLimit.bytes)
         try Self.validateName(characterName)
         try MochiTools.validateInstructions(instructions)
         try preferences.validate()
@@ -95,11 +106,15 @@ public struct ConversationTemplate: Codable, Identifiable, Equatable {
         var next = self
         if let value = metadata.title {
             next.title = value.trimmingCharacters(in: .whitespacesAndNewlines)
-            try Self.validateText(next.title, field: "Template title", characters: 160, bytes: 2048, required: true)
+            try Self.validateText(
+                next.title, field: "Template title", characters: Self.titleLimit.characters,
+                bytes: Self.titleLimit.bytes, required: true)
         }
         if let value = metadata.description {
             next.description = value.trimmingCharacters(in: .whitespacesAndNewlines)
-            try Self.validateText(next.description, field: "Description", characters: 500, bytes: 4096)
+            try Self.validateText(
+                next.description, field: "Description", characters: Self.descriptionLimit.characters,
+                bytes: Self.descriptionLimit.bytes)
         }
         try ConversationSettingsPatch(MochiTools.decode(ConversationSettingsArguments.self, from: args)).apply(
             to: &next)
@@ -155,21 +170,21 @@ public struct ConversationTemplate: Codable, Identifiable, Equatable {
     public func representation(includeInstructions: Bool = true) -> [String: Any] {
         var value = fullRepresentation
         var truncated: [String: Bool] = [:]
-        func bound(_ key: String, characters: Int, bytes: Int) {
+        func bound(_ key: String, _ limit: FieldLimit) {
             guard let original = value[key] as? String else { return }
-            let preview = MochiTools.boundedText(original, characters: characters, bytes: bytes)
+            let preview = MochiTools.boundedText(original, characters: limit.characters, bytes: limit.bytes)
             value[key] = preview
             if preview != original { truncated[key] = true }
         }
-        bound("title", characters: 160, bytes: 2048)
-        bound("description", characters: 500, bytes: 4096)
-        bound("character_name", characters: 80, bytes: 1024)
+        bound("title", Self.titleLimit)
+        bound("description", Self.descriptionLimit)
+        bound("character_name", Self.nameLimit)
         if includeInstructions {
-            bound("instructions", characters: 8000, bytes: 49152)
-            var byteLimit = 49152
+            bound("instructions", Self.instructionsLimit)
+            var byteLimit = Self.instructionsLimit.bytes
             while ((try? JSONSerialization.data(withJSONObject: value).count) ?? Int.max) > 95000 && byteLimit > 0 {
                 byteLimit /= 2
-                bound("instructions", characters: 8000, bytes: byteLimit)
+                bound("instructions", (Self.instructionsLimit.characters, byteLimit))
             }
         } else {
             value.removeValue(forKey: "instructions")
@@ -208,7 +223,7 @@ public struct ConversationTemplate: Codable, Identifiable, Equatable {
         return entries.enumerated().map { index, entry in
             var t = ConversationTemplate(
                 title: entry.0, description: entry.1, characterName: entry.2, instructions: entry.3)
-            t.id = UUID(uuidString: String(format: "DAF3D003-0000-4000-8000-%012d", index + 1))!
+            t.id = builtinID(index + 1)
             t.createdAt = Date(timeIntervalSince1970: 0)
             t.updatedAt = t.createdAt
             t.revision = ""

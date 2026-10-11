@@ -5,8 +5,9 @@ import MochiKernel
 
 /// The conversation itself: sending text and voice, replies, transcription and the spoken greeting.
 extension AppModel {
-    func append(_ message: Message, to id: UUID) {
-        guard let i = library.conversations.firstIndex(where: { $0.id == id }) else { return }
+    /// False when the conversation is gone or the library could not be saved; the save failure is already reported.
+    @discardableResult func append(_ message: Message, to id: UUID) -> Bool {
+        guard let i = library.conversations.firstIndex(where: { $0.id == id }) else { return false }
         if !library.conversations[i].customTitle
             && !library.conversations[i].messages.contains(where: { $0.role == "user" }) && message.role == "user"
             && !message.text.isEmpty
@@ -14,7 +15,7 @@ extension AppModel {
             library.conversations[i].title = String(message.text.prefix(42))
         }
         library.conversations[i].messages.append(message)
-        save()
+        return save()
     }
     func send() {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -25,10 +26,22 @@ extension AppModel {
             error = "Review the character name in Conversation Instructions before sending. Your draft is kept."
             return
         }
-        draft = ""
         notice = nil
         let history = conversation?.messages ?? []
-        append(Message(role: "user", text: text), to: id)
+        error = nil
+        let typed = draft
+        let before = library.conversations.first { $0.id == id }
+        // Cleared first, so the save that writes the message also writes the empty composer.
+        draft = ""
+        guard append(Message(role: "user", text: text), to: id) else {
+            // Nothing is sent: the draft returns to the composer and the unsaved message leaves memory,
+            // so memory never holds a message the disk lacks. The save failure is already reported.
+            if let before, let i = library.conversations.firstIndex(where: { $0.id == id }) {
+                library.conversations[i] = before
+            }
+            draft = typed
+            return
+        }
         requestReply(history: history, text: text, pcm: nil, audioFile: nil, conversationID: id)
     }
     var canRetry: Bool {
@@ -57,6 +70,8 @@ extension AppModel {
         existingUserID: UUID? = nil
     ) {
         if let existingUserID, transcribingMessageIDs.contains(existingUserID) { return }
+        // Cleared first, so a failure to save the voice message below stays visible.
+        error = nil
         var userID = existingUserID
         if pcm != nil && userID == nil {
             var message = Message(role: "user", text: "", audio: audioFile)
@@ -72,7 +87,6 @@ extension AppModel {
             updateTranscript(userID, chatID: conversationID, text: nil, state: .pending, error: nil)
         }
         let token = turn.begin(.generating)
-        error = nil
         let chat = library.conversations.first { $0.id == conversationID }
         let instructions = MochiTools.boundedInstructions(chat?.instructions ?? "")
         let preferences = chat?.preferences ?? ConversationPreferences()
@@ -86,13 +100,7 @@ extension AppModel {
             defer {
                 if turn.epoch == token { task = nil }
                 if let voiceID, transcripts.isCurrent(voiceID, requestID) {
-                    if library.conversations.first(where: { $0.id == conversationID })?.messages.first(where: {
-                        $0.id == voiceID
-                    })?.transcriptionState == .pending {
-                        updateTranscript(
-                            voiceID, chatID: conversationID, text: nil, state: .interrupted,
-                            error: "Transcription was interrupted. Your recording is saved.")
-                    }
+                    interruptPendingTranscript(voiceID, chatID: conversationID)
                     transcripts.finish(voiceID, requestID)
                 }
             }
@@ -101,52 +109,13 @@ extension AppModel {
                     response: { [weak self] reply in
                         guard let self, !Task.isCancelled, turn.epoch == token else { return }
                         task = nil
-                        var filename: String?
-                        var audioFailure: Error?
-                        if !reply.audio.isEmpty {
-                            let name = "reply-\(UUID().uuidString).wav"
-                            do {
-                                try PCM.wav(reply.audio).write(
-                                    to: store.root.appendingPathComponent(name), options: .atomic)
-                                filename = name
-                            } catch { audioFailure = error }
-                        }
-                        // The reply text is kept even when its audio cannot be written.
-                        if filename != nil || !reply.text.isEmpty {
-                            append(
-                                Message(role: "assistant", text: reply.text, audio: filename, speakerName: speakerName),
-                                to: conversationID)
-                        }
+                        let filename = saveReply(reply, conversationID: conversationID, speakerName: speakerName)
                         _ = turn.finish(token)
                         if reply.truncated {
                             notice =
                                 "\(speakerName)’s reply reached its length limit and was cut short. Ask a follow-up to continue."
                         }
-                        if let audioFailure {
-                            error = persistenceMessage(
-                                audioFailure, action: "Save reply audio",
-                                fallback:
-                                    "\(speakerName)’s reply was saved without its audio because the audio file could not be written.",
-                                diskFull:
-                                    "\(speakerName)’s reply was saved without its audio because the disk is full. Free some space before the next reply."
-                            )
-                        }
-                        let action = deferredToolAction
-                        deferredToolAction = nil
-                        if let action {
-                            if let filename {
-                                if let playReply {
-                                    playReply(filename)
-                                    action()
-                                } else {
-                                    play(filename, mochi: true, afterPlayback: action, afterPlaybackFailure: action)
-                                }
-                            } else {
-                                action()
-                            }
-                        } else if let filename {
-                            if let playReply { playReply(filename) } else { play(filename, mochi: true) }
-                        }
+                        playReplyThenDeferredAction(filename)
                     },
                     transcription: { [weak self] reply in
                         guard let self, !Task.isCancelled, let voiceID, transcripts.isCurrent(voiceID, requestID) else {
@@ -167,15 +136,7 @@ extension AppModel {
                     characterName: characterName, preferences: preferences)
                 try await reply(service, request, callbacks)
             } catch {
-                if let voiceID, transcripts.isCurrent(voiceID, requestID),
-                    library.conversations.first(where: { $0.id == conversationID })?.messages.first(where: {
-                        $0.id == voiceID
-                    })?.transcriptionState == .pending
-                {
-                    updateTranscript(
-                        voiceID, chatID: conversationID, text: nil, state: .interrupted,
-                        error: "Transcription was interrupted. Your recording is saved.")
-                }
+                // The deferred block marks a still-pending transcript as interrupted.
                 if turn.epoch == token { deferredToolAction = nil }
                 fail(error, token: token, context: "Conversation reply")
             }
@@ -183,12 +144,79 @@ extension AppModel {
         task = operation
         if let voiceID { transcripts.attach(operation, to: voiceID) }
     }
-    private func updateTranscript(
+    /// Writes the reply's audio and appends the reply; returns the audio file when one was written.
+    /// The reply text is kept even when its audio cannot be written. A failed library save is reported by `save()`
+    /// and is not overwritten, so the error never claims an unsaved reply was saved.
+    private func saveReply(_ reply: RealtimeAccumulator, conversationID: UUID, speakerName: String) -> String? {
+        var filename: String?
+        var audioFailure: Error?
+        if !reply.audio.isEmpty {
+            let name = "reply-\(UUID().uuidString).wav"
+            do {
+                try writeReplyAudio(PCM.wav(reply.audio), store.root.appendingPathComponent(name))
+                filename = name
+            } catch { audioFailure = error }
+        }
+        var appended = true
+        if filename != nil || !reply.text.isEmpty {
+            appended = append(
+                Message(role: "assistant", text: reply.text, audio: filename, speakerName: speakerName),
+                to: conversationID)
+        }
+        guard let audioFailure, appended else { return filename }
+        if reply.text.isEmpty {
+            // An audio-only reply has nothing left to save once its audio is lost.
+            error = persistenceMessage(
+                audioFailure, action: "Save reply audio",
+                fallback:
+                    "\(speakerName)’s reply could not be saved because its audio file could not be written. Retry the reply.",
+                diskFull:
+                    "\(speakerName)’s reply could not be saved because the disk is full. Free some space, then retry the reply."
+            )
+        } else {
+            error = persistenceMessage(
+                audioFailure, action: "Save reply audio",
+                fallback:
+                    "\(speakerName)’s reply was saved without its audio because the audio file could not be written.",
+                diskFull:
+                    "\(speakerName)’s reply was saved without its audio because the disk is full. Free some space before the next reply."
+            )
+        }
+        return filename
+    }
+    /// Plays the reply, then runs any tool action that waited for it.
+    private func playReplyThenDeferredAction(_ filename: String?) {
+        let action = deferredToolAction
+        deferredToolAction = nil
+        guard let filename else {
+            action?()
+            return
+        }
+        if let playReply {
+            playReply(filename)
+            action?()
+        } else if let action {
+            play(filename, mochi: true, afterPlayback: action, afterPlaybackFailure: action)
+        } else {
+            play(filename, mochi: true)
+        }
+    }
+    private func interruptPendingTranscript(_ messageID: UUID, chatID: UUID) {
+        guard
+            library.conversations.first(where: { $0.id == chatID })?.messages.first(where: { $0.id == messageID })?
+                .transcriptionState == .pending
+        else { return }
+        updateTranscript(
+            messageID, chatID: chatID, text: nil, state: .interrupted,
+            error: "Transcription was interrupted. Your recording is saved.")
+    }
+    /// False when the message is gone or the library could not be saved; the save failure is already reported.
+    @discardableResult private func updateTranscript(
         _ messageID: UUID, chatID: UUID, text: String?, state: TranscriptionState, error: String?
-    ) {
+    ) -> Bool {
         guard let ci = library.conversations.firstIndex(where: { $0.id == chatID && !$0.isDeleted && !$0.archived }),
             let mi = library.conversations[ci].messages.firstIndex(where: { $0.id == messageID })
-        else { return }
+        else { return false }
         if let text { library.conversations[ci].messages[mi].text = text }
         library.conversations[ci].messages[mi].transcriptionState = state
         library.conversations[ci].messages[mi].transcriptionError = error
@@ -197,7 +225,7 @@ extension AppModel {
         {
             library.conversations[ci].title = String(text.prefix(42))
         }
-        save()
+        return save()
     }
     func retryTranscription(_ messageID: UUID) {
         guard writableConversation, !busy,
@@ -210,7 +238,7 @@ extension AppModel {
         let chatID = chat.id
         updateTranscript(messageID, chatID: chatID, text: nil, state: .pending, error: nil)
         let transcribe = speech.transcribe
-        let model = settings.modelName
+        let model = settings.effectiveModelName
         let url = store.root.appendingPathComponent(file)
         let job = Task { [weak self] in
             guard let self else { return }
@@ -242,11 +270,12 @@ extension AppModel {
             updateTranscript(messageID, chatID: chatID, text: nil, state: .interrupted, error: nil)
         }
     }
-    func editTranscript(_ messageID: UUID, text: String) {
-        guard writableConversation, let chatID = conversation?.id else { return }
+    /// False when the transcript could not be saved; the failure is in `error`.
+    @discardableResult func editTranscript(_ messageID: UUID, text: String) -> Bool {
+        guard writableConversation, let chatID = conversation?.id else { return false }
         cancelTranscription(messageID)
         let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        updateTranscript(
+        return updateTranscript(
             messageID, chatID: chatID, text: clean, state: clean.isEmpty ? .failed : .completed, error: nil)
     }
     func toggleConversationVoice() {
@@ -269,7 +298,7 @@ extension AppModel {
         greetingActive = true
         error = nil
         let speakerName = conversation?.displayCharacterName ?? "Mochi"
-        let service = settings.conversationService()
+        let service = settings.conversationService(speed: conversation?.preferences.speed)
         task = Task { [self] in
             do {
                 let allowed: Bool

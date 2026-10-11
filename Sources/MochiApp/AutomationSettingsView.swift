@@ -1,9 +1,9 @@
-import MochiCore
 import SwiftUI
 
 struct AutomationSettingsView: View {
     @Bindable var app: AppModel
-    @State private var copied = false
+    /// The last copy's outcome, shown on the button briefly; nil shows the copy action.
+    @State private var copied: Bool?
     var body: some View {
         Form {
             Section("External Assistants") {
@@ -26,11 +26,15 @@ struct AutomationSettingsView: View {
                 }
                 Text(app.mcpConfiguration).font(.system(.caption, design: .monospaced))
                     .textSelection(.enabled).lineLimit(nil)
-                Button(copied ? "Configuration Copied" : "Copy MCP Configuration") {
+                Button(copyLabel) {
                     NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(app.mcpConfiguration, forType: .string)
-                    copied = true
+                    copied = NSPasteboard.general.setString(app.mcpConfiguration, forType: .string)
                 }.disabled(!app.mcpConfigurationAvailable)
+                    .task(id: copied) {
+                        guard copied != nil else { return }
+                        try? await Task.sleep(for: .seconds(2))
+                        if !Task.isCancelled { copied = nil }
+                    }
             }
             Section("Mochi’s Voice Commands") {
                 Text(
@@ -39,5 +43,12 @@ struct AutomationSettingsView: View {
                 .font(.callout).foregroundStyle(.secondary)
             }
         }.formStyle(.grouped)
+    }
+    private var copyLabel: String {
+        switch copied {
+        case true?: "Configuration Copied"
+        case false?: "Could Not Copy Configuration"
+        case nil: "Copy MCP Configuration"
+        }
     }
 }

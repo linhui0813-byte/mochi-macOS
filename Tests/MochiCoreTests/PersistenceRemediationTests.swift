@@ -1,13 +1,13 @@
 import Darwin
 import MochiKernel
+import MochiTestSupport
 import XCTest
 
 @testable import MochiCore
 
 final class PersistenceRemediationTests: XCTestCase {
     private func temporary() -> URL {
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent(
-            "mochi-persistence-\(UUID().uuidString)")
+        let url = TestScratch.folder("mochi-persistence")
         addTeardownBlock { try? FileManager.default.removeItem(at: url) }
         return url
     }

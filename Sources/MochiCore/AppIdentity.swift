@@ -12,8 +12,10 @@ extension AppIdentity {
             try validateDirectory(destination)
             if fm.fileExists(atPath: destination.appendingPathComponent("library.json").path) { return destination }
         }
-        // Without an older library there is nothing to migrate: caches or Finder files in the folder are harmless.
         guard fm.fileExists(atPath: legacy.path) else { return destination }
+        try validateDirectory(legacy)
+        // Without an older library there is nothing to migrate: caches or Finder files in the folder are harmless.
+        guard hasLegacyLibrary(in: support) else { return destination }
         if fm.fileExists(atPath: destination.path) {
             guard try fm.contentsOfDirectory(atPath: destination.path).isEmpty else {
                 throw AppFailure(
@@ -21,7 +23,6 @@ extension AppIdentity {
                 )
             }
         }
-        try validateDirectory(legacy)
         _ = try LibraryStore(root: legacy).load()  // Corrupt/future data stays untouched.
         let staging = support.appendingPathComponent(".mochi-migration-\(UUID().uuidString)")
         defer { try? fm.removeItem(at: staging) }
@@ -36,9 +37,13 @@ extension AppIdentity {
     }
     /// True when an older library must be copied into the Mochi folder before it can open.
     public static func needsMigration(in support: URL) -> Bool {
-        let fm = FileManager.default
-        return fm.fileExists(atPath: support.appendingPathComponent(legacyDataDirectory).path)
-            && !fm.fileExists(atPath: support.appendingPathComponent(name).appendingPathComponent("library.json").path)
+        hasLegacyLibrary(in: support)
+            && !FileManager.default.fileExists(
+                atPath: support.appendingPathComponent(name).appendingPathComponent("library.json").path)
+    }
+    private static func hasLegacyLibrary(in support: URL) -> Bool {
+        FileManager.default.fileExists(
+            atPath: support.appendingPathComponent(legacyDataDirectory).appendingPathComponent("library.json").path)
     }
     /// Removes copies left by a migration that was interrupted, for example by a force quit. The original stays untouched.
     public static func sweepStaleMigrations(in support: URL, olderThan age: TimeInterval = 3600, now: Date = Date()) {
@@ -70,13 +75,10 @@ extension AppIdentity {
         return fm.fileExists(atPath: legacy.path) ? legacy : support
     }
     public static func migratePreferences(into defaults: UserDefaults, legacy: [String: Any]) {
-        for key in [
-            "auth", "model", "clone", "performer", "conversationVoice", "builtInPracticeVoice", "practiceVoiceMode",
-        ] where defaults.object(forKey: key) == nil {
+        for key in ["model", "conversationVoice", "builtInPracticeVoice"] where defaults.object(forKey: key) == nil {
             if let value = legacy[key] as? String { defaults.set(value, forKey: key) }
         }
-        for key in ["voiceProfiles", "conversationVoiceOptions", "practiceVoiceOptions", "personalVoiceOptions"]
-        where defaults.object(forKey: key) == nil {
+        for key in ["conversationVoiceOptions", "practiceVoiceOptions"] where defaults.object(forKey: key) == nil {
             if let value = legacy[key] as? Data { defaults.set(value, forKey: key) }
         }
         if defaults.object(forKey: "voiceGreetingHistory") == nil,

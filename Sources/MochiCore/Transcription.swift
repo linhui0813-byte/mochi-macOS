@@ -32,29 +32,36 @@ public struct HelpSuggestion: Decodable {
 }
 public struct RecordingSignal {
     public let rmsDB: Double
-    public let peakDB: Double
     public var isQuiet: Bool { rmsDB < -48 }
     public init(samples: [Float]) {
         let finite = samples.map { $0.isFinite ? Double($0) : 0 }
         let rms = sqrt(finite.reduce(0) { $0 + $1 * $1 } / Double(max(1, finite.count)))
         rmsDB = 20 * log10(max(rms, 1e-9))
-        peakDB = 20 * log10(max(finite.map(abs).max() ?? 0, 1e-9))
     }
 }
 struct RealtimeTimeout: Error {}
 /// Cancelling or expiring a deadline closes the transport to unblock a suspended receive.
+/// Completion and expiry are arbitrated under one lock: whichever settles first wins, so a deadline
+/// that fires after the operation finished never closes a transport that is still in use.
 final class RealtimeDeadline: @unchecked Sendable {
+    private enum Outcome { case running, finished, expired }
     private let lock = NSLock()
-    private var expired = false
-    private func expire() {
-        lock.lock()
-        expired = true
-        lock.unlock()
-    }
-    private var didExpire: Bool {
+    private var outcome = Outcome.running
+    /// True when this call expired the deadline; false when the operation had already finished.
+    private func expire() -> Bool {
         lock.lock()
         defer { lock.unlock() }
-        return expired
+        guard outcome == .running else { return false }
+        outcome = .expired
+        return true
+    }
+    /// True when the operation finished in time; false when the deadline had already expired.
+    private func finish() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard outcome == .running else { return outcome == .finished }
+        outcome = .finished
+        return true
     }
     static func run<T>(
         nanoseconds: UInt64, close: @escaping @Sendable () -> Void,
@@ -63,8 +70,7 @@ final class RealtimeDeadline: @unchecked Sendable {
         let state = RealtimeDeadline()
         let timer = Task {
             do { try await Task.sleep(nanoseconds: nanoseconds) } catch { return }
-            guard !Task.isCancelled else { return }
-            state.expire()
+            guard !Task.isCancelled, state.expire() else { return }
             close()
         }
         defer { timer.cancel() }
@@ -73,12 +79,13 @@ final class RealtimeDeadline: @unchecked Sendable {
                 do {
                     try Task.checkCancellation()
                     let result = try await operation()
+                    guard state.finish() else { throw RealtimeTimeout() }
                     try Task.checkCancellation()
-                    if state.didExpire { throw RealtimeTimeout() }
                     return result
                 } catch {
+                    let inTime = state.finish()
                     if Task.isCancelled { throw CancellationError() }
-                    if state.didExpire { throw RealtimeTimeout() }
+                    if !inTime { throw RealtimeTimeout() }
                     throw error
                 }
             }, onCancel: close)
@@ -135,11 +142,7 @@ extension RealtimeService {
         try Task.checkCancellation()
         let token = try await credential()
         try Task.checkCancellation()
-        var components = URLComponents(string: "wss://api.openai.com/v1/realtime")!
-        components.queryItems = [URLQueryItem(name: "model", value: model)]
-        var request = URLRequest(url: components.url!)
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        let channel = connect(request)
+        let channel = connect(realtimeRequest(token: token))
         defer { channel.close() }
         do {
             return try await RealtimeDeadline.run(nanoseconds: timeoutNanoseconds, close: channel.close) {
@@ -157,8 +160,12 @@ extension RealtimeService {
                 underlying: error)
         }
     }
+    /// 16-bit mono 24 kHz PCM from a moment (0.1 s) up to 65 seconds long.
+    static func isRecordedAudio(_ pcm: Data) -> Bool {
+        pcm.count >= 4800 && pcm.count <= 65 * 48000 && pcm.count.isMultiple(of: 2)
+    }
     private static func validateTranscriptionAudio(_ pcm: Data) throws {
-        guard pcm.count >= 4800, pcm.count <= 65 * 48000, pcm.count.isMultiple(of: 2) else {
+        guard isRecordedAudio(pcm) else {
             throw AppFailure("Choose a recording between a moment and 65 seconds long to transcribe.")
         }
     }
@@ -205,12 +212,7 @@ extension RealtimeService {
             try Task.checkCancellation()
             let event = try await receive()
             try Task.checkCancellation()
-            // Ignore uncorrelated transcript events until the server acknowledges this commit.
-            if accumulator.inputItemID == nil,
-                (event["type"] as? String)?.hasPrefix("conversation.item.input_audio_transcription.") == true
-            {
-                continue
-            }
+            // The accumulator ignores transcript events that do not match this commit's item.
             try accumulator.accept(event)
         }
         try Task.checkCancellation()

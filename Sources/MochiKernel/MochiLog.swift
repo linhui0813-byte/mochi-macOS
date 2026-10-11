@@ -35,9 +35,10 @@ public enum ErrorChain {
         }
         return chain
     }
-    /// True when any cause is a full disk or an exhausted quota.
+    /// True when any cause is a full disk or an exhausted quota. The walk goes deeper than a log line does,
+    /// and its bound also ends a chain that loops back on itself.
     public static func isOutOfSpace(_ error: Error) -> Bool {
-        causes(of: error).contains { item in
+        causes(of: error, limit: 64).contains { item in
             if item is AppFailure { return false }
             let ns = item as NSError
             return (ns.domain == NSCocoaErrorDomain && ns.code == NSFileWriteOutOfSpaceError)

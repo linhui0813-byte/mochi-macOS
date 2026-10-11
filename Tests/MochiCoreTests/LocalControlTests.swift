@@ -1,4 +1,5 @@
 import Darwin
+import MochiTestSupport
 import XCTest
 
 @testable import MochiAutomation
@@ -24,7 +25,7 @@ final class LocalControlTests: XCTestCase {
             data.append(contentsOf: buffer.prefix(count))
         }
     }
-    private func path() -> String { "/tmp/mochi-socket-tests-\(UUID().uuidString)/control.sock" }
+    private func path() -> String { TestScratch.folder("socket").appendingPathComponent("control.sock").path }
     private func connect(_ path: String) throws -> Int32 {
         let fd = socket(AF_UNIX, SOCK_STREAM, 0)
         var address = try LocalControl.address(path)
@@ -203,7 +204,7 @@ extension LocalControlTests {
         XCTAssertEqual(calls, 1)
     }
     func testSymlinkFolderAndSocketAreRejected() throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent("mochi-links-\(UUID())")
+        let root = TestScratch.folder("mochi-links")
         defer { try? FileManager.default.removeItem(at: root) }
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let actual = root.appendingPathComponent("actual")

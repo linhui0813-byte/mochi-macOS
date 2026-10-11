@@ -1,4 +1,5 @@
 import MochiKernel
+import MochiTestSupport
 import XCTest
 
 @testable import MochiCore
@@ -28,7 +29,7 @@ final class StubProtocol: URLProtocol {
 
 final class NetworkRemediationTests: XCTestCase {
     private func home() throws -> URL {
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("mochi-home-\(UUID().uuidString)")
+        let url = TestScratch.folder("mochi-home")
         try FileManager.default.createDirectory(
             at: url.appendingPathComponent(".codex"), withIntermediateDirectories: true)
         addTeardownBlock { try? FileManager.default.removeItem(at: url) }
@@ -254,7 +255,7 @@ final class NetworkRemediationTests: XCTestCase {
         XCTAssertEqual(reply.text, "Let me save that.\nSaved!")
     }
     func testCachedExampleIsReusedWithoutAReply() async throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent("mochi-cache-\(UUID().uuidString)")
+        let root = TestScratch.folder("mochi-cache")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
         let service = RealtimeService()

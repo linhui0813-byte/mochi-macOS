@@ -1,13 +1,12 @@
 import Foundation
 import MochiCore
-import MochiKernel
 
 /// True inside an XCTest process. Live services must never run there: a test that forgets a fake
 /// would otherwise reach the network or the microphone silently.
 enum TestEnvironment {
     static let active = NSClassFromString("XCTestCase") != nil
     static func assertNotUnderTest(_ what: String) {
-        assert(!active, "\(what) must not be used in tests. Pass fakes to AppModel(speech:media:).")
+        precondition(!active, "\(what) must not be used in tests. Pass fakes to AppModel(speech:media:).")
     }
 }
 
@@ -46,6 +45,10 @@ struct MediaServices {
     var meter: @MainActor () -> Float
     /// False when the microphone stopped delivering audio before the user finished.
     var recordingActive: @MainActor () -> Bool = { true }
+    /// True when the last take ended because the microphone or recorder failed; still valid after `stopRecording`.
+    var recordingInterrupted: @MainActor () -> Bool = { false }
+    /// True once the recorder confirmed it stopped successfully at its own time limit; reported asynchronously.
+    var recordingFinished: @MainActor () -> Bool = { false }
 
     @MainActor static func live(_ audio: AudioController) -> MediaServices {
         TestEnvironment.assertNotUnderTest("MediaServices.live")
@@ -54,7 +57,9 @@ struct MediaServices {
             record: { try audio.record(to: $0) },
             stopRecording: { audio.stopRecording() },
             meter: { audio.meter },
-            recordingActive: { audio.isRecording })
+            recordingActive: { audio.isRecording },
+            recordingInterrupted: { audio.recordingInterrupted },
+            recordingFinished: { audio.recordingFinished })
     }
 }
 

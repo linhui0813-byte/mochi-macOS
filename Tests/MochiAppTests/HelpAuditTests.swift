@@ -1,11 +1,12 @@
 import MochiCore
+import MochiTestSupport
 import XCTest
 
 @testable import MochiApp
 
 final class HelpAuditTests: XCTestCase {
     @MainActor func testSavedPracticeDoesNotReplaceUnfinishedDraftOrRecording() throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let root = TestScratch.folder()
         defer { try? FileManager.default.removeItem(at: root) }
         let app = makeApp(root: root)
         app.startHelp()
@@ -24,7 +25,7 @@ final class HelpAuditTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: root.appendingPathComponent("thought.wav").path))
     }
     @MainActor func testCompletedHelpSeedsNextComposerAndDeletesOnlyUnreferencedAudio() throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let root = TestScratch.folder()
         defer { try? FileManager.default.removeItem(at: root) }
         let app = makeApp(root: root)
         app.startHelp()
@@ -43,7 +44,7 @@ final class HelpAuditTests: XCTestCase {
         XCTAssertEqual(app.library.expressions.first?.english, "Finished English")
     }
     @MainActor func testRecordingReplacementDiscardAndCancelCleanUpButKeepSharedFile() throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let root = TestScratch.folder()
         defer { try? FileManager.default.removeItem(at: root) }
         let app = makeApp(root: root)
         app.startHelp()
@@ -64,7 +65,7 @@ final class HelpAuditTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("canceled.wav").path))
     }
     @MainActor func testTranscribedThoughtRequiresExplicitAddOrReplaceAndPersistsReview() async throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let root = TestScratch.folder()
         defer { try? FileManager.default.removeItem(at: root) }
         let app = makeApp(root: root)
         app.startHelp()
@@ -408,7 +409,7 @@ final class HelpAuditTests: XCTestCase {
         }
     }
     @MainActor func testSavedPracticeCannotRecordAndExitCleansTransientAudioAndFlag() async throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let root = TestScratch.folder()
         defer { try? FileManager.default.removeItem(at: root) }
         let app = makeApp(root: root)
         app.openExpression(PracticeExpression(conversationID: app.selectedID!, meaning: "Meaning", english: "English"))

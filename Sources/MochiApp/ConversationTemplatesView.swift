@@ -4,6 +4,7 @@ import MochiKernel
 import SwiftUI
 
 struct ConversationSettingsFields: View {
+    @FocusState private var instructionsFocused: Bool
     @Binding var instructions: String
     @Binding var characterName: String?
     @Binding var preferences: ConversationPreferences
@@ -22,15 +23,16 @@ struct ConversationSettingsFields: View {
         )
         .font(.caption).foregroundStyle(.secondary)
         Text("Instructions").font(.headline)
-        TextEditor(text: $instructions).font(.body).padding(6).frame(height: 150)
-            .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
-            .overlay(RoundedRectangle(cornerRadius: 8).stroke(.quaternary))
+        TextEditor(text: $instructions).font(.body).padding(6).frame(height: 150).focused($instructionsFocused)
+            .fieldFrame(cornerRadius: 8, focused: instructionsFocused)
             .accessibilityLabel("Conversation instructions")
-        Text("\(instructions.count)/8,000 characters · \(instructions.utf8.count)/49,152 bytes")
-            .font(.caption).foregroundStyle(.secondary)
-        if instructions.count > 8000 || instructions.utf8.count > MochiTools.maxInstructionBytes {
+        Text(
+            "\(instructions.count)/\(MochiTools.maxInstructions.formatted()) characters · \(instructions.utf8.count)/\(MochiTools.maxInstructionBytes.formatted()) bytes"
+        )
+        .font(.caption).foregroundStyle(.secondary)
+        if instructions.count > MochiTools.maxInstructions || instructions.utf8.count > MochiTools.maxInstructionBytes {
             Text(
-                "The full original text is preserved. Future replies use a bounded preview. Shorten it to 8,000 characters and 48 KB to save edited text or a new template. Unchanged conversation text can be preserved when changing other settings."
+                "The full original text is preserved. Future replies use a bounded preview. Shorten it to \(MochiTools.maxInstructions.formatted()) characters and \(MochiTools.maxInstructionBytes / 1024) KB to save edited text or a new template. Unchanged conversation text can be preserved when changing other settings."
             )
             .font(.caption).foregroundStyle(.red)
         }
@@ -45,7 +47,8 @@ struct ConversationSettingsFields: View {
         if preferences.speed != nil {
             HStack {
                 Slider(
-                    value: Binding(get: { preferences.speed ?? 1 }, set: { preferences.speed = $0 }), in: 0.25...1.5,
+                    value: Binding(get: { preferences.speed ?? 1 }, set: { preferences.speed = $0 }),
+                    in: ConversationPreferences.speedRange,
                     step: 0.05
                 )
                 .accessibilityLabel("Conversation speech speed")
@@ -89,127 +92,17 @@ struct ConversationTemplatesView: View {
             if mode != .editor {
                 TextField("Search templates", text: $query).textFieldStyle(.roundedBorder)
                 HStack(alignment: .top, spacing: 16) {
-                    List(selection: $selection) {
-                        ForEach([true, false], id: \.self) { builtin in
-                            Section(builtin ? "Built-in" : "My Templates") {
-                                ForEach(values.filter { $0.isBuiltin == builtin }) { t in
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(t.title).fontWeight(.medium)
-                                        Text(t.description).font(.caption).foregroundStyle(.secondary).lineLimit(2)
-                                    }.frame(maxWidth: .infinity, alignment: .leading).tag(t.id)
-                                }
-                            }
-                        }
-                    }.frame(width: 195).focused($listFocused)
-                        .onAppear {
-                            selection = app.templateDraft?.value.id
-                            listFocused = true
-                        }
-                        .onChange(of: selection) { _, id in
-                            guard let id, app.templateDraft?.value.id != id,
-                                let t = app.allTemplates.first(where: { $0.id == id })
-                            else { return }
-                            app.templateDraft = TemplateEditorDraft(
-                                value: t, editingID: nil, expectedRevision: t.revision)
-                            error = nil
-                        }
-                    ScrollView {
-                        if let draft = app.templateDraft {
-                            VStack(alignment: .leading, spacing: 12) {
-                                Text(draft.value.title).font(.headline)
-                                Text(draft.value.description).foregroundStyle(.secondary)
-                                if mode == .picker {
-                                    ConversationSettingsFields(
-                                        instructions: draftBinding.instructions,
-                                        characterName: draftBinding.characterName, preferences: draftBinding.preferences
-                                    )
-                                } else {
-                                    Text(
-                                        draft.value.instructions.isEmpty
-                                            ? "No additional instructions" : draft.value.instructions
-                                    ).font(.callout)
-                                    Text("Character: \(draft.value.characterName ?? "Default")").font(.caption)
-                                }
-                                if let source = app.allTemplates.first(where: { $0.id == draft.value.id }) {
-                                    if source.revision != draft.expectedRevision {
-                                        Text("The source changed. Your preview is kept.").font(.caption)
-                                            .foregroundStyle(.orange)
-                                        Button("Refresh from Source") {
-                                            app.templateDraft = TemplateEditorDraft(
-                                                value: source, editingID: nil, expectedRevision: source.revision)
-                                        }
-                                    }
-                                } else {
-                                    Text("The source was deleted. You can still start from this preview.").font(
-                                        .caption
-                                    ).foregroundStyle(.orange)
-                                }
-                                HStack {
-                                    Button("Duplicate…") {
-                                        app.editTemplate(draft.value, duplicate: true)
-                                        error = nil
-                                    }
-                                    if mode == .manager && !draft.value.isBuiltin {
-                                        Button("Edit…") {
-                                            app.editTemplate(draft.value)
-                                            error = nil
-                                        }
-                                        Button("Delete…", role: .destructive) { pendingDelete = draft.value }
-                                    }
-                                }
-                            }
-                        } else {
-                            Text("Select a template to preview it.").foregroundStyle(.secondary)
-                        }
-                    }.frame(maxWidth: .infinity)
+                    templateList
+                    ScrollView { preview }.frame(maxWidth: .infinity)
                 }
             } else {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 12) {
-                        TextField("Template title", text: draftBinding.title).textFieldStyle(.roundedBorder)
-                        TextField("Description", text: draftBinding.description, axis: .vertical).textFieldStyle(
-                            .roundedBorder)
-                        ConversationSettingsFields(
-                            instructions: draftBinding.instructions, characterName: draftBinding.characterName,
-                            preferences: draftBinding.preferences)
-                    }
-                }
+                editor
             }
             // Selected recovery templates explain why Start/Save is disabled instead of failing silently.
             if let error = error ?? (mode == .editor || app.templateDraft != nil ? validationError : nil) {
                 Text(error).font(.callout).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
             }
-            HStack {
-                if mode != .editor {
-                    Button("New Template…") {
-                        app.editTemplate(nil)
-                        error = nil
-                    }
-                }
-                Spacer()
-                Button(mode == .manager ? "Done" : "Cancel") {
-                    error = nil
-                    if mode == .editor {
-                        app.closeTemplateEditor()
-                    } else {
-                        app.templatePresentation = nil
-                        app.templateDraft = nil
-                    }
-                }.keyboardShortcut(.cancelAction)
-                if mode == .picker {
-                    Button("Start Conversation") {
-                        do { if let t = app.templateDraft?.value { _ = try app.startTemplateSnapshot(t) } } catch {
-                            self.error = (error as? AppFailure)?.message ?? "Could not start conversation."
-                        }
-                    }.keyboardShortcut(.defaultAction).disabled(validationError != nil || app.busy)
-                } else if mode == .editor {
-                    if app.templateDraft?.editingID != nil {
-                        Button("Save as New") { save(asNew: true) }.disabled(validationError != nil)
-                    }
-                    Button("Save") { save(asNew: false) }.keyboardShortcut(.defaultAction).disabled(
-                        validationError != nil)
-                }
-            }
+            footer
         }.padding(24).frame(width: 620, height: 570)
             .confirmationDialog(
                 "Delete this template? Existing conversations retain their settings.",
@@ -221,10 +114,129 @@ struct ConversationTemplatesView: View {
                     do {
                         try app.deleteTemplate(id: t.id, revision: t.revision)
                         app.templateDraft = nil
+                        error = nil
                     } catch { self.error = (error as? AppFailure)?.message ?? "Could not delete template." }
                     pendingDelete = nil
                 }
             }
+    }
+    private var templateList: some View {
+        List(selection: $selection) {
+            ForEach([true, false], id: \.self) { builtin in
+                Section(builtin ? "Built-in" : "My Templates") {
+                    ForEach(values.filter { $0.isBuiltin == builtin }) { t in
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(t.title).fontWeight(.medium)
+                            Text(t.description).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                        }.frame(maxWidth: .infinity, alignment: .leading).tag(t.id)
+                    }
+                }
+            }
+        }.frame(width: 195).focused($listFocused)
+            .onAppear {
+                selection = app.templateDraft?.value.id
+                listFocused = true
+            }
+            .onChange(of: selection) { _, id in
+                guard let id, app.templateDraft?.value.id != id,
+                    let t = app.allTemplates.first(where: { $0.id == id })
+                else { return }
+                app.templateDraft = TemplateEditorDraft(value: t, editingID: nil, expectedRevision: t.revision)
+                error = nil
+            }
+    }
+    @ViewBuilder private var preview: some View {
+        if let draft = app.templateDraft {
+            VStack(alignment: .leading, spacing: 12) {
+                Text(draft.value.title).font(.headline)
+                Text(draft.value.description).foregroundStyle(.secondary)
+                if mode == .picker {
+                    ConversationSettingsFields(
+                        instructions: draftBinding.instructions,
+                        characterName: draftBinding.characterName, preferences: draftBinding.preferences)
+                } else {
+                    Text(draft.value.instructions.isEmpty ? "No additional instructions" : draft.value.instructions)
+                        .font(.callout)
+                    Text("Character: \(draft.value.characterName ?? "Default")").font(.caption)
+                }
+                sourceStatus(draft)
+                HStack {
+                    Button("Duplicate…") {
+                        app.editTemplate(draft.value, duplicate: true)
+                        error = nil
+                    }
+                    if mode == .manager && !draft.value.isBuiltin {
+                        Button("Edit…") {
+                            app.editTemplate(draft.value)
+                            error = nil
+                        }
+                        Button("Delete…", role: .destructive) { pendingDelete = draft.value }
+                    }
+                }
+            }
+        } else {
+            Text("Select a template to preview it.").foregroundStyle(.secondary)
+        }
+    }
+    @ViewBuilder private func sourceStatus(_ draft: TemplateEditorDraft) -> some View {
+        if let source = app.allTemplates.first(where: { $0.id == draft.value.id }) {
+            if source.revision != draft.expectedRevision {
+                Text("The source changed. Your preview is kept.").font(.caption).foregroundStyle(.orange)
+                Button("Refresh from Source") {
+                    app.templateDraft = TemplateEditorDraft(
+                        value: source, editingID: nil, expectedRevision: source.revision)
+                    error = nil
+                }
+            }
+        } else {
+            Text("The source was deleted. You can still start from this preview.").font(.caption)
+                .foregroundStyle(.orange)
+        }
+    }
+    private var editor: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                TextField("Template title", text: draftBinding.title).textFieldStyle(.roundedBorder)
+                TextField("Description", text: draftBinding.description, axis: .vertical).textFieldStyle(
+                    .roundedBorder)
+                ConversationSettingsFields(
+                    instructions: draftBinding.instructions, characterName: draftBinding.characterName,
+                    preferences: draftBinding.preferences)
+            }
+        }
+    }
+    private var footer: some View {
+        HStack {
+            if mode != .editor {
+                Button("New Template…") {
+                    app.editTemplate(nil)
+                    error = nil
+                }
+            }
+            Spacer()
+            Button(mode == .manager ? "Done" : "Cancel") {
+                error = nil
+                if mode == .editor {
+                    app.closeTemplateEditor()
+                } else {
+                    app.templatePresentation = nil
+                    app.templateDraft = nil
+                }
+            }.keyboardShortcut(.cancelAction)
+            if mode == .picker {
+                Button("Start Conversation") {
+                    do { if let t = app.templateDraft?.value { _ = try app.startTemplateSnapshot(t) } } catch {
+                        self.error = (error as? AppFailure)?.message ?? "Could not start conversation."
+                    }
+                }.keyboardShortcut(.defaultAction).disabled(validationError != nil || app.busy)
+            } else if mode == .editor {
+                if app.templateDraft?.editingID != nil {
+                    Button("Save as New") { save(asNew: true) }.disabled(validationError != nil)
+                }
+                Button("Save") { save(asNew: false) }.keyboardShortcut(.defaultAction).disabled(
+                    validationError != nil)
+            }
+        }
     }
     private func save(asNew: Bool) {
         guard let draft = app.templateDraft else { return }

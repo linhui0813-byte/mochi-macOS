@@ -7,6 +7,36 @@
     /// Scripted development runs: native smoke tests, tray checks and live provider probes.
     /// Compiled only into development builds; the release gate rejects their strings and symbols.
     extension AppDelegate {
+        /// Ends a scripted run. A failed or incomplete run exits nonzero so it never looks clean to its launcher.
+        private func finishRun(_ model: AppModel, passed: Bool) {
+            if passed {
+                NSApp.terminate(nil)
+            } else {
+                model.discardTemporaryLibrary()
+                exit(EXIT_FAILURE)
+            }
+        }
+        /// Writes required evidence; a failure is reported on stderr and fails the run.
+        private func writeEvidence(_ data: Data, to url: URL) -> Bool {
+            do {
+                try data.write(to: url, options: .atomic)
+                return true
+            } catch {
+                FileHandle.standardError.write(Data("Could not write \(url.path): \(error)\n".utf8))
+                return false
+            }
+        }
+        /// Removes evidence left by an earlier run; false when it is still present.
+        private func removeStaleEvidence(_ url: URL) -> Bool {
+            do {
+                try FileManager.default.removeItem(at: url)
+            } catch let error as CocoaError where error.code == .fileNoSuchFile {
+            } catch {
+                FileHandle.standardError.write(Data("Could not remove \(url.path): \(error)\n".utf8))
+                return false
+            }
+            return true
+        }
         func smokeTray(_ model: AppModel) {
             guard !ran else { return }
             ran = true
@@ -16,6 +46,7 @@
                 let directory = URL(
                     fileURLWithPath: ProcessInfo.processInfo.environment["MOCHI_EVIDENCE_DIR"]
                         ?? "/tmp/mochi-tray-evidence")
+                var passed = false
                 do {
                     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
                     guard let window = tray.window else { throw CocoaError(.fileNoSuchFile) }
@@ -225,11 +256,13 @@
                     ]
                     try JSONSerialization.data(withJSONObject: evidence, options: [.prettyPrinted, .sortedKeys]).write(
                         to: directory.appendingPathComponent("tray-smoke.json"))
+                    passed = !checks.isEmpty && checks.allSatisfy(\.1)
                 } catch {
-                    try? Data("FAIL: \(error.localizedDescription)\n".utf8).write(
+                    _ = writeEvidence(
+                        Data("FAIL: \(error.localizedDescription)\n".utf8),
                         to: directory.appendingPathComponent("tray-smoke.txt"))
                 }
-                NSApp.terminate(nil)
+                finishRun(model, passed: passed)
             }
         }
         func smoke(_ model: AppModel) {
@@ -241,15 +274,29 @@
                     fileURLWithPath: ProcessInfo.processInfo.environment["MOCHI_EVIDENCE_DIR"] ?? ProcessInfo
                         .processInfo.environment["ENJOY_EVIDENCE_DIR"] ?? "/tmp/mochi-evidence")
                 try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-                try? FileManager.default.removeItem(at: directory.appendingPathComponent("smoke.txt"))
                 var captureFailures: [String] = []
+                for stale in [
+                    "smoke.txt", "smoke-report.json", "template-minimum-geometry.json", "template-keyboard.json",
+                ] where !removeStaleEvidence(directory.appendingPathComponent(stale)) {
+                    captureFailures.append("Stale \(stale) could not be removed")
+                }
                 var captureCount = 0
                 var viewCaptureCount = 0
                 let mainWindow = NSApp.windows.first(where: {
                     $0.isVisible && !$0.isSheet && $0.parent == nil && $0.canBecomeMain && $0.frame.width >= 760
                 })
-                @MainActor func capture(_ name: String, settings: Bool = false, window explicitWindow: NSWindow? = nil)
-                {
+                /// Polls until `condition` holds or `timeout` passes; returns whether it held.
+                @MainActor func waitFor(_ timeout: TimeInterval, _ condition: () -> Bool) async -> Bool {
+                    let deadline = Date().addingTimeInterval(timeout)
+                    while !condition() {
+                        guard Date() < deadline else { return false }
+                        try? await Task.sleep(nanoseconds: 20_000_000)
+                    }
+                    return true
+                }
+                @MainActor func capture(
+                    _ name: String, settings: Bool = false, window explicitWindow: NSWindow? = nil
+                ) async {
                     captureCount += 1
                     let target =
                         explicitWindow
@@ -260,7 +307,10 @@
                         captureFailures.append(name)
                         return
                     }
-                    try? FileManager.default.removeItem(at: directory.appendingPathComponent(name))
+                    guard removeStaleEvidence(directory.appendingPathComponent(name)) else {
+                        captureFailures.append("\(name): stale capture could not be removed")
+                        return
+                    }
                     let capture = Process()
                     capture.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
                     capture.arguments = [
@@ -269,9 +319,14 @@
                     var captured = false
                     do {
                         try capture.run()
-                        capture.waitUntilExit()
+                        if await !waitFor(10, { !capture.isRunning }) {
+                            capture.terminate()
+                            if await !waitFor(2, { !capture.isRunning }) { kill(capture.processIdentifier, SIGKILL) }
+                            _ = await waitFor(2, { !capture.isRunning })
+                        }
+                        // A capture that never exits has no status and no trustworthy file.
                         captured =
-                            capture.terminationStatus == 0
+                            !capture.isRunning && capture.terminationStatus == 0
                             && FileManager.default.fileExists(atPath: directory.appendingPathComponent(name).path)
                     } catch {}
                     // Capture this app's own view hierarchy when screen recording permission is unavailable.
@@ -288,7 +343,16 @@
                         }
                     }
                     if !captured { captureFailures.append(name) }
-
+                }
+                /// A snapshot of the sheet attached to the workspace; a missing sheet is a failure, never the window.
+                @MainActor func captureSheet(_ name: String) async {
+                    guard await waitFor(2, { mainWindow?.attachedSheet != nil }), let sheet = mainWindow?.attachedSheet
+                    else {
+                        captureCount += 1
+                        captureFailures.append("\(name): no sheet attached")
+                        return
+                    }
+                    await capture(name, window: sheet)
                 }
                 if mainWindow?.titleVisibility != .hidden || mainWindow?.toolbar?.displayMode != .iconOnly {
                     captureFailures.append("Workspace title or toolbar display mode is incorrect")
@@ -301,21 +365,21 @@
                 }
                 mainWindow?.attachedSheet?.makeFirstResponder(nil)
                 model.settings.builtInPracticeVoice = RealtimeService.defaultVoice
-                capture("practice.png")
+                await capture("practice.png")
                 NSApp.appearance = NSAppearance(named: .darkAqua)
                 try? await Task.sleep(nanoseconds: 250_000_000)
-                capture("practice-dark.png")
+                await capture("practice-dark.png")
                 NSApp.appearance = NSAppearance(named: .aqua)
                 if let window = mainWindow { window.setContentSize(NSSize(width: 820, height: 700)) }
                 try? await Task.sleep(nanoseconds: 300_000_000)
-                capture("practice-compact.png")
+                await capture("practice-compact.png")
                 if let window = mainWindow { window.setContentSize(NSSize(width: 1120, height: 840)) }
                 model.resume()
                 try? await Task.sleep(nanoseconds: 350_000_000)
                 if mainWindow?.attachedSheet != nil {
                     captureFailures.append("Practice left a sheet attached to the conversation")
                 }
-                capture("conversation.png")
+                await capture("conversation.png")
                 let toolbarStates: [(Activity, String)] = [
                     (.generating, "generation"), (.playing, "playback"), (.recording, "recording"),
                     (.requestingPermission, "permission"), (.idle, "idle"),
@@ -323,16 +387,19 @@
                 for (activity, name) in toolbarStates {
                     _ = model.turn.begin(activity)
                     try? await Task.sleep(nanoseconds: 250_000_000)
-                    let hasStop = mainWindow?.toolbar?.items.contains(where: { $0.label == "Stop" }) == true
-                    if hasStop != (activity == .generating) {
+                    let stopShown = await waitFor(2) {
+                        (mainWindow?.toolbar?.items.contains(where: { $0.label == "Stop" }) == true)
+                            == (activity == .generating)
+                    }
+                    if !stopShown {
                         captureFailures.append("Incorrect title-bar Stop visibility: \(name)")
                     }
-                    capture("titlebar-stop-\(name).png")
+                    await capture("titlebar-stop-\(name).png")
                 }
                 model.stop()
                 model.newChat()
                 try? await Task.sleep(nanoseconds: 300_000_000)
-                capture("welcome.png")
+                await capture("welcome.png")
                 @MainActor func composerFrame(_ root: Any, depth: Int = 0) -> NSRect? {
                     guard depth < 60 else { return nil }
                     if let window = root as? NSWindow, let content = window.contentView,
@@ -360,7 +427,7 @@
                 let beforeNotice = mainWindow.flatMap { composerFrame($0) }
                 model.notice = "Help draft saved."
                 try? await Task.sleep(nanoseconds: 250_000_000)
-                capture("conversation-notice.png")
+                await capture("conversation-notice.png")
                 let withNotice = mainWindow.flatMap { composerFrame($0) }
                 if let beforeNotice, let withNotice {
                     if abs(beforeNotice.minY - withNotice.minY) > 0.5
@@ -371,9 +438,42 @@
                 } else {
                     captureFailures.append("Could not locate the composer for notice geometry verification")
                 }
-                try? await Task.sleep(nanoseconds: 4_100_000_000)
-                if model.notice != nil { captureFailures.append("Conversation notice did not automatically dismiss") }
-                capture("conversation-notice-dismissed.png")
+                if await !waitFor(6, { model.notice == nil }) {
+                    captureFailures.append("Conversation notice did not automatically dismiss")
+                }
+                // A reply disables the composer; focus must come back to it when the turn ends.
+                @MainActor func composerField(_ view: NSView) -> NSTextField? {
+                    if let field = view as? NSTextField, !(field is NSSearchField),
+                        (field.placeholderString ?? field.placeholderAttributedString?.string)?.hasPrefix("Message ")
+                            == true
+                    {
+                        return field
+                    }
+                    return view.subviews.lazy.compactMap(composerField).first
+                }
+                @MainActor func composerHasFocus(_ window: NSWindow, _ field: NSTextField) -> Bool {
+                    window.firstResponder === field || (window.firstResponder as? NSText)?.delegate === field
+                }
+                if let window = mainWindow, let content = window.contentView, let field = composerField(content) {
+                    window.makeFirstResponder(field)
+                    if await !waitFor(2, { composerHasFocus(window, field) }) {
+                        captureFailures.append("Composer could not take focus")
+                    }
+                    // SwiftUI learns of an AppKit focus change on a later pass; a reply that starts before then
+                    // looks to the view as if the composer was never focused.
+                    try? await Task.sleep(nanoseconds: 300_000_000)
+                    let reply = model.turn.begin(.generating)
+                    try? await Task.sleep(nanoseconds: 400_000_000)
+                    _ = model.turn.finish(reply)
+                    if await !waitFor(2, { composerHasFocus(window, field) }) {
+                        let responder = window.firstResponder.map { String(describing: type(of: $0)) } ?? "none"
+                        captureFailures.append(
+                            "Composer did not regain focus after a reply (first responder: \(responder))")
+                    }
+                } else {
+                    captureFailures.append("Could not locate the composer text field for focus verification")
+                }
+                await capture("conversation-notice-dismissed.png")
                 let deletedRecording = "message-delete-fixture.wav"
                 try? PCM.wav(Data(repeating: 0, count: 48000)).write(
                     to: model.store.root.appendingPathComponent(deletedRecording))
@@ -381,7 +481,7 @@
                     role: "user", text: "Could we practise this sentence?", audio: deletedRecording)
                 model.append(deleteFixture, to: model.selectedID!)
                 try? await Task.sleep(nanoseconds: 250_000_000)
-                capture("message-before-deletion.png")
+                await capture("message-before-deletion.png")
                 model.deleteMessage(deleteFixture.id)
                 try? await Task.sleep(nanoseconds: 250_000_000)
                 if !model.canUndoMessageDeletion
@@ -389,7 +489,7 @@
                 {
                     captureFailures.append("Single-message deletion or Undo availability failed")
                 }
-                capture("message-deleted-undo.png")
+                await capture("message-deleted-undo.png")
                 model.undoMessageDeletion()
                 try? await Task.sleep(nanoseconds: 250_000_000)
                 if model.conversation?.messages.last?.id != deleteFixture.id
@@ -398,7 +498,7 @@
                 {
                     captureFailures.append("Undo did not restore the message and recording")
                 }
-                capture("message-deletion-undone.png")
+                await capture("message-deletion-undone.png")
                 if let chatID = model.selectedID {
                     var preferences = ConversationPreferences()
                     preferences.coaching = .direct
@@ -413,10 +513,10 @@
                     }
                     model.instructionsID = chatID
                     try? await Task.sleep(nanoseconds: 450_000_000)
-                    capture("conversation-instructions.png", window: mainWindow?.attachedSheet)
+                    await captureSheet("conversation-instructions.png")
                     NSApp.appearance = NSAppearance(named: .darkAqua)
                     try? await Task.sleep(nanoseconds: 250_000_000)
-                    capture("conversation-instructions-dark.png", window: mainWindow?.attachedSheet)
+                    await captureSheet("conversation-instructions-dark.png")
                     NSApp.appearance = NSAppearance(named: .aqua)
                     model.instructionsID = nil
                     try? await Task.sleep(nanoseconds: 350_000_000)
@@ -425,14 +525,14 @@
                         value: ConversationTemplate.builtins[0], editingID: nil,
                         expectedRevision: ConversationTemplate.builtins[0].revision)
                     try? await Task.sleep(nanoseconds: 350_000_000)
-                    capture("template-picker.png", window: mainWindow?.attachedSheet)
+                    await captureSheet("template-picker.png")
                     let previousFrame = mainWindow?.frame
                     mainWindow?.setContentSize(NSSize(width: 760, height: 580))
                     try? await Task.sleep(nanoseconds: 250_000_000)
-                    capture("template-picker-minimum-window.png")
-                    capture("template-picker-minimum-sheet.png", window: mainWindow?.attachedSheet)
+                    await capture("template-picker-minimum-window.png")
+                    await captureSheet("template-picker-minimum-sheet.png")
                     if let window = mainWindow, let sheet = window.attachedSheet {
-                        try? JSONSerialization.data(
+                        let geometry = try? JSONSerialization.data(
                             withJSONObject: [
                                 "requested_content_width": 760, "requested_content_height": 580,
                                 "actual_window_width": window.frame.width, "actual_window_height": window.frame.height,
@@ -440,8 +540,12 @@
                                 "content_height": window.contentLayoutRect.height, "sheet_width": sheet.frame.width,
                                 "sheet_height": sheet.frame.height,
                                 "os": ProcessInfo.processInfo.operatingSystemVersionString,
-                            ], options: [.prettyPrinted, .sortedKeys]
-                        ).write(to: directory.appendingPathComponent("template-minimum-geometry.json"))
+                            ], options: [.prettyPrinted, .sortedKeys])
+                        if !(geometry.map {
+                            writeEvidence($0, to: directory.appendingPathComponent("template-minimum-geometry.json"))
+                        } ?? false) {
+                            captureFailures.append("Template minimum geometry evidence was not written")
+                        }
                         @MainActor func findTable(_ view: NSView) -> NSTableView? {
                             if let table = view as? NSTableView { return table }
                             for child in view.subviews { if let table = findTable(child) { return table } }
@@ -459,14 +563,21 @@
                             table.keyDown(with: event)
                             try? await Task.sleep(nanoseconds: 250_000_000)
                             let moved = model.templateDraft?.value.id != before
-                            try? JSONSerialization.data(withJSONObject: [
+                            let keyboard = try? JSONSerialization.data(withJSONObject: [
                                 "arrow_key_moved_selection": moved, "native_table": true,
-                            ]).write(to: directory.appendingPathComponent("template-keyboard.json"))
+                            ])
+                            if !(keyboard.map {
+                                writeEvidence($0, to: directory.appendingPathComponent("template-keyboard.json"))
+                            } ?? false) {
+                                captureFailures.append("Template keyboard evidence was not written")
+                            }
                             if !moved { captureFailures.append("Template arrow-key selection did not update preview") }
                         } else {
                             captureFailures.append(
                                 "Native template list could not be reached for keyboard verification")
                         }
+                    } else {
+                        captureFailures.append("No template sheet for minimum geometry and keyboard verification")
                     }
                     if let previousFrame { mainWindow?.setFrame(previousFrame, display: true) }
 
@@ -476,7 +587,7 @@
                     model.openTemplateManager()
                     model.editTemplate(ConversationTemplate.builtins[0], duplicate: true)
                     try? await Task.sleep(nanoseconds: 350_000_000)
-                    capture("template-editor.png", window: mainWindow?.attachedSheet)
+                    await captureSheet("template-editor.png")
                     model.templatePresentation = nil
                     model.templateDraft = nil
                     model.templateReturnTo = nil
@@ -488,20 +599,20 @@
                     }
                     model.instructionsID = chatID
                     try? await Task.sleep(nanoseconds: 350_000_000)
-                    capture("character-editor.png", window: mainWindow?.attachedSheet)
+                    await captureSheet("character-editor.png")
                     model.saveConversationAsTemplate(
                         chatID,
                         draft: ConversationSettingsDraft(
                             id: chatID, instructions: "Unsaved template instructions", characterName: nil,
                             preferences: preferences))
                     try? await Task.sleep(nanoseconds: 350_000_000)
-                    capture("template-save-as.png", window: mainWindow?.attachedSheet)
+                    await captureSheet("template-save-as.png")
                     model.closeTemplateEditor()
                     try? await Task.sleep(nanoseconds: 350_000_000)
                     if model.retainedInstructionsDraft?.instructions != "Unsaved template instructions" {
                         captureFailures.append("Save-as lost instructions draft")
                     }
-                    capture("instructions-draft-return.png", window: mainWindow?.attachedSheet)
+                    await captureSheet("instructions-draft-return.png")
                     model.instructionsID = nil
                     model.retainedInstructionsDraft = nil
                     try? await Task.sleep(nanoseconds: 350_000_000)
@@ -537,22 +648,24 @@
                     } catch { captureFailures.append("MCP subprocess smoke failed: \(error)") }
                     model.externalControlEnabled = false
                     model.allowDemoAutomation = false
+                } else {
+                    captureFailures.append("No selected conversation for instructions, template and MCP checks")
                 }
                 model.newChat()
                 model.startHelp()
                 try? await Task.sleep(nanoseconds: 300_000_000)
-                capture("help.png")
+                await capture("help.png")
                 model.meaning = "I want to ask for a little more time to think."
                 model.editEnglish("I would like a little more time to think.")
                 try? await Task.sleep(nanoseconds: 300_000_000)
-                capture("help-english.png")
+                await capture("help-english.png")
                 NSApp.appearance = NSAppearance(named: .darkAqua)
                 try? await Task.sleep(nanoseconds: 250_000_000)
-                capture("help-english-dark.png")
+                await capture("help-english-dark.png")
                 NSApp.appearance = NSAppearance(named: .aqua)
                 model.beginPractice()
                 try? await Task.sleep(nanoseconds: 300_000_000)
-                capture("help-practice.png")
+                await capture("help-practice.png")
                 model.editThought()
                 let thoughtName = "thought-fixture.wav"
                 try? PCM.wav(Data(repeating: 0, count: 144000)).write(
@@ -561,17 +674,17 @@
                 model.recordingWarning =
                     "This illustrative recording is very quiet. Listen before transcribing, or record it again."
                 try? await Task.sleep(nanoseconds: 300_000_000)
-                capture("help-recording-review.png")
+                await capture("help-recording-review.png")
                 model.recognizedThought = "I need a little more time before I can explain my idea."
                 try? await Task.sleep(nanoseconds: 300_000_000)
-                capture("help-transcript-review.png")
+                await capture("help-transcript-review.png")
                 model.recognizedThought = nil
                 _ = model.turn.begin(.recording)
                 model.recordingMeaning = true
                 model.recordingSeconds = 3
                 model.recordingLevel = -54
                 try? await Task.sleep(nanoseconds: 250_000_000)
-                capture("help-recording-feedback.png")
+                await capture("help-recording-feedback.png")
                 model.stop()
                 model.saveExpression()
                 model.resume()
@@ -585,36 +698,42 @@
                     model.append(
                         Message(role: "assistant", text: "Take your time. What would help you decide?"), to: id)
                     try? await Task.sleep(nanoseconds: 300_000_000)
-                    capture("voice-recovery.png")
+                    await capture("voice-recovery.png")
                     model.speech.transcribe = { _, _ in
                         try await Task.sleep(nanoseconds: 900_000_000)
                         return "I would like a little more time to think."
                     }
                     model.retryTranscription(failed.id)
-                    try? await Task.sleep(nanoseconds: 250_000_000)
-                    capture("voice-recovery-progress.png")
-                    try? await Task.sleep(nanoseconds: 750_000_000)
-                    capture("voice-recovery-complete.png")
+                    if await !waitFor(2, { model.transcribingMessageIDs.contains(failed.id) }) {
+                        captureFailures.append("Transcription retry did not show progress")
+                    }
+                    await capture("voice-recovery-progress.png")
+                    let recovered = await waitFor(5) {
+                        model.conversation?.messages.first(where: { $0.id == failed.id })?.transcriptionState
+                            == .completed
+                    }
+                    if !recovered { captureFailures.append("Transcription retry did not complete") }
+                    await capture("voice-recovery-complete.png")
                     let originalPlayer = model.audio.makePlayer
                     model.audio.makePlayer = { _ in SmokePlaybackPlayer() }
                     model.togglePlayback(thoughtName)
                     model.seekPlayback(thoughtName, to: 1)
                     try? await Task.sleep(nanoseconds: 250_000_000)
-                    capture("message-playback-playing.png")
+                    await capture("message-playback-playing.png")
                     model.togglePlayback(thoughtName)
                     try? await Task.sleep(nanoseconds: 250_000_000)
-                    capture("message-playback-paused.png")
+                    await capture("message-playback-paused.png")
                     model.seekPlayback(thoughtName, to: 2)
                     if !model.audio.paused || model.audio.position != 2 {
                         captureFailures.append("Paused seek did not preserve playback state")
                     }
                     NSApp.appearance = NSAppearance(named: .darkAqua)
                     try? await Task.sleep(nanoseconds: 250_000_000)
-                    capture("message-playback-dark.png")
+                    await capture("message-playback-dark.png")
                     NSApp.appearance = NSAppearance(named: .aqua)
                     if let window = mainWindow { window.setContentSize(NSSize(width: 820, height: 700)) }
                     try? await Task.sleep(nanoseconds: 250_000_000)
-                    capture("message-playback-compact.png")
+                    await capture("message-playback-compact.png")
                     if let window = mainWindow { window.setContentSize(NSSize(width: 1120, height: 840)) }
                     model.stop()
                     model.audio.makePlayer = originalPlayer
@@ -623,16 +742,16 @@
                     model.openConversationSearch()
                     model.conversationQuery = "time"
                     try? await Task.sleep(nanoseconds: 300_000_000)
-                    capture("conversation-search.png")
+                    await capture("conversation-search.png")
                     model.moveConversationMatch(1)
                     try? await Task.sleep(nanoseconds: 250_000_000)
-                    capture("conversation-search-next.png")
+                    await capture("conversation-search-next.png")
                     if model.conversationMatchIDs.count != 2 {
                         captureFailures.append("Current conversation search did not find both messages")
                     }
                     model.conversationQuery = "no-such-message"
                     try? await Task.sleep(nanoseconds: 250_000_000)
-                    capture("conversation-search-empty.png")
+                    await capture("conversation-search-empty.png")
                     @MainActor func searchFields(_ view: NSView) -> [NSSearchField] {
                         (view as? NSSearchField).map { [$0] } ?? view.subviews.flatMap(searchFields)
                     }
@@ -653,7 +772,7 @@
                     if let window = mainWindow { window.setContentSize(NSSize(width: 820, height: 700)) }
                     model.conversationQuery = "time"
                     try? await Task.sleep(nanoseconds: 250_000_000)
-                    capture("conversation-search-compact.png")
+                    await capture("conversation-search-compact.png")
                     let escapeCommand = NSApp.mainMenu?.items.compactMap(\.submenu).flatMap(\.items).first {
                         $0.title == "Stop" && $0.keyEquivalent == "\u{1b}"
                     }
@@ -673,10 +792,12 @@
                     {
                         captureFailures.append("Codex fixture recovery did not complete")
                     }
+                } else {
+                    captureFailures.append("No selected conversation for voice recovery, playback and search checks")
                 }
                 model.showExpressions = true
                 try? await Task.sleep(nanoseconds: 300_000_000)
-                capture("expressions.png")
+                await capture("expressions.png")
                 model.showExpressions = false
                 model.showHistory(.active)
                 let ids = model.library.conversations.map(\.id)
@@ -689,19 +810,19 @@
                     model.draft = "I think the first step is…"
                     model.search = "project"
                     try? await Task.sleep(nanoseconds: 350_000_000)
-                    capture("search.png")
+                    await capture("search.png")
                     model.showHistory(.archived)
                     try? await Task.sleep(nanoseconds: 350_000_000)
-                    capture("archived.png")
+                    await capture("archived.png")
                     model.showHistory(.deleted)
                     try? await Task.sleep(nanoseconds: 350_000_000)
-                    capture("deleted.png")
+                    await capture("deleted.png")
                     model.managerOpen = true
                     try? await Task.sleep(nanoseconds: 450_000_000)
-                    capture("manager.png")
+                    await capture("manager.png")
                     model.permanentDeleteIDs = [ids[2]]
                     try? await Task.sleep(nanoseconds: 350_000_000)
-                    capture("permanent-delete-confirmation.png")
+                    await capture("permanent-delete-confirmation.png")
                     model.permanentDeleteIDs = []
                     try? await Task.sleep(nanoseconds: 250_000_000)
                     model.managerOpen = false
@@ -709,21 +830,26 @@
                     model.showHistory(.active)
                     model.renameID = ids[0]
                     try? await Task.sleep(nanoseconds: 450_000_000)
-                    capture("rename.png")
+                    await capture("rename.png")
                     model.renameID = nil
                     if let window = mainWindow { window.setContentSize(NSSize(width: 820, height: 700)) }
                     try? await Task.sleep(nanoseconds: 350_000_000)
-                    capture("history-compact.png")
+                    await capture("history-compact.png")
+                } else {
+                    captureFailures.append("History checks need at least three conversations; found \(ids.count)")
                 }
                 model.settingsOpen = true
                 try? await Task.sleep(nanoseconds: 500_000_000)
-                capture("settings.png", settings: true)
+                await capture("settings.png", settings: true)
                 model.settingsTab = "automation"
                 try? await Task.sleep(nanoseconds: 350_000_000)
-                capture("automation-settings.png", settings: true)
+                await capture("automation-settings.png", settings: true)
                 model.settingsTab = "voices"
                 try? await Task.sleep(nanoseconds: 350_000_000)
-                capture("voice-settings.png", settings: true)
+                await capture("voice-settings.png", settings: true)
+                model.settingsTab = "about"
+                try? await Task.sleep(nanoseconds: 350_000_000)
+                await capture("about-settings.png", settings: true)
                 let pitchFixture = (0..<150).map { i -> PitchPoint in
                     let t = Double(i) * 0.015
                     let value = 7 + 3 * sin(t * 5) + (i.isMultiple(of: 2) ? 0.45 : -0.45) + (i == 88 ? 12 : 0)
@@ -749,10 +875,10 @@
                 comparison.center()
                 comparison.makeKeyAndOrderFront(nil)
                 try? await Task.sleep(nanoseconds: 300_000_000)
-                capture("pitch-curves-comparison.png", window: comparison)
+                await capture("pitch-curves-comparison.png", window: comparison)
                 NSApp.appearance = NSAppearance(named: .darkAqua)
                 try? await Task.sleep(nanoseconds: 250_000_000)
-                capture("pitch-curves-comparison-dark.png", window: comparison)
+                await capture("pitch-curves-comparison-dark.png", window: comparison)
                 NSApp.appearance = NSAppearance(named: .aqua)
                 comparison.orderOut(nil)
                 model.settingsOpen = false
@@ -771,8 +897,9 @@
                     }.value
                     try result.write(to: directory.appendingPathComponent("mcp-after-settings.json"))
                     tray.closeToTray()
-                    try? await Task.sleep(nanoseconds: 250_000_000)
-                    let hidden = mainWindow?.isVisible == false && NSApp.activationPolicy() == .accessory
+                    let hidden = await waitFor(2) {
+                        mainWindow?.isVisible == false && NSApp.activationPolicy() == .accessory
+                    }
                     let trayResult = try await Task.detached {
                         try AutomationSmokeClient.run(helper: helper, socketPath: controlPath)
                     }.value
@@ -791,42 +918,49 @@
                 model.audio.makePlayer = { _ in greetingPlayer }
                 model.media.permission = { true }
                 model.media.record = { _ in }
+                model.media.recordingActive = { true }
                 model.speech.referenceAudio = { _, _, root, _ in
                     let url = root.appendingPathComponent("greeting-fixture.wav")
                     try PCM.wav(Data(repeating: 0, count: 144000)).write(to: url)
                     return url
                 }
                 model.toggleConversationVoice()
-                try? await Task.sleep(nanoseconds: 350_000_000)
-                if model.turn.activity != .playing || !model.greetingActive || model.conversation?.messages.count != 1 {
+                let greeting = await waitFor(3) {
+                    model.turn.activity == .playing && model.greetingActive && model.conversation?.messages.count == 1
+                }
+                if !greeting {
                     captureFailures.append("Voice entry did not show its saved greeting")
                 }
-                capture("voice-greeting.png")
+                await capture("voice-greeting.png")
                 model.togglePlayback("greeting-fixture.wav", mochi: true)
-                try? await Task.sleep(nanoseconds: 200_000_000)
-                if !model.audio.paused { captureFailures.append("Greeting pause failed") }
-                capture("voice-greeting-paused.png")
+                if await !waitFor(2, { model.audio.paused }) { captureFailures.append("Greeting pause failed") }
+                await capture("voice-greeting-paused.png")
                 model.audio.finishPlayback(greetingPlayer, successfully: true)
-                try? await Task.sleep(nanoseconds: 250_000_000)
-                if model.turn.activity != .recording || model.greetingActive {
-                    captureFailures.append("Greeting did not transition to recording")
+                if await !waitFor(3, { model.turn.activity == .recording && !model.greetingActive }) {
+                    captureFailures.append(
+                        "Greeting did not transition to recording (activity \(model.turn.activity), greeting "
+                            + "\(model.greetingActive), error \(model.error ?? "none"))")
                 }
-                capture("voice-greeting-listening.png")
+                await capture("voice-greeting-listening.png")
                 model.stop()
-                let passed =
+                var passed =
                     captureFailures.isEmpty && model.library.expressions.count >= 1 && model.turn.mode == .conversation
                     && model.turn.owner == .none
-                try? JSONSerialization.data(
+                let report = try? JSONSerialization.data(
                     withJSONObject: [
                         "capture_count": captureCount, "view_capture_count": viewCaptureCount,
                         "failures": captureFailures,
-                    ], options: [.prettyPrinted, .sortedKeys]
-                ).write(to: directory.appendingPathComponent("smoke-report.json"))
-                try? Data(
+                    ], options: [.prettyPrinted, .sortedKeys])
+                if !(report.map { writeEvidence($0, to: directory.appendingPathComponent("smoke-report.json")) }
+                    ?? false)
+                {
+                    passed = false
+                }
+                let summary = Data(
                     "Native smoke: \(passed ? "PASS" : "FAIL"). \(captureCount) native window and sheet snapshots (\(viewCaptureCount) AppKit view captures). Capture failures: \(captureFailures.count). No network, microphone or speaker output.\n"
-                        .utf8
-                ).write(to: directory.appendingPathComponent("smoke.txt"))
-                NSApp.terminate(nil)
+                        .utf8)
+                if !writeEvidence(summary, to: directory.appendingPathComponent("smoke.txt")) { passed = false }
+                finishRun(model, passed: passed)
             }
         }
         func toolsProbe(_ model: AppModel) {
@@ -844,9 +978,7 @@
                 var calls: [String] = []
                 var result = "FAIL"
                 do {
-                    let preferences = UserDefaults.standard
-                    let service = RealtimeService(
-                        model: preferences.string(forKey: "model") ?? RealtimeService.defaultModel)
+                    let service = model.settings.conversationService()
                     let reply = try await service.reply(
                         ConversationRequest(
                             history: [],
@@ -917,11 +1049,11 @@
                     result = "UNVERIFIED: " + AppFailure.message(for: error, fallback: "Provider connection failed.")
                 }
                 _ = model.turn.finish(token)
-                try? Data(
-                    "Live Realtime instructions and tools: \(result). Calls: \(calls.joined(separator:", ")). Synthetic spoken response; audio returned without playback. No real library changes or microphone use.\n"
-                        .utf8
-                ).write(to: directory.appendingPathComponent("live-tools-probe.txt"))
-                NSApp.terminate(nil)
+                let written = writeEvidence(
+                    Data(
+                        "Live Realtime instructions and tools: \(result). Calls: \(calls.joined(separator:", ")). Synthetic spoken response; audio returned without playback. No real library changes or microphone use.\n"
+                            .utf8), to: directory.appendingPathComponent("live-tools-probe.txt"))
+                finishRun(model, passed: written && result == "PASS")
             }
         }
         func probe(_ model: AppModel) {
@@ -934,9 +1066,7 @@
                 try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
                 var lines: [String] = []
                 do {
-                    let service = RealtimeService(
-                        model: model.settings.modelName, voice: model.settings.conversationVoice,
-                        options: model.settings.conversationVoiceOptions)
+                    let service = model.settings.conversationService()
                     let result = try await service.reply(
                         ConversationRequest(history: [], text: "Reply with the single word ready."))
                     lines.append("Realtime text: \(!result.text.isEmpty ? "PASS" : "FAIL")")
@@ -947,7 +1077,7 @@
                     let spoken = try await service.reply(
                         ConversationRequest(history: [], text: "Say hello briefly.", spoken: true))
                     lines.append("Realtime audio generation: \(!spoken.audio.isEmpty ? "PASS" : "FAIL") (not played)")
-                    let reference = try await service.referenceAudio(
+                    let reference = try await model.settings.practiceService().referenceAudio(
                         text: "I would like a little more time to think.", root: model.store.root, force: true)
                     let samples = try AudioFile.samples(reference)
                     lines.append(
@@ -965,9 +1095,10 @@
                         )
                     }
                 } catch { lines.append("Realtime: \(error.localizedDescription)") }
-                try? Data((lines.joined(separator: "\n") + "\n").utf8).write(
+                let written = writeEvidence(
+                    Data((lines.joined(separator: "\n") + "\n").utf8),
                     to: directory.appendingPathComponent("live-probe.txt"))
-                NSApp.terminate(nil)
+                finishRun(model, passed: written && !lines.isEmpty && lines.allSatisfy { $0.contains(": PASS") })
             }
         }
     }

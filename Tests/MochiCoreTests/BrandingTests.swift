@@ -1,4 +1,5 @@
 import MochiKernel
+import MochiTestSupport
 import XCTest
 
 @testable import MochiCore
@@ -6,22 +7,19 @@ import XCTest
 final class BrandingTests: XCTestCase {
     func testPreviousMochiPreferencesSurviveIdentityChangeWithoutOverwritingNewValues() {
         let name = "mochi-identity-test-\(UUID())"
-        let defaults = UserDefaults(suiteName: name)!
+        let defaults = TestScratch.preferences(named: name)
         defer { defaults.removePersistentDomain(forName: name) }
         defaults.set("cedar", forKey: "conversationVoice")
-        let profile = Data("saved-profile".utf8)
         AppIdentity.migratePreferences(
             into: defaults,
             legacy: [
-                "conversationVoice": "marin", "practiceVoiceMode": "personal",
-                "voiceProfiles": profile, "personalVoiceOptions": Data([1, 2]),
+                "conversationVoice": "marin", "builtInPracticeVoice": "sage", "practiceVoiceOptions": Data([1, 2]),
                 "voiceGreetingHistory": ["Hello", "Hi"], "unknown": "ignore",
             ])
-        AppIdentity.migratePreferences(into: defaults, legacy: ["practiceVoiceMode": "builtIn"])
+        AppIdentity.migratePreferences(into: defaults, legacy: ["builtInPracticeVoice": "ash"])
         XCTAssertEqual(defaults.string(forKey: "conversationVoice"), "cedar")
-        XCTAssertEqual(defaults.string(forKey: "practiceVoiceMode"), "personal")
-        XCTAssertEqual(defaults.data(forKey: "voiceProfiles"), profile)
-        XCTAssertEqual(defaults.data(forKey: "personalVoiceOptions"), Data([1, 2]))
+        XCTAssertEqual(defaults.string(forKey: "builtInPracticeVoice"), "sage")
+        XCTAssertEqual(defaults.data(forKey: "practiceVoiceOptions"), Data([1, 2]))
         XCTAssertEqual(defaults.stringArray(forKey: "voiceGreetingHistory"), ["Hello", "Hi"])
         XCTAssertNil(defaults.object(forKey: "unknown"))
     }
@@ -49,15 +47,15 @@ final class BrandingTests: XCTestCase {
     }
     func testPreferencesOnlyCopyKnownMissingValues() {
         let name = "mochi-test-\(UUID())"
-        let defaults = UserDefaults(suiteName: name)!
+        let defaults = TestScratch.preferences(named: name)
         defer { defaults.removePersistentDomain(forName: name) }
         defaults.set("new-model", forKey: "model")
         AppIdentity.migratePreferences(
             into: defaults,
             legacy: ["model": "old-model", "clone": "test-clone", "auth": "api", "unknown": "do not copy"])
         XCTAssertEqual(defaults.string(forKey: "model"), "new-model")
-        XCTAssertEqual(defaults.string(forKey: "clone"), "test-clone")
-        XCTAssertNil(defaults.object(forKey: "unknown"))
+        // Preferences from retired features are left behind.
+        for key in ["clone", "auth", "unknown"] { XCTAssertNil(defaults.object(forKey: key), key) }
     }
     func testNewInstallAndUnsafeLegacyRoot() throws {
         let parent = temporary()
@@ -108,5 +106,5 @@ final class BrandingTests: XCTestCase {
         XCTAssertThrowsError(try AppIdentity.prepareDataDirectory(in: parent))
         XCTAssertTrue(FileManager.default.fileExists(atPath: new.appendingPathComponent("other-data").path))
     }
-    private func temporary() -> URL { FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString) }
+    private func temporary() -> URL { TestScratch.folder() }
 }

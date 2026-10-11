@@ -1,10 +1,11 @@
 import MochiCore
+import MochiTestSupport
 import XCTest
 
 @testable import MochiApp
 
 final class MessageDeletionTests: XCTestCase {
-    private func temporary() -> URL { FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString) }
+    private func temporary() -> URL { TestScratch.folder() }
 
     @MainActor func testDeletePersistsAndRemovesSearchAndContextWithoutDeletingOtherMessages() throws {
         let root = temporary()

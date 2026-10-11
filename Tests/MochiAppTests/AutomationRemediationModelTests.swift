@@ -52,7 +52,7 @@ final class AutomationRemediationModelTests: XCTestCase {
         let template = try app.executeTool(
             "get_conversation_template", arguments: ["template_id": ConversationTemplate.builtins[0].id.uuidString],
             origin: .external)
-        XCTAssertTrue((template["untrusted_fields"] as? [String] ?? []).contains("instructions"))
+        XCTAssertTrue((template["untrusted_fields"] as? [String] ?? []).contains("template.instructions"))
     }
 
     // MARK: One settings path (M18)

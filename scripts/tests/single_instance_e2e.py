@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Explicit native tests; invoke on the designated remote Mac, never via discovery."""
-import argparse, hashlib, json, os, plistlib, shutil, signal, subprocess, time, uuid
+import argparse, hashlib, json, os, plistlib, shutil, signal, subprocess, tempfile, time, uuid
 from pathlib import Path
 
 parser=argparse.ArgumentParser()
@@ -17,7 +17,17 @@ run_id=uuid.uuid4().hex
 scratch=root/run_id
 scratch.mkdir()
 owned=set(); checks=[]; contexts=[]
+# The distribution check claims the real per-user lock folder; remove it afterwards if this run created it.
+real_lock_dir=Path.home()/'Library/Application Support/com.lixiaolai.mochi-macos'; real_lock_dir_existed=real_lock_dir.exists()
+# The preview fixture is killed with SIGTERM, which skips the app's own removal of its preview library.
+preview_libraries=lambda:set(Path(tempfile.gettempdir()).glob('mochi-preview-*')); previews_before=preview_libraries()
 
+def alive(pid):
+    # kill -0 succeeds on a zombie, so reap exited children of this script first.
+    try:
+        if os.waitpid(pid,os.WNOHANG)[0]==pid: return False
+    except ChildProcessError: pass
+    return subprocess.run(['kill','-0',str(pid)],stderr=subprocess.DEVNULL).returncode==0
 def run(argv,**kw): return subprocess.run([str(x) for x in argv],check=True,**kw)
 def wait(fn,seconds=30):
     end=time.monotonic()+seconds
@@ -29,6 +39,10 @@ def wait(fn,seconds=30):
 def check(name,value):
     checks.append({'name':name,'pass':bool(value)})
     assert value,name
+
+def preference_suite(library):
+    # Mirrors DevelopmentLaunch.preferencesSuite: the whole standardized path, never just its basename.
+    return 'mochi-e2e-'+hashlib.sha256(os.path.normpath(os.path.abspath(str(library))).encode()).hexdigest()[:32]
 
 def context(name):
     base=scratch/name; events=base/'events'; events.mkdir(parents=True)
@@ -52,12 +66,12 @@ def owner(events,excluded=()):
     return wait(ready)
 
 def state(events,pid,command='snapshot'):
-    p=events/f'workspace-{pid}.json'; before=time.time()
-    run([scratch/'control',events,command])
+    p=events/f'workspace-{pid}.json'; request=str(uuid.uuid4())
+    run([scratch/'control',events,command,request])
     def ready():
         if p.exists():
             data=json.loads(p.read_text())
-            if data['time']>=before: return data
+            if data.get('request_id')==request: return data
     return wait(ready)
 
 def quit_owner(events,pid):
@@ -93,7 +107,7 @@ try:
     native=json.loads(evidence.read_text()); owned.add(native['pid'])
     check('All native tray/focus/idempotence checks pass',all(c['pass'] for c in native['checks']))
     report['native_tray']=native
-    wait(lambda:not subprocess.run(['kill','-0',str(native['pid'])],stderr=subprocess.DEVNULL).returncode==0)
+    wait(lambda:not alive(native['pid']))
 
     events,env=context('concurrent'); env['MOCHI_INSTANCE_TEST_ID']=run_id+'-race'
     children=[subprocess.Popen([str(exe),'--single-instance-smoke-test'],env=env,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL) for _ in range(6)]
@@ -108,11 +122,11 @@ try:
     check('Production owner obtains lock before model initialization',json.loads((events/str(pid)/'lock-acquired.json').read_text())['time']<=json.loads((events/str(pid)/'model-created.json').read_text())['time'])
     mini=state(events,pid,'minimize'); check('Workspace can be minimized',mini['miniaturized'])
     duplicate(events,env)
-    restored=state(events,pid); check('Duplicate restores minimized original window',restored['visible'] and not restored['miniaturized'] and restored['active'] and restored['key'])
+    restored=state(events,pid,'restored'); check('Duplicate restores minimized original window',restored['visible'] and not restored['miniaturized'] and restored['active'] and restored['key'])
     hidden=state(events,pid,'hide'); check('Tray hide retains app and removes Dock presence',hidden['hidden'] and hidden['tray'] and not hidden['dock'])
     copy=scratch/'CopiedMochi.app'; shutil.copytree(app,copy)
     duplicate(events,env,copy/'Contents/MacOS/Mochi')
-    restored=state(events,pid); check('Copied app restores the same tray window and Dock',restored['pid']==pid and restored['visible'] and not restored['hidden'] and restored['dock'] and restored['active'] and restored['key'])
+    restored=state(events,pid,'restored'); check('Copied app restores the same tray window and Dock',restored['pid']==pid and restored['visible'] and not restored['hidden'] and restored['dock'] and restored['active'] and restored['key'])
     previous=len(list(events.glob('*/duplicate-exit.json'))); launch(copy,env)
     wait(lambda:len(list(events.glob('*/duplicate-exit.json')))>previous)
     check('Forced Launch Services duplicate avoids second model',len(list(events.glob('*/model-created.json')))==1)
@@ -135,7 +149,12 @@ try:
     (legacy/'Contents/Info.plist').write_bytes(plistlib.dumps(replaced))
     (legacy_events/'reopened').unlink()
     distribution=scratch/'DistributionMochi.app'; shutil.copytree(app,distribution)
-    bin_path=Path(subprocess.check_output(['swift','build','-c','release','--show-bin-path'],cwd=project,text=True).strip())
+    # --show-bin-path builds nothing; the release folder holds build-app.sh's development binary.
+    # Build the distribution configuration in its own scratch path so the handoff is the shipped one.
+    dist_build=['swift','build','-c','release','--scratch-path',str(scratch/'distribution-build')]
+    run(dist_build,cwd=project,stdout=subprocess.DEVNULL)
+    bin_path=Path(subprocess.check_output(dist_build+['--show-bin-path'],cwd=project,text=True).strip())
+    if b'--smoke-test' in (bin_path/'Mochi').read_bytes(): raise AssertionError('Distribution handoff binary contains development code')
     shutil.copy2(bin_path/'Mochi',distribution/'Contents/MacOS/Mochi')
     shutil.copy2(bin_path/'mochi-mcp',distribution/'Contents/MacOS/mochi-mcp')
     run(['codesign','--force','--sign','-',distribution/'Contents/MacOS/mochi-mcp'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
@@ -148,7 +167,7 @@ try:
     wait((legacy_events/'reopened').exists)
     check('Distribution replacement handoff leaves the real library untouched',before_library==(library.exists(),library.stat().st_mtime_ns if library.exists() else None))
     os.kill(legacy_pid,signal.SIGTERM)
-    wait(lambda:subprocess.run(['kill','-0',str(legacy_pid)],stderr=subprocess.DEVNULL).returncode!=0)
+    wait(lambda:not alive(legacy_pid))
 
     preview_events,preview_env=context('unlocked-preview'); launch(app,preview_env,['--preview']); preview_pid=owner(preview_events)
     events,env=context('preview-coexistence'); launch(app,env); pid=owner(events)
@@ -157,7 +176,7 @@ try:
     # The unlocked preview is an artificial developer fixture, not an ownership
     # participant. Dispose of that process directly after the coexistence check.
     os.kill(preview_pid,signal.SIGTERM)
-    wait(lambda:subprocess.run(['kill','-0',str(preview_pid)],stderr=subprocess.DEVNULL).returncode!=0)
+    wait(lambda:not alive(preview_pid))
     report['result']='PASS'
 except Exception as exc:
     report['result']='FAIL'; report['error']=str(exc)
@@ -170,13 +189,13 @@ finally:
         try: os.kill(pid,signal.SIGTERM)
         except ProcessLookupError: continue
         end=time.monotonic()+5
-        while time.monotonic()<end and subprocess.run(['kill','-0',str(pid)],stderr=subprocess.DEVNULL).returncode==0: time.sleep(.05)
-        if subprocess.run(['kill','-0',str(pid)],stderr=subprocess.DEVNULL).returncode==0:
+        while time.monotonic()<end and alive(pid): time.sleep(.05)
+        if alive(pid):
             try: os.kill(pid,signal.SIGKILL)
             except ProcessLookupError: pass
             end=time.monotonic()+5
-            while time.monotonic()<end and subprocess.run(['kill','-0',str(pid)],stderr=subprocess.DEVNULL).returncode==0: time.sleep(.05)
-        if subprocess.run(['kill','-0',str(pid)],stderr=subprocess.DEVNULL).returncode==0: cleanup_ok=False
+            while time.monotonic()<end and alive(pid): time.sleep(.05)
+        if alive(pid): cleanup_ok=False
     if cleanup_ok:
         retained=root/'events'/run_id
         retained.mkdir(parents=True,exist_ok=True)
@@ -192,14 +211,20 @@ finally:
                 shutil.rmtree(bundle)
         subprocess.run([register,'-u',str(app)],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
         for _,env in contexts:
-            suite='mochi-e2e-'+Path(env['MOCHI_E2E_LIBRARY_ROOT']).name
-            subprocess.run(['defaults','delete',suite],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+            subprocess.run(['defaults','delete',preference_suite(env['MOCHI_E2E_LIBRARY_ROOT'])],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
         for folder in root.rglob('library-*'):
             prior_id=folder.parent.parent.name
             if len(prior_id)==32 and all(c in '0123456789abcdef' for c in prior_id) and folder.name.startswith('library-'+prior_id+'-'):
-                subprocess.run(['defaults','delete','mochi-e2e-'+folder.name],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+                # Builds before path-keyed suites named them by the folder basename.
+                for suite in [preference_suite(folder),'mochi-e2e-'+folder.name]:
+                    subprocess.run(['defaults','delete',suite],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
         shutil.rmtree(scratch)
-        report['cleanup']={'owned_processes_exited':True,'scratch_removed':not scratch.exists(),'test_apps_unregistered':True,'private_preference_suites_deleted':True}
+        # The app keeps fixture locks in its temporary directory; it leaves their removal to this runner.
+        locks=[Path(tempfile.gettempdir())/('mochi-instance-'+run_id+suffix) for suffix in ['-tray','-race']]
+        for lock in locks: shutil.rmtree(lock,ignore_errors=True)
+        if not real_lock_dir_existed: shutil.rmtree(real_lock_dir,ignore_errors=True)
+        for preview in preview_libraries()-previews_before: shutil.rmtree(preview,ignore_errors=True)
+        report['cleanup']={'owned_processes_exited':True,'scratch_removed':not scratch.exists(),'fixture_locks_removed':not any(l.exists() for l in locks),'real_lock_dir_restored':real_lock_dir.exists()==real_lock_dir_existed,'preview_libraries_removed':not (preview_libraries()-previews_before),'test_apps_unregistered':True,'private_preference_suites_deleted':True}
     else:
         report['result']='FAIL'; report['error']='Owned processes failed to exit; lock directories retained'
     report['finished']=time.time()

@@ -155,71 +155,91 @@ extension AppModel {
         templateReturnDraft = nil
     }
     func executeTemplateTool(_ name: MochiToolName, arguments: [String: Any]) throws -> [String: Any] {
-        func result(_ fields: [String: Any]) -> [String: Any] {
-            fields.merging([
-                "ok": true, "revision": controlRevision, "catalog_revision": templateCatalogRevision,
-                "untrusted_fields": ["title", "description", "character_name", "instructions"],
-            ]) { _, new in new }
-        }
         let request = try MochiTools.decode(TemplateArguments.self, from: arguments)
         switch name {
-        case .listConversationTemplates:
-            let list = try MochiTools.decode(TemplateListArguments.self, from: arguments)
-            if let expected = list.expectedCatalogRevision, expected != templateCatalogRevision {
-                throw AppFailure("Template catalog changed. Restart listing from offset 0.")
-            }
-            let query = (list.query ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            let origin = list.origin ?? "all"
-            let values = allTemplates.filter {
-                (origin == "all" || ($0.isBuiltin ? "built_in" : "user") == origin)
-                    && (query.isEmpty || $0.title.localizedCaseInsensitiveContains(query)
-                        || $0.description.localizedCaseInsensitiveContains(query))
-            }.sorted {
-                if $0.isBuiltin != $1.isBuiltin { return $0.isBuiltin }
-                if $0.title != $1.title { return $0.title.utf8.lexicographicallyPrecedes($1.title.utf8) }
-                return $0.id.uuidString < $1.id.uuidString
-            }
-            let offset = min(list.offset ?? 0, values.count)
-            let limit = list.limit ?? 30
-            var page: [[String: Any]] = []
-            var index = offset
-            while index < values.count && page.count < limit {
-                let item = values[index].representation(includeInstructions: false)
-                let candidate = result(["templates": page + [item], "next_offset": index + 1])
-                if try JSONSerialization.data(withJSONObject: candidate).count >= 110000 { break }
-                page.append(item)
-                index += 1
-            }
-            return result([
-                "templates": page, "next_offset": index < values.count ? index as Any : NSNull(),
-                "untrusted_fields": ["templates.title", "templates.description", "templates.character_name"],
-            ])
-        case .createConversationTemplate:
-            // A retried request with the same key returns the first result instead of creating a duplicate.
-            let signature = try MochiTools.signature(name: name.rawValue, arguments: arguments)
-            if let key = request.idempotencyKey, let previous = automation.templateCreations[key] {
-                guard previous.signature == signature else {
-                    throw AppFailure("This idempotency_key was already used for a different template.")
-                }
-                return result(["template": previous.template, "replayed": true])
-            }
-            let template = try createTemplate(fields: arguments).representation()
-            if let key = request.idempotencyKey { automation.templateCreations.insert((signature, template), for: key) }
-            return result(["template": template])
+        case .listConversationTemplates: return try listTemplates(arguments: arguments)
+        case .createConversationTemplate: return try createTemplateOnce(arguments: arguments, request: request)
         case .getConversationTemplate, .updateConversationTemplate, .deleteConversationTemplate:
             guard let id = request.templateID else { throw AppFailure("A template ID is required.") }
-            if name == .getConversationTemplate { return result(["template": try template(id: id).representation()]) }
+            if name == .getConversationTemplate {
+                return templateResult(["template": try template(id: id).representation()])
+            }
             guard let revision = request.expectedTemplateRevision else {
                 throw AppFailure("Read the template revision first.")
             }
             if name == .updateConversationTemplate {
-                return result([
+                return templateResult([
                     "template": try updateTemplate(id: id, revision: revision, fields: arguments).representation()
                 ])
             }
             try deleteTemplate(id: id, revision: revision)
-            return result(["deleted_template_id": id.uuidString])
+            return templateResult(["deleted_template_id": id.uuidString], untrusted: [])
         default: throw AppFailure("This is not a template action.")
         }
+    }
+    private static let templateFields = [
+        "template.title", "template.description", "template.character_name", "template.instructions",
+    ]
+    /// `untrusted` names the fields of `fields` that hold library text; by default those of one `template`.
+    /// `catalogRevision` lets a caller that builds many candidate responses compute it once.
+    private func templateResult(
+        _ fields: [String: Any], untrusted: [String]? = nil,
+        catalogRevision: String? = nil
+    ) -> [String: Any] {
+        fields.merging([
+            "ok": true, "revision": controlRevision, "catalog_revision": catalogRevision ?? templateCatalogRevision,
+            "untrusted_fields": untrusted ?? Self.templateFields,
+        ]) { _, new in new }
+    }
+    private func listTemplates(arguments: [String: Any]) throws -> [String: Any] {
+        let list = try MochiTools.decode(TemplateListArguments.self, from: arguments)
+        let catalogRevision = templateCatalogRevision
+        if let expected = list.expectedCatalogRevision, expected != catalogRevision {
+            throw AppFailure("Template catalog changed. Restart listing from offset 0.")
+        }
+        let query = (list.query ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let origin = list.origin ?? "all"
+        let values = allTemplates.filter {
+            (origin == "all" || ($0.isBuiltin ? "built_in" : "user") == origin)
+                && (query.isEmpty || $0.title.localizedCaseInsensitiveContains(query)
+                    || $0.description.localizedCaseInsensitiveContains(query))
+        }.sorted {
+            if $0.isBuiltin != $1.isBuiltin { return $0.isBuiltin }
+            if $0.title != $1.title { return $0.title.utf8.lexicographicallyPrecedes($1.title.utf8) }
+            return $0.id.uuidString < $1.id.uuidString
+        }
+        let untrusted = ["templates.title", "templates.description", "templates.character_name"]
+        func page(_ items: [[String: Any]], next: Int?) -> [String: Any] {
+            templateResult(
+                ["templates": items, "next_offset": next.map { $0 as Any } ?? NSNull()], untrusted: untrusted,
+                catalogRevision: catalogRevision)
+        }
+        let offset = min(list.offset ?? 0, values.count)
+        let limit = list.limit ?? 30
+        var items: [[String: Any]] = []
+        var index = offset
+        while index < values.count && items.count < limit {
+            let item = values[index].representation(includeInstructions: false)
+            if try JSONSerialization.data(withJSONObject: page(items + [item], next: index + 1)).count >= 110000 {
+                break
+            }
+            items.append(item)
+            index += 1
+        }
+        return page(items, next: index < values.count ? index : nil)
+    }
+    /// A retried request with the same key returns the first result instead of creating a duplicate.
+    private func createTemplateOnce(arguments: [String: Any], request: TemplateArguments) throws -> [String: Any] {
+        let signature = try MochiTools.signature(
+            name: MochiToolName.createConversationTemplate.rawValue, arguments: arguments)
+        if let key = request.idempotencyKey, let previous = automation.templateCreations[key] {
+            guard previous.signature == signature else {
+                throw AppFailure("This idempotency_key was already used for a different template.")
+            }
+            return templateResult(["template": previous.template, "replayed": true])
+        }
+        let template = try createTemplate(fields: arguments).representation()
+        if let key = request.idempotencyKey { automation.templateCreations.insert((signature, template), for: key) }
+        return templateResult(["template": template])
     }
 }

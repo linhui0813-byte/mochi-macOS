@@ -1,5 +1,6 @@
 import MochiAutomation
 import MochiKernel
+import MochiTestSupport
 import XCTest
 
 @testable import MochiCore
@@ -48,7 +49,7 @@ final class ConversationTemplateTests: XCTestCase {
         XCTAssertEqual(MochiTools.boundedInstructions(enormous), "")
     }
     func testMigrationBacksUpReupgradeAndStampsVersion() throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let root = TestScratch.folder()
         defer { try? FileManager.default.removeItem(at: root) }
         let store = LibraryStore(root: root)
         try store.prepare()
@@ -78,7 +79,7 @@ final class ConversationTemplateTests: XCTestCase {
 
 extension ConversationTemplateTests {
     func testRecoveryImportKeepsOverCapTemplatesAndLocalCollisions() throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let root = TestScratch.folder()
         let backup = root.appendingPathComponent("backup.mochilibrary")
         defer { try? FileManager.default.removeItem(at: root) }
         var imported = Library()
@@ -176,7 +177,7 @@ extension ConversationTemplateTests {
 // Audit regressions (2026-10-10).
 extension ConversationTemplateTests {
     func testV1MigrationBackupIsPrivateCompleteAndLeavesNoStaging() throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let root = TestScratch.folder()
         defer { try? FileManager.default.removeItem(at: root) }
         let store = LibraryStore(root: root)
         try store.prepare()
@@ -233,7 +234,7 @@ extension ConversationTemplateTests {
 
 extension ConversationTemplateTests {
     func testBackupFailureCannotReplaceOriginalAndReservedTemplateImportFails() throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let root = TestScratch.folder()
         defer { try? FileManager.default.removeItem(at: root) }
         let store = LibraryStore(root: root)
         try store.prepare()

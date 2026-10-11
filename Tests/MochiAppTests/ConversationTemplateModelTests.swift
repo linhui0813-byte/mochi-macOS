@@ -1,12 +1,13 @@
 import MochiCore
 import MochiKernel
+import MochiTestSupport
 import XCTest
 
 @testable import MochiApp
 
 final class ConversationTemplateModelTests: XCTestCase {
     @MainActor func testMCPIndependentCatalogAndImmutableSnapshots() throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let root = TestScratch.folder()
         defer { try? FileManager.default.removeItem(at: root) }
         let app = makeApp(root: root, preferences: makePreferences())
         app.externalControlEnabled = true
@@ -62,7 +63,7 @@ final class ConversationTemplateModelTests: XCTestCase {
         XCTAssertEqual(unchanged.revision, t.revision)
     }
     @MainActor func testFailedTemplateSavePreservesConversationAndDraft() throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let root = TestScratch.folder()
         defer { try? FileManager.default.removeItem(at: root) }
         let app = makeApp(root: root, preferences: makePreferences())
         app.error = "Existing error"

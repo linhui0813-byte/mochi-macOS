@@ -1,3 +1,4 @@
+import MochiTestSupport
 import XCTest
 
 @testable import MochiCore
@@ -165,5 +166,5 @@ final class HistoryTests: XCTestCase {
             withDestinationURL: source.appendingPathComponent("shared.wav"))
         XCTAssertThrowsError(try LibraryBackup.read(package))
     }
-    private func temporary() -> URL { FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString) }
+    private func temporary() -> URL { TestScratch.folder() }
 }

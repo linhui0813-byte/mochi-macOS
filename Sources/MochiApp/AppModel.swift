@@ -118,7 +118,12 @@ struct MessageDeletionUndo {
                 if oldValue != thoughtRecording { removeUnreferencedRecording(oldValue) }
                 return
             }
-            if oldValue != thoughtRecording { recognizedThought = nil }
+            if oldValue != thoughtRecording, recognizedThought != nil {
+                // One save below covers both fields, so the previous-copy snapshot keeps the state before this change.
+                restoringHelp = true
+                recognizedThought = nil
+                restoringHelp = false
+            }
             if persistHelpDraft(), oldValue != thoughtRecording { removeUnreferencedRecording(oldValue) }
         }
     }
@@ -133,6 +138,8 @@ struct MessageDeletionUndo {
     @ObservationIgnored var speech: SpeechServices
     @ObservationIgnored var media: MediaServices
     @ObservationIgnored var playReply: ((String) -> Void)?
+    /// Writes a reply's audio file; replaceable so a failed audio write can be tested while the library still saves.
+    @ObservationIgnored var writeReplyAudio: (Data, URL) throws -> Void = { try $0.write(to: $1, options: .atomic) }
     var greetingActive = false
     @ObservationIgnored var recordingNow: () -> Date = Date.init
     @ObservationIgnored var recordingSleep: (UInt64) async throws -> Void = { try await Task.sleep(nanoseconds: $0) }
@@ -142,11 +149,18 @@ struct MessageDeletionUndo {
     var error: String?
     var notice: String? {
         didSet {
-            if notice != "Message deleted." { finishMessageDeletion() }
+            if !noticeKeepsDeletionUndo { finishMessageDeletion() }
+            noticeKeepsDeletionUndo = false
             scheduleNoticeDismissal()
         }
     }
     var messageDeletionUndo: MessageDeletionUndo?
+    /// True only while the deletion notice itself is shown; any other notice ends the chance to undo.
+    @ObservationIgnored private var noticeKeepsDeletionUndo = false
+    func showMessageDeletedNotice() {
+        noticeKeepsDeletionUndo = true
+        notice = "Message deleted."
+    }
     @ObservationIgnored private var noticeTask: Task<Void, Never>?
     /// The timer that will clear the current notice, so a caller can wait for it to run.
     var pendingNoticeDismissal: Task<Void, Never>? { noticeTask }
@@ -169,6 +183,8 @@ struct MessageDeletionUndo {
     var referencePitch: [PitchPoint] = []
     var attemptPitch: [PitchPoint] = []
     var playbackFile: String?
+    /// The turn a voice preview owns, first while it is generated, then while it plays.
+    var previewEpoch: UUID?
     var speaking = false
     var slow = false
     var settingsOpen = false
@@ -179,10 +195,15 @@ struct MessageDeletionUndo {
     var settingsTab = "conversation"
     let audio: AudioController
     let demo: Bool
+    /// A preview library created in the temporary folder for this launch, discarded on quit.
+    let temporaryLibrary: Bool
     @ObservationIgnored var task: Task<Void, Never>?
     /// The job that currently owns the turn, so callers can await its end after cancelling it.
     var currentTask: Task<Void, Never>? { task }
     @ObservationIgnored var recordingClock: Task<Void, Never>?
+    /// The recorder stops itself after this many seconds.
+    static let recordingLimit: Double = 60
+    @ObservationIgnored private var exclusiveTask: (token: UUID, task: Task<Void, Never>)?
     @ObservationIgnored var chooseFile: @MainActor (PanelRequest) -> URL? = FilePanels.choose
     var conversation: Conversation? { library.conversations.first { $0.id == selectedID } }
     var writableConversation: Bool { conversation.map { !$0.archived && !$0.isDeleted } ?? false }
@@ -213,6 +234,7 @@ struct MessageDeletionUndo {
         InstanceEvidence.record("model-created")
         assert(!TestEnvironment.active || preferences != nil, "Tests must give AppModel isolated preferences.")
         self.demo = demo
+        temporaryLibrary = demo && libraryRoot == nil
         let audio = AudioController()
         self.audio = audio
         self.media = media ?? .live(audio)
@@ -235,6 +257,11 @@ struct MessageDeletionUndo {
         libraryController.open(managedIn: managed ? support : nil, isolated: libraryRoot != nil) { [weak self] in
             self?.libraryOpened()
         }
+    }
+    /// Preview launches create a fresh library each time; remove it so previews leave nothing behind.
+    func discardTemporaryLibrary() {
+        guard temporaryLibrary else { return }
+        try? FileManager.default.removeItem(at: store.root)
     }
     /// Selects where the user left off once the library is open, or failed to open.
     private func libraryOpened() {
@@ -269,7 +296,9 @@ struct MessageDeletionUndo {
                 library.selectedConversationID.flatMap { id in
                     library.conversations.contains(where: { $0.id == id }) ? id : nil
                 } ?? library.history(in: .active).first?.id
-            historyScope = .active
+            if let chat = conversation {
+                historyScope = chat.isDeleted ? .deleted : chat.archived ? .archived : .active
+            }
             draft = conversation?.draft ?? ""
             notice = "Restored the earlier copy of your library. The unreadable file was kept in the data folder."
         } catch {
@@ -286,14 +315,9 @@ struct MessageDeletionUndo {
             return
         }
     }
-    func stop() {
-        deferredToolAction = nil
-        greetingActive = false
-        let unfinishedRecording = media.stopRecording()
-        task?.cancel()
-        task = nil
-        recordingClock?.cancel()
-        recordingClock = nil
+    /// False when the library could not be saved; the failure is already reported.
+    @discardableResult func stop() -> Bool {
+        let unfinishedRecording = cancelTurn()
         transcripts.cancelAll()
         for ci in library.conversations.indices {
             for mi in library.conversations[ci].messages.indices
@@ -301,24 +325,33 @@ struct MessageDeletionUndo {
                 library.conversations[ci].messages[mi].transcriptionState = .interrupted
             }
         }
-        helpProgress = nil
-        recordingLevel = -80
-        audio.stop()
-        playbackFile = nil
-        speaking = false
-        recordingMeaning = false
-        turn.stop()
-        persistHelpDraft()
-        save()
+        // One write covers the interrupted transcripts and the help draft.
+        stageHelpDraft()
+        let saved = save()
         removeUnreferencedRecording(unfinishedRecording?.lastPathComponent)
+        return saved
     }
+    /// True while the turn is still the one a voice preview started; any other activity takes a new epoch.
+    var previewActive: Bool { previewEpoch == turn.epoch && turn.activity != .idle }
+    /// Ends a voice preview without Stop's other effects on replies, transcriptions and recordings.
+    func stopPreview() {
+        guard previewActive else { return }
+        _ = cancelTurn()
+    }
+    /// Unlike Stop, leaves transcriptions running and does not force a save.
     func cancelHelpWork() {
-        deferredToolAction = nil
-        greetingActive = false
-        let recording = media.stopRecording()
         if !practice && task != nil && turn.activity == .generating {
             notice = "Your pending reply was cancelled. You can retry it when you return."
         }
+        let recording = cancelTurn()
+        persistHelpDraft()
+        removeUnreferencedRecording(recording?.lastPathComponent)
+    }
+    /// Ends whatever owns the turn and returns the unfinished recording, if any, for the caller to discard.
+    private func cancelTurn() -> URL? {
+        deferredToolAction = nil
+        greetingActive = false
+        let recording = media.stopRecording()
         task?.cancel()
         task = nil
         recordingClock?.cancel()
@@ -330,8 +363,7 @@ struct MessageDeletionUndo {
         helpProgress = nil
         recordingLevel = -80
         turn.stop()
-        persistHelpDraft()
-        removeUnreferencedRecording(recording?.lastPathComponent)
+        return recording
     }
     func leavePractice() {
         if isSavedPractice {
@@ -367,7 +399,8 @@ struct MessageDeletionUndo {
                 if progress != nil { self.helpProgress = nil }
                 _ = self.turn.finish(token)
             })
-        task = Task { [weak self] in
+        let handle = Task { [weak self] in
+            defer { self?.releaseExclusiveTask(token) }
             do {
                 try await body(job)
                 if job.isCurrent() { job.finish() }
@@ -377,7 +410,15 @@ struct MessageDeletionUndo {
                 self.fail(error, token: token, context: context)
             }
         }
+        task = handle
+        exclusiveTask = (token, handle)
         return token
+    }
+    /// Clears the finished job's handle unless a newer job has already replaced it.
+    private func releaseExclusiveTask(_ token: UUID) {
+        guard let owned = exclusiveTask, owned.token == token else { return }
+        if task == owned.task { task = nil }
+        exclusiveTask = nil
     }
     func removeUnreferencedRecording(_ name: String?) {
         do {

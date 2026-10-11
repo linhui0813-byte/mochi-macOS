@@ -21,8 +21,12 @@ var buffer = [UInt8](repeating: 0, count: 65536)
 while true {
     let count = Darwin.read(STDIN_FILENO, &buffer, buffer.count)
     if count < 0 {
-        if errno == EINTR { continue }
-        break
+        let code = errno
+        if code == EINTR { continue }
+        // A transport failure is not end of input: buffered bytes may be a truncated request, so none is answered.
+        let reason = String(cString: strerror(code))
+        FileHandle.standardError.write(Data("mochi-mcp: reading stdin failed: \(reason)\n".utf8))
+        exit(EXIT_FAILURE)
     }
     if count == 0 { break }
     for line in framer.feed(Data(buffer[0..<count])) { answer(line) }

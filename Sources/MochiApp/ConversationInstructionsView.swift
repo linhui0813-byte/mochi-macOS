@@ -15,7 +15,7 @@ struct ConversationInstructionsView: View {
             if instructions != app.library.conversations.first(where: { $0.id == id })?.instructions {
                 try MochiTools.validateInstructions(instructions)
             }
-            try ConversationTemplate.validateName(characterName)
+            try ConversationTemplate.validateName(characterName?.trimmingCharacters(in: .whitespacesAndNewlines))
             try preferences.validate()
             return nil
         } catch { return (error as? AppFailure)?.message ?? "Review these settings." }
@@ -40,6 +40,7 @@ struct ConversationInstructionsView: View {
                     instructions = ""
                     characterName = nil
                     preferences = ConversationPreferences()
+                    saveError = nil
                 }
                 Button("Save as Template…") {
                     app.saveConversationAsTemplate(
@@ -65,7 +66,10 @@ struct ConversationInstructionsView: View {
                     app.error = existingError
                 }.keyboardShortcut(.defaultAction).disabled(validationError != nil || app.busy)
             }
-        }.padding(24).frame(width: 560, height: 540)
+        }.padding(24).frame(width: 620, height: 570)
+            .onChange(of: instructions) { saveError = nil }
+            .onChange(of: characterName) { saveError = nil }
+            .onChange(of: preferences) { saveError = nil }
             .onAppear {
                 if let draft = app.retainedInstructionsDraft, draft.id == id {
                     instructions = draft.instructions

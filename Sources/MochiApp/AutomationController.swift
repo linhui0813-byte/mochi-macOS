@@ -33,8 +33,15 @@ struct RecentResults<Value> {
     @ObservationIgnored var voiceResults = RecentResults<[String: Any]>()
     /// The voice call currently executing, so an action it schedules can record its own result.
     @ObservationIgnored var voiceToolKey: String?
+    /// The voice call whose action is scheduled after the reply, so a retry of it is not refused as a second one.
+    @ObservationIgnored var scheduledVoiceToolKey: String?
     /// Template creations by client idempotency key, so a retry after a lost reply cannot duplicate one.
     @ObservationIgnored var templateCreations = RecentResults<(signature: String, template: [String: Any])>()
+
+    /// The latest configuration's callbacks, read on each use so reconfiguring never leaves a stale one running.
+    @ObservationIgnored private var recheck: (@MainActor () -> Void)?
+    @ObservationIgnored private var handler: (@MainActor (Data) -> Data)?
+    @ObservationIgnored private var serverPath: String?
 
     /// Starts, keeps alive or stops the server. `recheck` runs every 30 s while enabled, so a socket removed
     /// from the temporary folder is recreated; `handler` answers each request on the main actor.
@@ -47,31 +54,40 @@ struct RecentResults<Value> {
             healthTask = nil
             server?.stop()
             server = nil
+            serverPath = nil
+            self.recheck = nil
+            self.handler = nil
             externalResults.removeAll()
             status = "Disabled"
             return
         }
+        self.recheck = recheck
+        self.handler = handler
         if healthTask == nil {
-            healthTask = Task {
+            healthTask = Task { [weak self] in
                 while !Task.isCancelled {
                     do { try await Task.sleep(nanoseconds: 30_000_000_000) } catch { return }
-                    recheck()
+                    guard let self else { return }
+                    self.recheck?()
                 }
             }
         }
         if let server {
-            if server.endpointAvailable { return }
+            if server.endpointAvailable && serverPath == path { return }
             server.stop()
             self.server = nil
+            serverPath = nil
         }
         let server = LocalControlServer()
         do {
-            try server.start(path: path, handler: handler)
+            try server.start(path: path) { [weak self] data in self?.handler?(data) ?? Data() }
             self.server = server
+            serverPath = path
             status = "Available locally"
         } catch {
             MochiLog.failure(MochiLog.automation, "Start external control", error)
             status = AppFailure.message(for: error, fallback: "Could not start external control.")
         }
     }
+    deinit { healthTask?.cancel() }
 }

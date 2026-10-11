@@ -1,4 +1,5 @@
 import MochiKernel
+import MochiTestSupport
 import XCTest
 
 @testable import MochiCore
@@ -183,7 +184,7 @@ final class TranscriptionTests: XCTestCase {
         } catch is CancellationError {} catch { XCTFail("Expected cancellation") }
     }
     func testHelpRecordingBackupRemapsAndKeepsAudioOnImport() throws {
-        let parent = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let parent = TestScratch.folder()
         defer { try? FileManager.default.removeItem(at: parent) }
         let root = parent.appendingPathComponent("source")
         let target = parent.appendingPathComponent("target")
@@ -204,7 +205,7 @@ final class TranscriptionTests: XCTestCase {
         XCTAssertTrue(local.referencedAudio.contains(name))
     }
     func testPendingLoadBecomesInterruptedAndMigrationPreservesOriginal() throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let root = TestScratch.folder()
         defer { try? FileManager.default.removeItem(at: root) }
         let store = LibraryStore(root: root)
         var library = Library()

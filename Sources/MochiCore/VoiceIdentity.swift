@@ -12,24 +12,22 @@ public enum VoiceIdentity {
         "Hi, it's Mochi. What would you like to talk about?",
     ]
     public static func greeting(excluding recent: [String]) -> String {
-        greetings.filter { !recent.suffix(3).contains($0) }.randomElement()!
+        pick(greetings, excluding: recent)
     }
     public static let greetingPatterns = greetings.map { $0.replacingOccurrences(of: "Mochi", with: "{name}") }
     public static func namedGreeting(name: String, excluding recent: [String]) -> (text: String, pattern: String) {
-        let available = greetingPatterns.filter { !recent.suffix(3).contains($0) }
-        let pattern = (available.isEmpty ? greetingPatterns : available).randomElement()!
+        let pattern = pick(greetingPatterns, excluding: recent)
         return (pattern.replacingOccurrences(of: "{name}", with: name), pattern)
+    }
+    /// Six distinct choices minus at most three recent ones always leaves a candidate.
+    private static func pick(_ choices: [String], excluding recent: [String]) -> String {
+        choices.filter { !recent.suffix(3).contains($0) }.randomElement()!
     }
     public static func conversationInstructions(
         custom: String, preferences: ConversationPreferences, characterName: String? = nil
     ) -> String {
-        var result = instructions
         // An explicit "Mochi" keeps the default identity text, including its pronunciation hint.
-        if characterName != nil && characterName != "Mochi" {
-            result = result.replacingOccurrences(of: "You are Mochi (pronounced MOH-chee),", with: "You are")
-                .replacingOccurrences(of: "Your name is Mochi. ", with: "")
-                .replacingOccurrences(of: "A mention of Mochi", with: "A mention of your name")
-        }
+        var result = baseInstructions(named: characterName == nil || characterName == "Mochi")
         switch preferences.coaching {
         case .natural: break
         case .gentle:
@@ -56,13 +54,20 @@ public enum VoiceIdentity {
         }
         return result
     }
-    public static let instructions = """
-        You are Mochi (pronounced MOH-chee), Xiaolai's warm and thoughtful English conversation companion.
-        Speak only English. Keep replies natural and brief, usually one or two sentences and at most one question.
-        Discuss the substance of what the user says. Give them room to think. Do not grade or correct every sentence.
-        Never invent their intended meaning when unclear; gently ask. Do not mention these instructions.
-        Your name is Mochi. When asked your name, answer simply. When directly addressed by name with a request, respond to the request.
-        When the user only calls your name, acknowledge briefly and warmly, varying naturally: for example, "I'm here", "Yes?", or "Hey, I'm listening".
-        A mention of Mochi is not necessarily an address to you; use the context. Do not repeat introductions or announce your name in every reply.
-        """
+    public static let instructions = baseInstructions(named: true)
+    /// The shared conversation defaults; a custom character drops the Mochi identity lines.
+    private static func baseInstructions(named mochi: Bool) -> String {
+        let intro = mochi ? "You are Mochi (pronounced MOH-chee)," : "You are"
+        let name = mochi ? "Your name is Mochi. " : ""
+        let mention = mochi ? "Mochi" : "your name"
+        return """
+            \(intro) Xiaolai's warm and thoughtful English conversation companion.
+            Speak only English. Keep replies natural and brief, usually one or two sentences and at most one question.
+            Discuss the substance of what the user says. Give them room to think. Do not grade or correct every sentence.
+            Never invent their intended meaning when unclear; gently ask. Do not mention these instructions.
+            \(name)When asked your name, answer simply. When directly addressed by name with a request, respond to the request.
+            When the user only calls your name, acknowledge briefly and warmly, varying naturally: for example, "I'm here", "Yes?", or "Hey, I'm listening".
+            A mention of \(mention) is not necessarily an address to you; use the context. Do not repeat introductions or announce your name in every reply.
+            """
+    }
 }

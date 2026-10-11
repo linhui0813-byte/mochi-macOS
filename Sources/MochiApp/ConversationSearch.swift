@@ -7,27 +7,28 @@ struct ConversationSearchControl: View {
         if app.conversationSearchOpen {
             HStack(spacing: 6) {
                 ConversationSearchField(app: app).frame(width: 180)
-                if !app.conversationQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Text(
-                        app.conversationMatchIDs.isEmpty
+                Text(
+                    app.conversationQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        ? ""
+                        : app.conversationMatchIDs.isEmpty
                             ? "No matches"
                             : "\(min(app.conversationMatchIndex+1,app.conversationMatchIDs.count))/\(app.conversationMatchIDs.count)"
-                    )
-                    .font(.caption.monospacedDigit()).foregroundStyle(.secondary).fixedSize()
-                    Button {
-                        app.moveConversationMatch(-1)
-                    } label: {
-                        Image(systemName: "chevron.up")
-                    }
-                    .help("Previous Match (⇧⌘G)").accessibilityLabel("Previous Match").disabled(
-                        app.conversationMatchIDs.isEmpty)
-                    Button {
-                        app.moveConversationMatch(1)
-                    } label: {
-                        Image(systemName: "chevron.down")
-                    }
-                    .help("Next Match (⌘G)").accessibilityLabel("Next Match").disabled(app.conversationMatchIDs.isEmpty)
+                )
+                .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                .lineLimit(1).frame(width: 64, alignment: .trailing)
+                Button {
+                    app.moveConversationMatch(-1)
+                } label: {
+                    Image(systemName: "chevron.up")
                 }
+                .help("Previous Match (⇧⌘G)").accessibilityLabel("Previous Match").disabled(
+                    app.conversationMatchIDs.isEmpty)
+                Button {
+                    app.moveConversationMatch(1)
+                } label: {
+                    Image(systemName: "chevron.down")
+                }
+                .help("Next Match (⌘G)").accessibilityLabel("Next Match").disabled(app.conversationMatchIDs.isEmpty)
                 Button(action: app.closeConversationSearch) { Image(systemName: "xmark") }
                     .help("Close Search (Escape)").accessibilityLabel("Close conversation search")
             }
@@ -81,7 +82,7 @@ private struct ConversationSearchField: NSViewRepresentable {
         }
         func controlTextDidChange(_ notification: Notification) {
             guard let field = notification.object as? NSSearchField else { return }
-            app.conversationQuery = field.stringValue
+            searchChanged(field)
         }
         func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
             if commandSelector == #selector(NSResponder.cancelOperation(_:)) {

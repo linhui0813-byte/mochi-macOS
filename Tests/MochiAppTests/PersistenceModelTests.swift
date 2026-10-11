@@ -95,9 +95,9 @@ final class PersistenceModelTests: XCTestCase {
         XCTAssertEqual(message(POSIXError(.EACCES)), "fallback")
     }
     @MainActor func testReplyKeepsItsTextWhenItsAudioCannotBeWritten() async throws {
-        let root = makeTemporaryFolder()
-        let app = makeApp(root: root)
-        defer { chmod(root.path, 0o700) }
+        let app = makeApp(root: makeTemporaryFolder())
+        // Only the audio write fails; the library itself still saves, so the reply text reaches disk.
+        app.writeReplyAudio = { _, _ in throw POSIXError(.EACCES) }
         app.speech.conversationReply = { _, _, callbacks in
             var reply = RealtimeAccumulator()
             reply.text = "Hello back."
@@ -105,7 +105,6 @@ final class PersistenceModelTests: XCTestCase {
             reply.done = true
             try callbacks.response(reply)
         }
-        XCTAssertEqual(chmod(root.path, 0o500), 0)
         app.draft = "Hello"
         app.send()
         await waitUntil { !app.busy }
@@ -114,6 +113,8 @@ final class PersistenceModelTests: XCTestCase {
         XCTAssertEqual(reply.text, "Hello back.")
         XCTAssertNil(reply.audio)
         XCTAssertTrue(app.error?.contains("without its audio") == true, app.error ?? "no error")
+        let saved = try LibraryStore(root: app.store.root).load().conversations.first { $0.id == app.selectedID }
+        XCTAssertEqual(saved?.messages.map(\.text), ["Hello", "Hello back."])
     }
 
     // MARK: Creating examples (moved from the retired ElevenLabs tests)

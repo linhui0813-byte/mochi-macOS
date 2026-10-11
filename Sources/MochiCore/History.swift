@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import MochiKernel
 
@@ -20,17 +21,17 @@ public enum HistoryScope: String, CaseIterable, Identifiable {
     }
 }
 extension Conversation {
-    public func matchingMessage(_ query: String) -> Message? {
+    /// Matches the text a message shows as its content, so every search agrees on legacy voice placeholders.
+    private func messageMatcher(_ query: String) -> ((Message) -> Bool)? {
         let term = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !term.isEmpty else { return nil }
-        return messages.first { $0.text.range(of: term, options: [.caseInsensitive, .diacriticInsensitive]) != nil }
+        return { $0.contextText?.range(of: term, options: [.caseInsensitive, .diacriticInsensitive]) != nil }
+    }
+    public func matchingMessage(_ query: String) -> Message? {
+        messageMatcher(query).flatMap { messages.first(where: $0) }
     }
     public func matchingMessageIDs(_ query: String) -> [UUID] {
-        let term = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !term.isEmpty else { return [] }
-        return messages.filter {
-            $0.contextText?.range(of: term, options: [.caseInsensitive, .diacriticInsensitive]) != nil
-        }.map(\.id)
+        messageMatcher(query).map { messages.filter($0).map(\.id) } ?? []
     }
     public func matches(_ query: String) -> Bool {
         title.range(of: query, options: [.caseInsensitive, .diacriticInsensitive]) != nil
@@ -149,9 +150,16 @@ public enum LibraryBackup {
         guard !FileManager.default.fileExists(atPath: package.path) else {
             throw AppFailure("Choose a new backup filename; an existing backup is never overwritten.")
         }
-        for name in library.referencedAudio { _ = try regularFile(root.appendingPathComponent(name)) }
+        for name in library.referencedAudio { try validateRegularFile(root.appendingPathComponent(name)) }
         try FileManager.default.createDirectory(
-            at: package, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+            at: package.deletingLastPathComponent(), withIntermediateDirectories: true)
+        // Exclusive: a package that appeared since the check above is neither written into nor removed.
+        guard mkdir(package.path, 0o700) == 0 else {
+            if errno == EEXIST {
+                throw AppFailure("Choose a new backup filename; an existing backup is never overwritten.")
+            }
+            throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+        }
         do {
             let e = JSONEncoder()
             e.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -168,12 +176,12 @@ public enum LibraryBackup {
         }
     }
     public static func read(_ package: URL) throws -> Library {
-        _ = try regularFile(package.appendingPathComponent("library.json"))
+        try validateRegularFile(package.appendingPathComponent("library.json"))
         var library = try JSONDecoder().decode(
             Library.self, from: Data(contentsOf: package.appendingPathComponent("library.json")))
         guard (1...3).contains(library.version) else { throw AppFailure("This backup requires a newer app.") }
         try library.validate()
-        for name in library.referencedAudio { _ = try regularFile(package.appendingPathComponent(name)) }
+        for name in library.referencedAudio { try validateRegularFile(package.appendingPathComponent(name)) }
         library.version = 3
         return library
     }
@@ -186,10 +194,8 @@ public enum LibraryBackup {
     public static func merge(_ imported: Library, from package: URL, into local: inout Library, root: URL) throws -> Int
     {
         let prepared = try prepareMerge(imported, from: package, into: local, root: root)
-        do { return try apply(prepared, to: &local) } catch {
-            discard(prepared, keeping: local)
-            throw error
-        }
+        defer { discard(prepared, keeping: local) }
+        return try apply(prepared, to: &local)
     }
     /// Adds the prepared items that are still missing. On a conflict `local` is unchanged.
     public static func apply(_ prepared: PreparedImport, to local: inout Library) throws -> Int {
@@ -210,7 +216,8 @@ public enum LibraryBackup {
         local = next
         return conversations.count
     }
-    /// Removes copied audio that `library` does not reference, after an import was abandoned.
+    /// Removes copied audio that `library` does not reference: all of it after an import was abandoned,
+    /// and the audio of items skipped because they were added meanwhile after one was applied.
     public static func discard(_ prepared: PreparedImport, keeping library: Library) {
         let referenced = library.referencedAudio
         for url in prepared.copied where !referenced.contains(url.lastPathComponent) {
@@ -222,7 +229,7 @@ public enum LibraryBackup {
         -> PreparedImport
     {
         try imported.validate()
-        for name in imported.referencedAudio { _ = try regularFile(package.appendingPathComponent(name)) }
+        for name in imported.referencedAudio { try validateRegularFile(package.appendingPathComponent(name)) }
         let chatIDs = Set(local.conversations.map(\.id))
         let expressionIDs = Set(local.expressions.map(\.id))
         var additions = Library()
@@ -238,52 +245,51 @@ public enum LibraryBackup {
             at: root, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         var mapping: [String: String] = [:]
         var copied: [URL] = []
-        func mapped(_ name: String) throws -> String {
-            guard let replacement = mapping[name] else {
-                throw AppFailure("A backup recording could not be matched to its copy.")
-            }
-            return replacement
-        }
         do {
             for name in additions.referencedAudio {
+                try Task.checkCancellation()
                 let replacement = "import-\(UUID().uuidString).\(URL(fileURLWithPath:name).pathExtension)"
                 let destination = root.appendingPathComponent(replacement)
                 try FileManager.default.copyItem(at: package.appendingPathComponent(name), to: destination)
                 copied.append(destination)
                 mapping[name] = replacement
             }
-            for ci in additions.conversations.indices {
-                if let name = additions.conversations[ci].helpDraft?.recording {
-                    additions.conversations[ci].helpDraft?.recording = try mapped(name)
+            try remapAudio(in: &additions) { name in
+                guard let replacement = mapping[name] else {
+                    throw AppFailure("A backup recording could not be matched to its copy.")
                 }
-                for mi in additions.conversations[ci].messages.indices {
-                    if let name = additions.conversations[ci].messages[mi].audio {
-                        additions.conversations[ci].messages[mi].audio = try mapped(name)
-                    }
-                    if additions.conversations[ci].messages[mi].transcriptionState == .pending {
-                        additions.conversations[ci].messages[mi].transcriptionState = .interrupted
-                    }
-                }
+                return replacement
             }
-            for i in additions.expressions.indices {
-                if let name = additions.expressions[i].reference {
-                    additions.expressions[i].reference = try mapped(name)
-                }
-                for ai in additions.expressions[i].attempts.indices {
-                    additions.expressions[i].attempts[ai].file = try mapped(additions.expressions[i].attempts[ai].file)
-                }
-            }
+            additions.interruptPendingTranscriptions()
             return PreparedImport(additions: additions, copied: copied)
         } catch {
             for url in copied { try? FileManager.default.removeItem(at: url) }
             throw error
         }
     }
-    private static func regularFile(_ url: URL) throws -> Bool {
+    /// Renames every recording `library` references.
+    private static func remapAudio(in library: inout Library, _ mapped: (String) throws -> String) rethrows {
+        for ci in library.conversations.indices {
+            if let name = library.conversations[ci].helpDraft?.recording {
+                library.conversations[ci].helpDraft?.recording = try mapped(name)
+            }
+            for mi in library.conversations[ci].messages.indices {
+                if let name = library.conversations[ci].messages[mi].audio {
+                    library.conversations[ci].messages[mi].audio = try mapped(name)
+                }
+            }
+        }
+        for i in library.expressions.indices {
+            if let name = library.expressions[i].reference { library.expressions[i].reference = try mapped(name) }
+            for ai in library.expressions[i].attempts.indices {
+                library.expressions[i].attempts[ai].file = try mapped(library.expressions[i].attempts[ai].file)
+            }
+        }
+    }
+    private static func validateRegularFile(_ url: URL) throws {
         let v = try url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
         guard v.isRegularFile == true, v.isSymbolicLink != true else {
             throw AppFailure("A backup recording is missing or is not a regular file.")
         }
-        return true
     }
 }

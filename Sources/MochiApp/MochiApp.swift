@@ -1,6 +1,5 @@
 import AppKit
-import MochiCore
-import MochiKernel
+import CryptoKit
 import SwiftUI
 
 @main struct MochiApp: App {
@@ -52,7 +51,7 @@ import SwiftUI
                         model.practice || model.renameID != nil || !model.permanentDeleteIDs.isEmpty)
                     Button("Manage Conversations…") { model.managerOpen = true }.keyboardShortcut(
                         "m", modifiers: [.command, .shift]
-                    ).disabled(model.practice)
+                    ).disabled(model.automationModal)
                     if let chat = model.conversation { ChatActions(app: model, chat: chat).disabled(model.practice) }
                     Divider()
                     Button("Export Library Backup…", action: model.exportLibraryBackup).disabled(
@@ -62,7 +61,7 @@ import SwiftUI
                     Divider()
                     Button("Help Me Say This", action: model.startHelp).keyboardShortcut(
                         "h", modifiers: [.command, .shift]
-                    ).disabled(!model.writableConversation)
+                    ).disabled(!model.writableConversation || model.automationModal)
                     Button("Stop") {
                         if model.conversationSearchOpen { model.closeConversationSearch() } else { model.stop() }
                     }.keyboardShortcut(.escape, modifiers: [])
@@ -120,11 +119,22 @@ import SwiftUI
         tray.install()
     }
     func applicationDidBecomeActive(_ notification: Notification) { model?.configureAutomation() }
+    /// Quitting saves first; when the save fails the user chooses between keeping the window and losing the edits.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard let model else { return .terminateNow }
+        model.notice = nil
+        guard !TrayController.finishWork(model) else { return .terminateNow }
+        tray.showWindow()
+        let alert = NSAlert()
+        alert.messageText = "Mochi couldn’t save your library"
+        alert.informativeText = model.error ?? "Your latest changes were not saved."
+        alert.addButton(withTitle: "Keep Mochi Open")
+        alert.addButton(withTitle: "Quit Without Saving")
+        return alert.runModal() == .alertSecondButtonReturn ? .terminateNow : .terminateCancel
+    }
     func applicationWillTerminate(_ notification: Notification) {
         model?.automation.server?.stop()
-        model?.notice = nil
-        model?.stop()
-        model?.save()
+        model?.discardTemporaryLibrary()
     }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
@@ -143,7 +153,15 @@ enum DevelopmentLaunch {
         return nil
     }
     static var preferences: UserDefaults? {
-        libraryRoot.map { UserDefaults(suiteName: "mochi-e2e-" + $0.lastPathComponent)! }
+        libraryRoot.map { UserDefaults(suiteName: preferencesSuite(forLibraryRoot: $0))! }
+    }
+    /// Keyed by the whole standardized path, so distinct roots never share settings.
+    /// scripts/tests/single_instance_e2e.py derives the same name to delete these suites.
+    static func preferencesSuite(forLibraryRoot root: URL) -> String {
+        "mochi-e2e-"
+            + SHA256.hash(data: Data(root.standardizedFileURL.path.utf8)).prefix(16).map {
+                String(format: "%02x", $0)
+            }.joined()
     }
     static var demo: Bool {
         #if MOCHI_DEVELOPMENT

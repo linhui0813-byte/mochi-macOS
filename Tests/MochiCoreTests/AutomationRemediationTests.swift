@@ -144,7 +144,10 @@ final class AutomationRemediationTests: XCTestCase {
         _ = server.respond(
             try JSONSerialization.data(withJSONObject: [
                 "jsonrpc": "2.0", "id": 1, "method": "initialize",
-                "params": ["protocolVersion": "2025-06-18", "capabilities": [:], "clientInfo": [:]],
+                "params": [
+                    "protocolVersion": "2025-06-18", "capabilities": [:],
+                    "clientInfo": ["name": "test", "version": "1"],
+                ],
             ]))
         _ = server.respond(
             try JSONSerialization.data(withJSONObject: ["jsonrpc": "2.0", "method": "notifications/initialized"]))

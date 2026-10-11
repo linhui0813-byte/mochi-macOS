@@ -1,12 +1,13 @@
 import MochiCore
 import MochiKernel
+import MochiTestSupport
 import XCTest
 
 @testable import MochiApp
 
 final class HelpFlowTests: XCTestCase {
     @MainActor func testHelpDraftSeedDismissAndRelaunchPreserveMeaningAndEnglish() throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let root = TestScratch.folder()
         defer { try? FileManager.default.removeItem(at: root) }
         let app = makeApp(root: root)
         app.draft = "An unfinished thought"
@@ -96,7 +97,7 @@ final class HelpFlowTests: XCTestCase {
         XCTAssertTrue(app.library.referencedAudio.contains("saved.wav"))
     }
     @MainActor func testHelpThoughtRecordingSurvivesRelaunchWithoutUpload() throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let root = TestScratch.folder()
         defer { try? FileManager.default.removeItem(at: root) }
         let app = makeApp(root: root)
         app.startHelp()

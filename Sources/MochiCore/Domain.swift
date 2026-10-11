@@ -1,4 +1,3 @@
-import CryptoKit
 import Darwin
 import Foundation
 import MochiKernel
@@ -183,6 +182,17 @@ public struct Library: Codable {
         conversationTemplates = try c.decodeIfPresent([ConversationTemplate].self, forKey: .conversationTemplates) ?? []
     }
 }
+extension Library {
+    /// Transcriptions recorded as pending have no running job once the library is read back from disk.
+    public mutating func interruptPendingTranscriptions() {
+        for ci in conversations.indices {
+            for mi in conversations[ci].messages.indices
+            where conversations[ci].messages[mi].transcriptionState == .pending {
+                conversations[ci].messages[mi].transcriptionState = .interrupted
+            }
+        }
+    }
+}
 /// Marks a library that failed validation while still in memory: a programming error, never user data.
 public struct LibraryInvariantViolation: Error { public let reason: String }
 public final class LibraryStore {
@@ -250,12 +260,7 @@ public final class LibraryStore {
         }
         try library.validate()
         remember(before == identity(file) ? before : nil, version: library.version)
-        for ci in library.conversations.indices {
-            for mi in library.conversations[ci].messages.indices
-            where library.conversations[ci].messages[mi].transcriptionState == .pending {
-                library.conversations[ci].messages[mi].transcriptionState = .interrupted
-            }
-        }
+        library.interruptPendingTranscriptions()
         library.version = 3
         return library
     }
@@ -267,35 +272,55 @@ public final class LibraryStore {
             throw AppFailure("The earlier copy was created by a newer version of Mochi.")
         }
         try library.validate()
+        library.interruptPendingTranscriptions()
         library.version = 3
         return library
     }
-    /// Moves an unreadable library aside (never deleting it) and reinstates the earlier copy.
+    /// Keeps an unreadable library under a second name (never deleting it) and atomically reinstates the earlier copy,
+    /// so `library.json` always names one of the two.
     public func restorePrevious() throws -> Library {
         let library = try loadPrevious()
+        var aside: URL?
         if FileManager.default.fileExists(atPath: file.path) {
-            let aside = root.appendingPathComponent(
+            let url = root.appendingPathComponent(
                 "library-unreadable-\(Int(Date().timeIntervalSince1970))-\(UUID().uuidString).json")
-            guard renamex_np(file.path, aside.path, UInt32(RENAME_EXCL)) == 0 else {
+            guard Darwin.link(file.path, url.path) == 0 else {
                 throw AppFailure(
                     "The unreadable library could not be set aside, so nothing was restored.",
                     underlying: POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO))
             }
+            aside = url
         }
         known = nil
-        try save(library)
+        do { try write(library, replacingUnreadable: true) } catch {
+            // `library.json` still names the unreadable file, so the extra name is not needed.
+            if let aside { unlink(aside.path) }
+            throw error
+        }
         return library
     }
+    /// Folders of hard links that keep an export's recordings; one left by a force quit is removed at cleanup.
+    public static let exportStagingPrefix = ".export-"
     /// How long an unreferenced generated example or preview stays cached after its last use.
     public static let cacheLifetime: TimeInterval = 7 * 24 * 3600
     /// Removes audio Mochi created that nothing references: abandoned recordings and replies at once,
     /// generated examples, previews and replaced imports once unused for `cacheLifetime`. Other files are never touched.
     public func cleanupOrphanedAudio(_ library: Library, now: Date = Date()) throws {
         try library.validate()
-        let referenced = library.referencedAudio
-        let keys: Set<URLResourceKey> = [.isRegularFileKey, .isSymbolicLinkKey, .contentModificationDateKey]
+        // The earlier copy can be reinstated later, so its recordings stay too.
+        let referenced = library.referencedAudio.union((try? loadPrevious())?.referencedAudio ?? [])
+        let keys: Set<URLResourceKey> = [
+            .isRegularFileKey, .isSymbolicLinkKey, .isDirectoryKey, .contentModificationDateKey,
+        ]
         for url in try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: Array(keys)) {
             let name = url.lastPathComponent
+            if name.hasPrefix(Self.exportStagingPrefix) {
+                let values = try url.resourceValues(forKeys: keys)
+                if values.isDirectory == true, values.isSymbolicLink != true {
+                    try FileManager.default.removeItem(at: url)
+                }
+                continue
+            }
             guard !referenced.contains(name), let kind = Self.generatedAudio(name) else { continue }
             let values = try url.resourceValues(forKeys: keys)
             guard values.isRegularFile == true, values.isSymbolicLink != true else { continue }
@@ -325,7 +350,9 @@ public final class LibraryStore {
         }
         return nil
     }
-    public func save(_ library: Library) throws {
+    public func save(_ library: Library) throws { try write(library, replacingUnreadable: false) }
+    /// `replacingUnreadable` installs over a file already kept elsewhere: it is neither read nor kept as the earlier copy.
+    private func write(_ library: Library, replacingUnreadable: Bool) throws {
         try prepare()
         guard (1...3).contains(library.version) else { throw AppFailure("Unsupported library version.") }
         do { try library.validate() } catch {
@@ -339,7 +366,7 @@ public final class LibraryStore {
         let usesHelpOrTranscription = library.conversations.contains(where: {
             $0.helpDraft != nil || $0.messages.contains(where: { $0.transcriptionState != nil })
         })
-        let current = identity(file)
+        let current = replacingUnreadable ? nil : identity(file)
         let settled =
             known.map {
                 $0.identity == current && $0.version == 3 && $0.instructionsBackup

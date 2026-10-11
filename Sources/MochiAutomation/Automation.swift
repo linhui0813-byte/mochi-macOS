@@ -94,7 +94,7 @@ public enum MochiTools {
         var origins: Set<ToolOrigin> = [.voice, .external], deferred = false
     }
     private static let definitions: [Definition] = {
-        let string: [String: Any] = ["type": "string", "maxLength": 8000]
+        let string: [String: Any] = ["type": "string", "maxLength": MochiTools.maxInstructions]
         let uuid: [String: Any] = ["type": "string", "format": "uuid"]
         let boolean: [String: Any] = ["type": "boolean"]
         let character: [String: Any] = ["type": "string", "maxLength": 80]
@@ -220,7 +220,7 @@ public enum MochiTools {
 
     public static func catalog(origin: ToolOrigin) -> [MochiTool] {
         let uuid: [String: Any] = ["type": "string", "format": "uuid"]
-        let string: [String: Any] = ["type": "string", "maxLength": 8000]
+        let string: [String: Any] = ["type": "string", "maxLength": maxInstructions]
         return definitions.filter { $0.origins.contains(origin) }.map { d in
             var properties = d.properties
             var required = d.required
@@ -247,40 +247,49 @@ public enum MochiTools {
         else { throw AppFailure("Missing or unexpected tool arguments.") }
         for (key, value) in arguments {
             guard let schema = tool.properties[key] else { throw AppFailure("Missing or unexpected tool arguments.") }
-            switch schema["type"] as? String {
-            case "string":
-                guard let text = value as? String, text.count <= (schema["maxLength"] as? Int ?? 8000) else {
-                    throw AppFailure("Invalid text argument: \(key).")
-                }
-                if schema["format"] as? String == "uuid", UUID(uuidString: text) == nil {
-                    throw AppFailure("Invalid ID: \(key).")
-                }
-                if let values = schema["enum"] as? [String], !values.contains(text) {
-                    throw AppFailure("Invalid option: \(key).")
-                }
-            case "boolean":
-                guard let number = value as? NSNumber, CFGetTypeID(number) == CFBooleanGetTypeID() else {
-                    throw AppFailure("Invalid boolean: \(key).")
-                }
-            case "number", "integer":
-                guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID() else {
-                    throw AppFailure("Invalid number: \(key).")
-                }
-                let n = number.doubleValue
-                guard n.isFinite, n >= ((schema["minimum"] as? NSNumber)?.doubleValue ?? 0),
-                    n <= ((schema["maximum"] as? NSNumber)?.doubleValue ?? 100),
-                    schema["type"] as? String != "integer" || n.rounded() == n
-                else { throw AppFailure("Number out of range: \(key).") }
-            default: throw AppFailure("Invalid tool schema.")
-            }
+            try validateValue(value, key: key, schema: schema)
         }
+        try validateRules(tool.name, arguments: arguments)
+        return tool
+    }
+    /// One argument against its property schema.
+    private static func validateValue(_ value: Any, key: String, schema: [String: Any]) throws {
+        switch schema["type"] as? String {
+        case "string":
+            guard let text = value as? String, text.count <= (schema["maxLength"] as? Int ?? maxInstructions) else {
+                throw AppFailure("Invalid text argument: \(key).")
+            }
+            if schema["format"] as? String == "uuid", UUID(uuidString: text) == nil {
+                throw AppFailure("Invalid ID: \(key).")
+            }
+            if let values = schema["enum"] as? [String], !values.contains(text) {
+                throw AppFailure("Invalid option: \(key).")
+            }
+        case "boolean":
+            guard let number = value as? NSNumber, CFGetTypeID(number) == CFBooleanGetTypeID() else {
+                throw AppFailure("Invalid boolean: \(key).")
+            }
+        case "number", "integer":
+            guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID() else {
+                throw AppFailure("Invalid number: \(key).")
+            }
+            let n = number.doubleValue
+            guard n.isFinite, n >= ((schema["minimum"] as? NSNumber)?.doubleValue ?? 0),
+                n <= ((schema["maximum"] as? NSNumber)?.doubleValue ?? 100),
+                schema["type"] as? String != "integer" || n.rounded() == n
+            else { throw AppFailure("Number out of range: \(key).") }
+        default: throw AppFailure("Invalid tool schema.")
+        }
+    }
+    /// Rules spanning several arguments, which a property schema cannot express.
+    private static func validateRules(_ name: MochiToolName, arguments: [String: Any]) throws {
         if let instructions = arguments["instructions"] as? String { try validateInstructions(instructions) }
         for (clear, field) in [("clear_speed", "speed"), ("clear_character_name", "character_name")] {
             if arguments[clear] as? Bool == true, arguments[field] != nil {
                 throw AppFailure("Specify either \(field) or \(clear), not both.")
             }
         }
-        switch tool.name {
+        switch name {
         case .createConversation:
             if arguments["template_id"] == nil
                 && (arguments["expected_template_revision"] != nil || arguments["clear_character_name"] != nil)
@@ -307,7 +316,6 @@ public enum MochiTools {
             }
         default: break
         }
-        return tool
     }
     /// Decodes validated arguments into a typed value. A mismatch is an error, never a crash.
     public static func decode<T: Decodable>(_ type: T.Type, from arguments: [String: Any]) throws -> T {
@@ -401,8 +409,5 @@ public struct AudioArguments: Decodable {
 }
 public struct SearchArguments: Decodable {
     public var query: String
-    public var limit: Int?
-}
-public struct LimitArguments: Decodable {
     public var limit: Int?
 }

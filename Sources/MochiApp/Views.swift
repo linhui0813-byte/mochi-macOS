@@ -10,6 +10,8 @@ private enum SidebarDestination: Hashable {
 struct WorkspaceView: View {
     @Bindable var app: AppModel
     @FocusState private var searchFocused: Bool
+    @FocusState private var composerFocused: Bool
+    @State private var refocusComposer = false
     @Environment(\.openSettings) private var openSettings
     private var selection: Binding<SidebarDestination?> {
         Binding(
@@ -48,41 +50,18 @@ struct WorkspaceView: View {
                     }
                 }
                 ForEach(historyGroups, id: \.title) { group in
-                    Section(group.title) {
+                    Section {
                         ForEach(group.chats) { chat in
-                            HStack(spacing: 10) {
-                                Image(
-                                    systemName: chat.pinned
-                                        ? "pin.fill"
-                                        : chat.archived ? "archivebox" : "bubble.left.and.bubble.right.fill"
-                                )
-                                .font(.system(size: 18)).foregroundStyle(.secondary)
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(chat.title).fontWeight(.medium).lineLimit(1)
-                                    Text(
-                                        chat.matchingMessage(app.search)?.text
-                                            ?? (chat.draft.isEmpty
-                                                ? chat.messages.last?.text ?? "New conversation"
-                                                : "Draft: " + chat.draft)
-                                    )
-                                    .font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                                }
-                                Spacer(minLength: 0)
-                                Menu {
-                                    ChatActions(app: app, chat: chat)
-                                } label: {
-                                    Image(systemName: "ellipsis").frame(width: 20, height: 24)
-                                }.menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
-                                    .help("Conversation Actions")
-                                    .accessibilityLabel("Actions for \(chat.title)")
-                            }.padding(.vertical, 7)
+                            SidebarChatRow(app: app, chat: chat)
                                 .tag(SidebarDestination.conversation(chat.id))
                                 .contextMenu { ChatActions(app: app, chat: chat) }
                         }
+                    } header: {
+                        if !group.chats.isEmpty { Text(group.title) }
                     }
                 }
-                if app.visibleChats.isEmpty {
-                    Section {
+                Section {
+                    if app.visibleChats.isEmpty {
                         Text(app.search.isEmpty ? "No conversations here" : "No matching conversations")
                             .foregroundStyle(.secondary).font(.callout)
                         if !app.search.isEmpty { Button("Clear Search") { app.search = "" } }
@@ -115,7 +94,10 @@ struct WorkspaceView: View {
         } detail: {
             Group {
                 if app.showExpressions {
-                    expressions
+                    VStack(spacing: 0) {
+                        expressions
+                        if let error = app.error { errorBanner(error) }
+                    }
                 } else {
                     VStack(spacing: 0) {
                         transcript
@@ -136,36 +118,17 @@ struct WorkspaceView: View {
                 }
             }
             .overlay(alignment: .topTrailing) {
-                if let notice = app.notice, !app.practice {
-                    HStack(alignment: .top, spacing: 10) {
-                        Text(notice).font(.callout).textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        if app.messageDeletionUndo != nil {
-                            Button("Undo", action: app.undoMessageDeletion)
-                                .buttonStyle(.borderless).disabled(!app.canUndoMessageDeletion)
-                                .accessibilityLabel("Undo Delete Message")
-                        }
-                        Button {
-                            app.notice = nil
-                        } label: {
-                            Image(systemName: "xmark")
-                        }
-                        .buttonStyle(.borderless).foregroundStyle(.secondary)
-                        .help("Dismiss notice").accessibilityLabel("Dismiss notice")
-                    }
-                    .padding(12).frame(maxWidth: 360)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
-                    .overlay { RoundedRectangle(cornerRadius: 12).strokeBorder(.secondary.opacity(0.15)) }
-                    .shadow(color: .black.opacity(0.08), radius: 6, y: 2)
-                    .padding(16)
-                    .accessibilityIdentifier("conversation-notice")
-                }
+                if let notice = app.notice, !app.practice { NoticeCard(app: app, notice: notice) }
             }
             .navigationTitle("")
             .toolbar {
                 if app.turn.activity == .generating {
                     ToolbarItem(placement: .primaryAction) {
-                        Button(action: app.stop) { Label("Stop", systemImage: "stop.fill") }.labelStyle(.iconOnly).help(
+                        Button {
+                            app.stop()
+                        } label: {
+                            Label("Stop", systemImage: "stop.fill")
+                        }.labelStyle(.iconOnly).help(
                             "Stop (Escape)")
                     }
                 }
@@ -208,7 +171,7 @@ struct WorkspaceView: View {
                 set: { if !$0 && !app.managerOpen { app.permanentDeleteIDs = [] } })
         ) { DeleteHistoryConfirmation(app: app) }
         .sheet(isPresented: Binding(get: { app.practice }, set: { if !$0 && app.practice { app.resume() } })) {
-            PracticePane(app: app).frame(width: 640, height: app.helpStage == .practice ? 580 : 480)
+            PracticePane(app: app).frame(width: 640, height: 580)
         }
         .onChange(of: app.searchFocusRequest) { _, _ in if !app.managerOpen { searchFocused = true } }
         .onChange(of: app.settingsOpen) { _, show in
@@ -221,27 +184,29 @@ struct WorkspaceView: View {
         .frame(minWidth: 760, minHeight: 580)
     }
 
+    /// Every group is always present, empty or not. Inserting a whole section into the live
+    /// sidebar table (for example Pinned, when switching to Conversations) makes SwiftUI
+    /// update NSTableView reentrantly; with a fixed section list only rows change.
     private var historyGroups: [(title: String, chats: [Conversation])] {
         let chats = app.visibleChats
-        if !app.search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return [("Search Results", chats)] }
-        var groups: [(title: String, chats: [Conversation])] = []
-        let pinned = chats.filter { $0.pinned && app.historyScope == .active }
-        if !pinned.isEmpty { groups.append(("Pinned", pinned)) }
-        let remaining = chats.filter { !($0.pinned && app.historyScope == .active) }
+        let searching = !app.search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let listed = searching ? [] : chats
+        let pinned = listed.filter { $0.pinned && app.historyScope == .active }
+        let remaining = listed.filter { !($0.pinned && app.historyScope == .active) }
         let calendar = Calendar.current
         func rowDate(_ chat: Conversation) -> Date {
             app.historyScope == .deleted ? chat.deletedAt ?? chat.updatedAt : chat.updatedAt
         }
-        let buckets: [(String, (Conversation) -> Bool)] = [
-            ("Today", { calendar.isDateInToday(rowDate($0)) }),
-            ("Yesterday", { calendar.isDateInYesterday(rowDate($0)) }),
-            ("Earlier", { !calendar.isDateInToday(rowDate($0)) && !calendar.isDateInYesterday(rowDate($0)) }),
+        return [
+            ("Search Results", searching ? chats : []),
+            ("Pinned", pinned),
+            ("Today", remaining.filter { calendar.isDateInToday(rowDate($0)) }),
+            ("Yesterday", remaining.filter { calendar.isDateInYesterday(rowDate($0)) }),
+            (
+                "Earlier",
+                remaining.filter { !calendar.isDateInToday(rowDate($0)) && !calendar.isDateInYesterday(rowDate($0)) }
+            ),
         ]
-        for (title, predicate) in buckets {
-            let rows = remaining.filter(predicate)
-            if !rows.isEmpty { groups.append((title, rows)) }
-        }
-        return groups
     }
     private func historyBanner(_ chat: Conversation) -> some View {
         HStack(spacing: 12) {
@@ -291,6 +256,8 @@ struct WorkspaceView: View {
                         .frame(maxWidth: 820)
                         .frame(maxWidth: .infinity)
                     }
+                    .defaultScrollAnchor(.bottom)
+                    .id(app.selectedID)
                     .task(id: "\(app.selectedID?.uuidString ?? "")|\(app.search)") {
                         await Task.yield()
                         if let id = app.conversationMatchID {
@@ -334,7 +301,8 @@ struct WorkspaceView: View {
                             app.transcribingMessageIDs.contains(message.id)
                                 ? "Transcribing…" : "Transcript unavailable · use the message menu to retry or add text"
                         )
-                        .font(.caption).opacity(0.8).frame(maxWidth: 310, alignment: .leading)
+                        .font(.caption).opacity(0.8).frame(width: 300, alignment: .leading).fixedSize(
+                            horizontal: false, vertical: true)
                     }
                     if let file = message.audio {
                         HStack(alignment: .center, spacing: 4) {
@@ -349,23 +317,10 @@ struct WorkspaceView: View {
                 .contextMenu {
                     Button("Copy Message") {
                         NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(message.text, forType: .string)
-                    }
+                        NSPasteboard.general.setString(message.contextText ?? "", forType: .string)
+                    }.disabled(message.contextText == nil)
                     Text(message.date.formatted(date: .abbreviated, time: .shortened))
-                    if let name = message.audio {
-                        Button("Show Recording in Finder") {
-                            NSWorkspace.shared.activateFileViewerSelecting([app.store.root.appendingPathComponent(name)]
-                            )
-                        }
-                    }
-                    if app.writableConversation {
-                        Divider()
-                        Button(role: .destructive) {
-                            app.deleteMessage(message.id)
-                        } label: {
-                            Label("Delete Message", systemImage: "trash")
-                        }.disabled(!app.canDeleteMessages)
-                    }
+                    SharedMessageActions(app: app, message: message)
                 }
                 .overlay(alignment: .leading) {
                     if app.conversationMatchSet.contains(message.id) || sidebarMatchID == message.id {
@@ -406,6 +361,7 @@ struct WorkspaceView: View {
                         .background(ComposerGeometryProbe())
                     #endif
                     .textFieldStyle(.plain).font(.system(size: 15)).lineLimit(1...5)
+                    .focused($composerFocused)
                     .onSubmit { app.send() }.disabled(app.busy)
                 Button(action: app.send) { Image(systemName: "arrow.up").fontWeight(.semibold) }
                     .buttonStyle(.borderedProminent).buttonBorderShape(.circle)
@@ -413,8 +369,7 @@ struct WorkspaceView: View {
                     .keyboardShortcut(.return, modifiers: .command)
             }
             .padding(12)
-            .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 24))
-            .overlay(RoundedRectangle(cornerRadius: 24).strokeBorder(.quaternary, lineWidth: 1))
+            .fieldFrame(cornerRadius: 24, focused: composerFocused)
             if app.turn.activity == .recording { RecordingFeedback(app: app) }
             HStack(spacing: 5) {
                 if app.turn.activity == .generating || app.turn.activity == .requestingPermission {
@@ -430,6 +385,21 @@ struct WorkspaceView: View {
         }
         .padding(.horizontal, 16).padding(.vertical, 12)
         .background(Color(nsColor: .textBackgroundColor))
+        .onChange(of: app.busy) { _, busy in
+            if busy {
+                refocusComposer = composerFocused
+            } else if refocusComposer {
+                refocusComposer = false
+                DispatchQueue.main.async {
+                    // The user may have moved into a search field while the composer was disabled.
+                    let editor = (NSApp.keyWindow?.firstResponder as? NSTextView)?.delegate
+                    guard !searchFocused, !(editor is NSSearchField) else { return }
+                    composerFocused = true
+                }
+            }
+        }
+        .onChange(of: searchFocused) { _, focused in if focused { refocusComposer = false } }
+        .animation(.easeOut(duration: 0.2), value: app.turn.activity == .recording)
     }
 
     private func errorBanner(_ text: String) -> some View {
@@ -473,6 +443,68 @@ struct WorkspaceView: View {
     }
 }
 
+private struct SidebarChatRow: View {
+    @Bindable var app: AppModel
+    var chat: Conversation
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(
+                systemName: chat.pinned
+                    ? "pin.fill"
+                    : chat.archived ? "archivebox" : "bubble.left.and.bubble.right.fill"
+            )
+            .font(.system(size: 18)).foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(chat.title).fontWeight(.medium).lineLimit(1)
+                Text(
+                    chat.matchingMessage(app.search)?.text
+                        ?? (chat.draft.isEmpty
+                            ? chat.messages.last?.text ?? "New conversation"
+                            : "Draft: " + chat.draft)
+                )
+                .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            }
+            Spacer(minLength: 0)
+            Menu {
+                ChatActions(app: app, chat: chat)
+            } label: {
+                Image(systemName: "ellipsis").frame(width: 20, height: 24)
+            }.menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+                .help("Conversation Actions")
+                .accessibilityLabel("Actions for \(chat.title)")
+        }.padding(.vertical, 7)
+    }
+}
+
+private struct NoticeCard: View {
+    @Bindable var app: AppModel
+    var notice: String
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Text(notice).font(.callout).textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if app.messageDeletionUndo != nil {
+                Button("Undo", action: app.undoMessageDeletion)
+                    .buttonStyle(.borderless).disabled(!app.canUndoMessageDeletion)
+                    .accessibilityLabel("Undo Delete Message")
+            }
+            Button {
+                app.notice = nil
+            } label: {
+                Image(systemName: "xmark")
+            }
+            .buttonStyle(.borderless).foregroundStyle(.secondary)
+            .help("Dismiss notice").accessibilityLabel("Dismiss notice")
+        }
+        .padding(12).frame(maxWidth: 360)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+        .overlay { RoundedRectangle(cornerRadius: 12).strokeBorder(.secondary.opacity(0.15)) }
+        .shadow(color: .black.opacity(0.08), radius: 6, y: 2)
+        .padding(16)
+        .accessibilityIdentifier("conversation-notice")
+    }
+}
+
 struct PracticeActions: View {
     @Bindable var app: AppModel
     var body: some View {
@@ -491,8 +523,7 @@ struct PracticeActions: View {
                 .labelStyle(.iconOnly).help("Play Latest Attempt").disabled(app.busy)
             }
             Button {
-                app.saveExpression()
-                app.notice = "Saved to My Expressions."
+                if app.saveExpression() { app.notice = "Saved to My Expressions." }
             } label: {
                 Label("Save Expression", systemImage: "bookmark")
             }

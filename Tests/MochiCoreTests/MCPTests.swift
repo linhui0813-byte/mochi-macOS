@@ -1,4 +1,5 @@
 import MochiAutomation
+import MochiTestSupport
 import XCTest
 
 @testable import MochiCore
@@ -43,7 +44,7 @@ final class MCPTests: XCTestCase {
         XCTAssertNotNil(server.respond(Data("invalid".utf8)))
     }
     @MainActor func testRealSocketPermissionsRoundtripAndStop() async throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent("mcp-" + UUID().uuidString)
+        let root = TestScratch.folder("mcp")
         defer { try? FileManager.default.removeItem(at: root) }
         let path = root.appendingPathComponent("control.sock").path
         let server = LocalControlServer()
@@ -59,7 +60,7 @@ final class MCPTests: XCTestCase {
         XCTAssertThrowsError(try LocalControl.request(Data(), path: path))
     }
     func testUntrustedSocketPathRejected() throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent("mcp-" + UUID().uuidString)
+        let root = TestScratch.folder("mcp")
         defer { try? FileManager.default.removeItem(at: root) }
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let path = root.appendingPathComponent("control.sock").path
@@ -83,7 +84,10 @@ extension MCPTests {
             server,
             [
                 "jsonrpc": "2.0", "id": 1, "method": "initialize",
-                "params": ["protocolVersion": "2025-06-18", "clientInfo": [:], "capabilities": [:]],
+                "params": [
+                    "protocolVersion": "2025-06-18", "clientInfo": ["name": "test", "version": "1"],
+                    "capabilities": [:],
+                ],
             ])
         _ = server.respond(
             try JSONSerialization.data(withJSONObject: ["jsonrpc": "2.0", "method": "notifications/initialized"]))

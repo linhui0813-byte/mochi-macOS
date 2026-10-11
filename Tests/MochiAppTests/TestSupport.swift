@@ -1,5 +1,6 @@
 import MochiCore
 import MochiKernel
+import MochiTestSupport
 import XCTest
 
 @testable import MochiApp
@@ -50,18 +51,12 @@ final class TestPlayer: PlaybackPlayer {
 }
 
 extension XCTestCase {
-    /// Preferences private to this test, removed when it ends.
-    func makePreferences(named suite: String = "mochi-test-\(UUID().uuidString)") -> UserDefaults {
-        let preferences = UserDefaults(suiteName: suite)!
-        addTeardownBlock { preferences.removePersistentDomain(forName: suite) }
-        return preferences
-    }
-    /// A temporary folder removed when the test ends.
-    func makeTemporaryFolder() -> URL {
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("mochi-test-\(UUID().uuidString)")
-        addTeardownBlock { try? FileManager.default.removeItem(at: url) }
-        return url
-    }
+    /// Preferences private to this test; their file is deleted when the test process exits.
+    func makePreferences(_ prefix: String = "mochi-test") -> UserDefaults { TestScratch.preferences(prefix).defaults }
+    /// The preferences suite with exactly this name, for tests that relaunch against the same suite.
+    func makePreferences(named suite: String) -> UserDefaults { TestScratch.preferences(named: suite) }
+    /// A temporary folder inside the test process's scratch folder, removed when the process exits.
+    func makeTemporaryFolder(_ prefix: String = "mochi-test") -> URL { TestScratch.folder(prefix) }
     /// An AppModel with private preferences and fake services; playing audio fails the test unless it sets a player.
     /// Demo models get their own temporary folder.
     /// Pass `applicationSupport` without `root` to exercise the managed data folder and its migration.

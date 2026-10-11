@@ -1,4 +1,5 @@
 import MochiCore
+import MochiTestSupport
 import XCTest
 
 @testable import MochiApp
@@ -15,8 +16,8 @@ final class VoiceModelTests: XCTestCase {
     }
     @MainActor func testVoiceOptionsPersistAndRejectInvalidPreferences() throws {
         let suite = "mochi-options-test-\(UUID())"
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        let prefs = UserDefaults(suiteName: suite)!
+        let root = TestScratch.folder()
+        let prefs = TestScratch.preferences(named: suite)
         defer {
             prefs.removePersistentDomain(forName: suite)
             try? FileManager.default.removeItem(at: root)

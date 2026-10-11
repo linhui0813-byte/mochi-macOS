@@ -52,8 +52,21 @@ public enum PitchContour {
 
     private static func smooth(_ points: [Point]) -> [Point] {
         guard points.count > 2 else { return points }
+        let values = suppressingSpikes(points)
+        var lower = 0
+        var upper = 0
+        return points.indices.map { i in
+            let time = points[i].time
+            while lower < i && time - points[lower].time > 0.045 { lower += 1 }
+            upper = max(upper, i)
+            while upper + 1 < points.count && points[upper + 1].time - time <= 0.045 { upper += 1 }
+            return Point(time: time, value: localFit(points, values, at: i, over: lower...upper))
+        }
+    }
+
+    /// Suppresses only an isolated large spike with agreeing adjacent frames.
+    private static func suppressingSpikes(_ points: [Point]) -> [Double] {
         var values = points.map(\.value)
-        // Suppress only an isolated large spike with agreeing adjacent frames.
         for i in 1..<points.count - 1 {
             let before = points[i - 1].value
             let after = points[i + 1].value
@@ -62,36 +75,35 @@ public enum PitchContour {
                 values[i] = (before + after) / 2
             }
         }
-        var lower = 0
-        var upper = 0
-        return points.indices.map { i in
-            let time = points[i].time
-            while lower < i && time - points[lower].time > 0.045 { lower += 1 }
-            upper = max(upper, i)
-            while upper + 1 < points.count && points[upper + 1].time - time <= 0.045 { upper += 1 }
-            // Local Gaussian-weighted linear fit preserves ramps, including at edges.
-            var weight = 0.0
-            var x = 0.0
-            var xx = 0.0
-            var y = 0.0
-            var xy = 0.0
-            var minimum = values[i]
-            var maximum = values[i]
-            for j in lower...upper {
-                let dt = points[j].time - time
-                let w = exp(-0.5 * pow(dt / 0.020, 2))
-                weight += w
-                x += w * dt
-                xx += w * dt * dt
-                y += w * values[j]
-                xy += w * dt * values[j]
-                minimum = min(minimum, values[j])
-                maximum = max(maximum, values[j])
-            }
-            let denominator = weight * xx - x * x
-            let fitted = denominator > 1e-12 ? (y * xx - x * xy) / denominator : y / weight
-            return Point(time: time, value: min(maximum, max(minimum, fitted)))
+        return values
+    }
+
+    /// Local Gaussian-weighted linear fit preserves ramps, including at edges, clamped to the window's range.
+    private static func localFit(_ points: [Point], _ values: [Double], at i: Int, over window: ClosedRange<Int>)
+        -> Double
+    {
+        let time = points[i].time
+        var weight = 0.0
+        var x = 0.0
+        var xx = 0.0
+        var y = 0.0
+        var xy = 0.0
+        var minimum = values[i]
+        var maximum = values[i]
+        for j in window {
+            let dt = points[j].time - time
+            let w = exp(-0.5 * pow(dt / 0.020, 2))
+            weight += w
+            x += w * dt
+            xx += w * dt * dt
+            y += w * values[j]
+            xy += w * dt * values[j]
+            minimum = min(minimum, values[j])
+            maximum = max(maximum, values[j])
         }
+        let denominator = weight * xx - x * x
+        let fitted = denominator > 1e-12 ? (y * xx - x * xy) / denominator : y / weight
+        return min(maximum, max(minimum, fitted))
     }
 
     /// PCHIP: continuous tangents without the overshoot of unconstrained splines.

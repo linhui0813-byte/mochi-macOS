@@ -1,3 +1,4 @@
+import Accelerate
 import Foundation
 
 public struct PitchPoint: Sendable {
@@ -12,17 +13,18 @@ public struct PitchPoint: Sendable {
 public enum PitchAnalyzer {
     // Normalized autocorrelation with the first strong local maximum to avoid subharmonics.
     public static func analyze(samples: [Float], sampleRate: Double) -> [PitchPoint] {
-        guard sampleRate > 0, samples.count > 1024 else { return [] }
+        guard sampleRate.isFinite, sampleRate > 0, sampleRate / 12000 < Double(Int.max), !samples.isEmpty else {
+            return []
+        }
         let stride = max(1, Int(sampleRate / 12000))
-        let signal = Swift.stride(from: 0, to: samples.count, by: stride).map { Double(samples[$0]) }
         let rate = sampleRate / Double(stride)
         let window = Int(rate * 0.045)
         let hop = Int(rate * 0.015)
-        guard signal.count > window else { return [] }
         let low = max(2, Int(rate / 500))
-        let high = min(window / 2, Int(rate / 65))
+        let high = min(window / 2, Int((rate / 65).rounded(.up)))
         // Very low sample rates leave no usable lag range or hop; such audio has no measurable speech pitch.
-        guard hop > 0, high > low + 1 else { return [] }
+        guard hop > 0, high > low + 1, (samples.count - 1) / stride + 1 >= window else { return [] }
+        let signal = decimate(samples, by: stride)
         func point(at start: Int) -> PitchPoint {
             let segment = Array(signal[start..<start + window])
             let mean = segment.reduce(0, +) / Double(window)
@@ -30,8 +32,9 @@ public enum PitchAnalyzer {
             let rms = sqrt(x.reduce(0) { $0 + $1 * $1 } / Double(window))
             let time = Double(start + window / 2) / rate
             guard rms > 0.008 else { return PitchPoint(time: time, hz: nil) }
+            // Neighbours outside low...high are computed too, so peaks at either end of the range count.
             var correlations = [Double](repeating: 0, count: high + 2)
-            for lag in low...high {
+            for lag in (low - 1)...(high + 1) {
                 var sum = 0.0
                 var a = 0.0
                 var b = 0.0
@@ -43,7 +46,7 @@ public enum PitchAnalyzer {
                 correlations[lag] = sum / max(1e-10, sqrt(a * b))
             }
             guard
-                let peak = (low + 1..<high).first(where: {
+                let peak = (low...high).first(where: {
                     correlations[$0] > 0.78 && correlations[$0] >= correlations[$0 - 1]
                         && correlations[$0] >= correlations[$0 + 1]
                 })
@@ -55,11 +58,33 @@ public enum PitchAnalyzer {
             return PitchPoint(time: time, hz: rate / (Double(peak) + delta))
         }
         var points: [PitchPoint] = []
-        for start in Swift.stride(from: 0, to: signal.count - window, by: hop) {
+        for start in Swift.stride(from: 0, through: signal.count - window, by: hop) {
             if Task.isCancelled { return [] }
             points.append(point(at: start))
         }
         return points
+    }
+    /// Keeps every `factor`th sample after a Blackman-windowed sinc low-pass (about 74 dB of stopband attenuation)
+    /// whose stopband starts at 80% of the new Nyquist frequency. Tones the analysis rate cannot carry, or that sit
+    /// so close to its Nyquist frequency that they beat like a voice, are removed instead of read as speech pitch.
+    /// Runs even without decimation for that reason. Samples beyond either end count as silence.
+    static func decimate(_ samples: [Float], by factor: Int) -> [Double] {
+        let half = 28 * factor
+        let cutoff = 0.35 / Double(factor)
+        var taps = (-half...half).map { k -> Float in
+            let x = Double(k)
+            let sinc = k == 0 ? 2 * cutoff : sin(2 * .pi * cutoff * x) / (.pi * x)
+            let phase = .pi * Double(k + half) / Double(half)
+            return Float(sinc * (0.42 - 0.5 * cos(phase) + 0.08 * cos(2 * phase)))
+        }
+        let gain = taps.reduce(0, +)
+        taps = taps.map { $0 / gain }
+        let count = (samples.count - 1) / factor + 1
+        var padded = [Float](repeating: 0, count: (count - 1) * factor + taps.count)
+        padded.replaceSubrange(half..<half + samples.count, with: samples)
+        var output = [Float](repeating: 0, count: count)
+        vDSP_desamp(padded, vDSP_Stride(factor), taps, &output, vDSP_Length(count), vDSP_Length(taps.count))
+        return output.map(Double.init)
     }
 }
 public enum PCM {

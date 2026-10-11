@@ -1,6 +1,5 @@
 #if MOCHI_DEVELOPMENT
     import Foundation
-    import MochiCore
     import MochiKernel
     import MochiAutomation
 
@@ -22,37 +21,58 @@
             deinit {
                 try? input.fileHandleForWriting.close()
                 if process.isRunning { process.terminate() }
+                let deadline = Date().addingTimeInterval(2)
+                while process.isRunning && Date() < deadline { usleep(20000) }
+                if process.isRunning { kill(process.processIdentifier, SIGKILL) }
                 process.waitUntilExit()
             }
             func write(_ object: [String: Any]) throws {
                 try input.fileHandleForWriting.write(
                     contentsOf: JSONSerialization.data(withJSONObject: object) + Data([10]))
             }
-            func request(_ method: String, id: Int, params: [String: Any] = [:]) throws -> [String: Any] {
-                try write(["jsonrpc": "2.0", "id": id, "method": method, "params": params])
+            /// One newline-terminated message from the helper, read before `deadline`.
+            private func readLine(before deadline: Date) throws -> Data {
                 var data = Data()
-                let deadline = Date().addingTimeInterval(10)
                 let fd = output.fileHandleForReading.fileDescriptor
                 while true {
+                    let remaining = deadline.timeIntervalSinceNow
+                    guard remaining > 0 else { throw AppFailure("MCP helper timed out.") }
                     var item = pollfd(fd: fd, events: Int16(POLLIN), revents: 0)
-                    guard Date() < deadline, poll(&item, 1, 1000) >= 0 else {
-                        throw AppFailure("MCP helper timed out.")
+                    let ready = poll(&item, 1, Int32(max(1, min(1000, remaining * 1000))))
+                    if ready < 0 {
+                        if errno == EINTR { continue }
+                        throw AppFailure("Could not wait for the MCP helper: \(String(cString: strerror(errno))).")
                     }
-                    if item.revents == 0 { continue }
+                    if ready == 0 { continue }
                     guard let byte = try output.fileHandleForReading.read(upToCount: 1), !byte.isEmpty else {
                         throw AppFailure("MCP helper ended.")
                     }
-                    if byte[byte.startIndex] == 10 { break }
+                    if byte[byte.startIndex] == 10 { return data }
                     data.append(byte)
                     guard data.count <= LocalControl.maxFrame else {
                         throw AppFailure("MCP helper response exceeded limit.")
                     }
                 }
-                guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-                    throw AppFailure("Invalid MCP helper JSON.")
+            }
+            /// The JSON-RPC response to request `id`. Notifications that arrive first are recorded and skipped.
+            func request(_ method: String, id: Int, params: [String: Any] = [:]) throws -> [String: Any] {
+                try write(["jsonrpc": "2.0", "id": id, "method": method, "params": params])
+                let deadline = Date().addingTimeInterval(10)
+                while true {
+                    let line = try readLine(before: deadline)
+                    guard let object = try JSONSerialization.jsonObject(with: line) as? [String: Any] else {
+                        throw AppFailure("Invalid MCP helper JSON.")
+                    }
+                    transcript.append(object)
+                    guard object["jsonrpc"] as? String == "2.0" else {
+                        throw AppFailure("MCP helper sent a message that is not JSON-RPC 2.0.")
+                    }
+                    if object["id"] == nil, object["method"] is String { continue }
+                    guard let number = object["id"] as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(),
+                        number.intValue == id, number.doubleValue == Double(id)
+                    else { throw AppFailure("MCP helper answered a different request than \(method) #\(id).") }
+                    return object
                 }
-                transcript.append(object)
-                return object
             }
             func initialize() throws {
                 _ = try request(
@@ -63,14 +83,30 @@
                     ])
                 try write(["jsonrpc": "2.0", "method": "notifications/initialized"])
             }
-            func call(_ name: String, id: Int, arguments: [String: Any] = [:]) throws -> [String: Any] {
+            /// The tool's decoded JSON payload and whether the helper flagged it as an error.
+            func tool(_ name: String, id: Int, arguments: [String: Any]) throws -> (
+                isError: Bool, object: [String: Any]
+            ) {
                 let response = try request("tools/call", id: id, params: ["name": name, "arguments": arguments])
-                guard let result = response["result"] as? [String: Any], result["isError"] as? Bool == false,
+                guard let result = response["result"] as? [String: Any], let isError = result["isError"] as? Bool,
                     let content = result["content"] as? [[String: Any]], let text = content.first?["text"] as? String,
-                    let object = try JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any],
-                    object["ok"] as? Bool == true
-                else { throw AppFailure("MCP helper tool call failed.") }
+                    let object = try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any]
+                else { throw AppFailure("MCP helper returned an unreadable \(name) result.") }
+                return (isError, object)
+            }
+            func call(_ name: String, id: Int, arguments: [String: Any] = [:]) throws -> [String: Any] {
+                let (isError, object) = try tool(name, id: id, arguments: arguments)
+                guard !isError, object["ok"] as? Bool == true else {
+                    throw AppFailure("MCP helper \(name) failed: \(object["error"] as? String ?? "no message").")
+                }
                 return object
+            }
+            /// The current conversation revision, which every conversation action must quote.
+            func revision() throws -> String {
+                guard let revision = try call("get_session", id: 9)["revision"] as? String else {
+                    throw AppFailure("MCP session missing revision.")
+                }
+                return revision
             }
         }
         static func run(helper: String, socketPath: String) throws -> Data {
@@ -85,19 +121,29 @@
             guard let id = session["conversation_id"] as? String, let revision = session["revision"] as? String else {
                 throw AppFailure("MCP session missing state.")
             }
-            _ = try client.call(
-                "save_expression", id: 4,
-                arguments: [
-                    "conversation_id": id, "expected_revision": revision, "english": "Could you give me a moment?",
-                    "meaning": "Ask politely for time to think.",
-                ])
-            let replay = try client.call(
-                "save_expression", id: 4,
-                arguments: [
-                    "conversation_id": id, "expected_revision": revision, "english": "Could you give me a moment?",
-                    "meaning": "Ask politely for time to think.",
-                ])
-            guard replay["expression_id"] != nil else { throw AppFailure("MCP replay failed.") }
+            try checkExpressionReplay(client, conversation: id, revision: revision)
+            let template = try checkTemplateLifecycle(client)
+            try checkSnapshotSurvivesDeletion(client, template: template, conversation: id)
+            return try JSONSerialization.data(
+                withJSONObject: client.transcript, options: [.prettyPrinted, .sortedKeys])
+        }
+        /// A request repeated with the same JSON-RPC ID gets the first reply and changes nothing.
+        private static func checkExpressionReplay(_ client: Client, conversation id: String, revision: String) throws {
+            let arguments: [String: Any] = [
+                "conversation_id": id, "expected_revision": revision, "english": "Could you give me a moment?",
+                "meaning": "Ask politely for time to think.",
+            ]
+            let first = try client.call("save_expression", id: 4, arguments: arguments)
+            let replay = try client.call("save_expression", id: 4, arguments: arguments)
+            guard let saved = first["expression_id"] as? String, replay["expression_id"] as? String == saved,
+                let savedRevision = first["revision"] as? String, replay["revision"] as? String == savedRevision
+            else { throw AppFailure("MCP replay returned a different result.") }
+            guard try client.call("get_session", id: 40)["revision"] as? String == savedRevision else {
+                throw AppFailure("MCP replay changed Mochi's state.")
+            }
+        }
+        /// Creates and updates a user template, and checks that a stale revision is refused for that reason.
+        private static func checkTemplateLifecycle(_ client: Client) throws -> (id: String, revision: String) {
             let catalog = try client.call("list_conversation_templates", id: 5)
             guard (catalog["templates"] as? [[String: Any]])?.count ?? 0 >= 6 else {
                 throw AppFailure("Built-in templates missing.")
@@ -114,43 +160,45 @@
                     "template_id": templateID, "expected_template_revision": templateRevision,
                     "instructions": "Discuss books",
                 ])
-            let updatedRevision = (updated["template"] as? [String: Any])?["template_revision"] as? String ?? ""
-            let stale = try client.request(
-                "tools/call", id: 80,
-                params: [
-                    "name": "update_conversation_template",
-                    "arguments": [
-                        "template_id": templateID, "expected_template_revision": templateRevision,
-                        "instructions": "Stale overwrite",
-                    ],
+            guard let updatedRevision = (updated["template"] as? [String: Any])?["template_revision"] as? String,
+                updatedRevision != templateRevision
+            else { throw AppFailure("Template update did not return a new revision.") }
+            let stale = try client.tool(
+                "update_conversation_template", id: 80,
+                arguments: [
+                    "template_id": templateID, "expected_template_revision": templateRevision,
+                    "instructions": "Stale overwrite",
                 ])
-            guard (stale["result"] as? [String: Any])?["isError"] as? Bool == true else {
-                throw AppFailure("Stale helper update was accepted.")
+            guard stale.isError, (stale.object["error"] as? String)?.hasPrefix("This template changed.") == true else {
+                throw AppFailure("Stale helper update was not refused as a revision conflict.")
             }
             let unchanged = try client.call("get_conversation_template", id: 81, arguments: ["template_id": templateID])
-            guard (unchanged["template"] as? [String: Any])?["instructions"] as? String == "Discuss books" else {
-                throw AppFailure("Stale request changed template instructions.")
-            }
-
-            let beforeStart = try client.call("get_session", id: 9)
+            guard let current = unchanged["template"] as? [String: Any],
+                current["instructions"] as? String == "Discuss books",
+                current["template_revision"] as? String == updatedRevision
+            else { throw AppFailure("Stale request changed the template.") }
+            return (templateID, updatedRevision)
+        }
+        /// A conversation started from a template keeps its settings after the template is deleted.
+        private static func checkSnapshotSurvivesDeletion(
+            _ client: Client, template: (id: String, revision: String), conversation id: String
+        ) throws {
             _ = try client.call(
                 "create_conversation", id: 10,
                 arguments: [
-                    "template_id": templateID, "expected_template_revision": updatedRevision,
-                    "expected_revision": beforeStart["revision"] as! String,
+                    "template_id": template.id, "expected_template_revision": template.revision,
+                    "expected_revision": try client.revision(),
                 ])
             _ = try client.call(
                 "delete_conversation_template", id: 11,
-                arguments: ["template_id": templateID, "expected_template_revision": updatedRevision])
+                arguments: ["template_id": template.id, "expected_template_revision": template.revision])
             let snapshot = try client.call("get_session", id: 12)
             guard snapshot["character_name"] as? String == "Loki",
-                snapshot["instructions"] as? String == "Discuss books"
+                snapshot["instructions"] as? String == "Discuss books",
+                let revision = snapshot["revision"] as? String
             else { throw AppFailure("Conversation lost deleted template snapshot.") }
             _ = try client.call(
-                "open_conversation", id: 13,
-                arguments: ["conversation_id": id, "expected_revision": snapshot["revision"] as! String])
-            return try JSONSerialization.data(
-                withJSONObject: client.transcript, options: [.prettyPrinted, .sortedKeys])
+                "open_conversation", id: 13, arguments: ["conversation_id": id, "expected_revision": revision])
         }
         static func disabled(helper: String, socketPath: String) throws -> Bool {
             let client = try Client(helper: helper, socketPath: socketPath)

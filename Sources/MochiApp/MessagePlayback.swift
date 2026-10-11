@@ -10,6 +10,9 @@ struct MessagePlayback: View {
     @State private var fileDuration: Double = 0
     @State private var scrubbing = false
     @State private var scrubPosition: Double = 0
+    @FocusState private var playFocused: Bool
+    @FocusState private var sliderFocused: Bool
+    private var focusColor: Color { isUser ? .white : Color(nsColor: .keyboardFocusIndicatorColor) }
     private var active: Bool { app.playbackFile == file }
     private var length: Double { active ? audio.duration : fileDuration }
     private var position: Double { scrubbing ? scrubPosition : active ? audio.position : 0 }
@@ -23,6 +26,11 @@ struct MessagePlayback: View {
                     .frame(width: 26, height: 26)
             }
             .buttonStyle(.plain)
+            .focused($playFocused)
+            .focusEffectDisabled()
+            .overlay {
+                Circle().strokeBorder(focusColor, lineWidth: 2).opacity(playFocused ? 1 : 0).allowsHitTesting(false)
+            }
             .accessibilityLabel(
                 active && !audio.paused ? "Pause recording" : active ? "Resume recording" : "Play recording"
             )
@@ -40,6 +48,12 @@ struct MessagePlayback: View {
                 }
             )
             .controlSize(.small)
+            .focused($sliderFocused)
+            .focusEffectDisabled(isUser)
+            .overlay {
+                Capsule().strokeBorder(focusColor, lineWidth: 2).padding(-2).opacity(isUser && sliderFocused ? 1 : 0)
+                    .allowsHitTesting(false)
+            }
             .accessibilityLabel("Recording position")
             .help("Click or drag to jump within this recording")
             .disabled(length <= 0)

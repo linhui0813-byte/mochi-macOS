@@ -1,4 +1,5 @@
 import MochiCore
+import MochiTestSupport
 import XCTest
 
 @testable import MochiApp
@@ -6,8 +7,8 @@ import XCTest
 final class CodexOnlyTests: XCTestCase {
     @MainActor func testLegacyProviderPreferencesCannotSelectPaidProviders() throws {
         let suite = "mochi-codex-only-\(UUID())"
-        let prefs = UserDefaults(suiteName: suite)!
-        let root = URL(fileURLWithPath: "/tmp/mochi-codex-only-\(UUID())")
+        let prefs = TestScratch.preferences(named: suite)
+        let root = TestScratch.folder("mochi-codex-only")
         defer {
             prefs.removePersistentDomain(forName: suite)
             try? FileManager.default.removeItem(at: root)
@@ -26,8 +27,8 @@ final class CodexOnlyTests: XCTestCase {
     }
     @MainActor func testRetiredElevenLabsSettingsAreIgnoredButRetainedWithSavedExamples() throws {
         let suite = "mochi-retired-elevenlabs-\(UUID())"
-        let prefs = UserDefaults(suiteName: suite)!
-        let root = URL(fileURLWithPath: "/tmp/mochi-retired-elevenlabs-\(UUID())")
+        let prefs = TestScratch.preferences(named: suite)
+        let root = TestScratch.folder("mochi-retired-elevenlabs")
         defer {
             prefs.removePersistentDomain(forName: suite)
             try? FileManager.default.removeItem(at: root)
@@ -54,8 +55,8 @@ final class CodexOnlyTests: XCTestCase {
     }
     @MainActor func testLegacyReferenceAudioAndLabelSurviveVoiceChangeAndRelaunch() throws {
         let suite = "mochi-retained-voice-\(UUID())"
-        let prefs = UserDefaults(suiteName: suite)!
-        let root = URL(fileURLWithPath: "/tmp/mochi-retained-\(UUID())")
+        let prefs = TestScratch.preferences(named: suite)
+        let root = TestScratch.folder("mochi-retained")
         defer {
             prefs.removePersistentDomain(forName: suite)
             try? FileManager.default.removeItem(at: root)

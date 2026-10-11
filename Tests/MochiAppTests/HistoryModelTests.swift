@@ -1,4 +1,5 @@
 import MochiCore
+import MochiTestSupport
 import XCTest
 
 @testable import MochiApp
@@ -123,5 +124,5 @@ final class HistoryModelTests: XCTestCase {
         XCTAssertTrue(model.library.conversations.first(where: { $0.id == other })!.archived)
         XCTAssertFalse(model.library.conversations.first(where: { $0.id == source })!.archived)
     }
-    private func temporary() -> URL { FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString) }
+    private func temporary() -> URL { TestScratch.folder() }
 }

@@ -1,11 +1,12 @@
 import MochiKernel
+import MochiTestSupport
 import XCTest
 
 @testable import MochiCore
 
 final class FilesRemediationTests: XCTestCase {
     private func folder() throws -> URL {
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("mochi-files-\(UUID().uuidString)")
+        let url = TestScratch.folder("mochi-files")
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         addTeardownBlock { try? FileManager.default.removeItem(at: url) }
         return url

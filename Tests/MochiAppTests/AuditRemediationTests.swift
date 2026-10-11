@@ -1,12 +1,13 @@
 import MochiAutomation
 import MochiCore
+import MochiTestSupport
 import XCTest
 
 @testable import MochiApp
 
 final class AuditRemediationTests: XCTestCase {
     @MainActor private func app() -> AppModel {
-        makeApp(root: URL(fileURLWithPath: "/tmp/mochi-audit-\(UUID())"), preferences: makePreferences())
+        makeApp(root: TestScratch.folder("mochi-audit"), preferences: makePreferences())
     }
     @MainActor func testDraftProtectedAndCancelledPreparationNeverWrites() throws {
         let app = app()

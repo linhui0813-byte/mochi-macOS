@@ -1,3 +1,4 @@
+import MochiTestSupport
 import XCTest
 
 @testable import MochiCore
@@ -34,7 +35,7 @@ final class CoreTests: XCTestCase {
             a, ReferenceSpeech.cacheName(text: "Hello", model: "gpt-realtime", voice: "marin", options: options))
     }
     func testPersistenceRoundTripAndCorruptionDoesNotOverwrite() throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let root = TestScratch.folder()
         defer { try? FileManager.default.removeItem(at: root) }
         let store = LibraryStore(root: root)
         var library = Library()
@@ -56,7 +57,7 @@ final class CoreTests: XCTestCase {
         XCTAssertEqual(turn.owner, .none)
     }
     func testFutureLibraryVersionIsPreserved() throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let root = TestScratch.folder()
         defer { try? FileManager.default.removeItem(at: root) }
         let store = LibraryStore(root: root)
         var library = Library()

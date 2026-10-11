@@ -5,7 +5,18 @@ import MochiKernel
 /// The app's stored settings. Stored values that no longer validate fall back to defaults, and the log names them.
 @MainActor @Observable final class PreferencesStore {
     @ObservationIgnored let defaults: UserDefaults
-    var modelName: String { didSet { defaults.set(modelName, forKey: "model") } }
+    /// The Model field as typed. A blank value is not stored, so the default returns after a restart.
+    var modelName: String {
+        didSet {
+            if Self.trimmed(modelName) == nil {
+                defaults.removeObject(forKey: "model")
+            } else {
+                defaults.set(modelName, forKey: "model")
+            }
+        }
+    }
+    /// The model services use: the typed name without surrounding spaces, or the default when it is blank.
+    var effectiveModelName: String { Self.trimmed(modelName) ?? RealtimeService.defaultModel }
     var conversationVoice: String { didSet { defaults.set(conversationVoice, forKey: "conversationVoice") } }
     var builtInPracticeVoice: String { didSet { defaults.set(builtInPracticeVoice, forKey: "builtInPracticeVoice") } }
     var conversationVoiceOptions: OpenAIVoiceOptions {
@@ -15,7 +26,9 @@ import MochiKernel
     var externalControlEnabled: Bool {
         didSet { defaults.set(externalControlEnabled, forKey: "externalControlEnabled") }
     }
-    var practiceVoiceLabel: String { "\(RealtimeVoice(rawValue:builtInPracticeVoice)?.name ?? "Marin") · Codex voice" }
+    var practiceVoiceLabel: String {
+        "\(RealtimeVoice(rawValue: builtInPracticeVoice)?.name ?? RealtimeService.defaultVoice.capitalized) · Codex voice"
+    }
     /// The last few greeting patterns, so a new conversation does not open with the same words.
     var recentGreetings: [String] {
         get { defaults.stringArray(forKey: "voiceGreetingHistory") ?? [] }
@@ -53,7 +66,7 @@ import MochiKernel
                 return OpenAIVoiceOptions()
             }
         }
-        modelName = defaults.string(forKey: "model") ?? RealtimeService.defaultModel
+        modelName = defaults.string(forKey: "model").flatMap(Self.trimmed) ?? RealtimeService.defaultModel
         conversationVoice = voice("conversationVoice")
         builtInPracticeVoice = voice("builtInPracticeVoice")
         conversationVoiceOptions = options("conversationVoiceOptions")
@@ -64,12 +77,16 @@ import MochiKernel
     func conversationService(speed: Double? = nil) -> RealtimeService {
         var options = conversationVoiceOptions
         if let speed { options.speed = speed }
-        return RealtimeService(model: modelName, voice: conversationVoice, options: options)
+        return RealtimeService(model: effectiveModelName, voice: conversationVoice, options: options)
     }
     /// The voice for practice examples, or another voice being previewed.
     func practiceService(voice: String? = nil, options: OpenAIVoiceOptions? = nil) -> RealtimeService {
         RealtimeService(
-            model: modelName, voice: voice ?? builtInPracticeVoice, options: options ?? practiceVoiceOptions)
+            model: effectiveModelName, voice: voice ?? builtInPracticeVoice, options: options ?? practiceVoiceOptions)
+    }
+    private static func trimmed(_ value: String) -> String? {
+        let text = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return text.isEmpty ? nil : text
     }
     private func store(_ value: OpenAIVoiceOptions, key: String) {
         do { defaults.set(try JSONEncoder().encode(value), forKey: key) } catch {

@@ -1,4 +1,3 @@
-import MochiCore
 import SwiftUI
 
 struct SettingsView: View {
@@ -11,7 +10,10 @@ struct SettingsView: View {
                     LabeledContent("Sign-in", value: "Codex")
                     Text("Sign in through Codex on this Mac, then check the connection here.").font(.callout)
                         .foregroundStyle(.secondary)
-                    TextField("Model", text: Bindable(app.settings).modelName).disabled(app.busy)
+                    TextField("Model", text: Bindable(app.settings).modelName).textFieldStyle(.roundedBorder).disabled(
+                        app.busy
+                    )
+                    .onChange(of: app.settings.modelName) { app.serviceStatus = "Not checked" }
                     LabeledContent("Status") { Text(app.serviceStatus).foregroundStyle(.secondary) }
                     Button("Check Connection", action: app.checkConnection).disabled(app.busy)
                 }
@@ -35,10 +37,8 @@ struct SettingsView: View {
                 Section("Storage") {
                     LabeledContent("Conversations and recordings", value: "On this Mac")
                     LabeledContent("Sign-in", value: "Your local Codex session")
-                    Button("Export Library Backup…", action: app.exportLibraryBackup).disabled(
-                        app.libraryTransfer != nil)
-                    Button("Import Library Backup…", action: app.importLibraryBackup).disabled(
-                        app.libraryTransfer != nil)
+                    Button("Export Library Backup…", action: app.exportLibraryBackup).disabled(!canTransferLibrary)
+                    Button("Import Library Backup…", action: app.importLibraryBackup).disabled(!canTransferLibrary)
                     Button("Show Data Folder…", action: app.revealDataFolder)
                     if app.canRestorePreviousLibrary {
                         Button("Restore Earlier Copy…", action: app.restorePreviousLibrary)
@@ -55,22 +55,19 @@ struct SettingsView: View {
                         "Library backups include conversations and practice audio, not sign-in credentials. Provider processing and retention follow your account settings."
                     ).foregroundStyle(.secondary)
                 }
-                Section("Mochi") {
-                    Text("Original character and artwork © Xiaolai. Used with permission.").foregroundStyle(.secondary)
-                }
+                feedback
+                if let feedback = app.historyFeedback { Text(feedback).font(.callout).foregroundStyle(.secondary) }
             }.formStyle(.grouped)
                 .tabItem { Label("Data & Privacy", systemImage: "hand.raised") }.tag("privacy")
-        }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            Text(
-                "Mochi \(Bundle.main.object(forInfoDictionaryKey:"CFBundleShortVersionString") as? String ?? "Development") (build \(Bundle.main.object(forInfoDictionaryKey:"CFBundleVersion") as? String ?? "Development"))"
-            )
-            .font(.caption).foregroundStyle(.secondary)
-            .textSelection(.enabled).padding(.top, 8)
+
+            AboutSettingsView()
+                .tabItem { Label("About", systemImage: "info.circle") }.tag("about")
         }
         .padding(12)
         .frame(width: 620, height: 560)
     }
+
+    private var canTransferLibrary: Bool { app.libraryReadable && app.libraryTransfer == nil }
 
     @ViewBuilder private var feedback: some View {
         if let error = app.error { Text(error).font(.callout).foregroundStyle(.red) }

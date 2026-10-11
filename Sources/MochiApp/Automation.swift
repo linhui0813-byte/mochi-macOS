@@ -29,16 +29,19 @@ extension AppModel {
     }
     func executeVoiceTool(_ name: String, arguments: [String: Any], operationID: UUID) throws -> [String: Any] {
         let tool = try MochiTools.validate(name: name, arguments: arguments, origin: .voice)
-        if tool.readOnly { return try executeTool(name, arguments: arguments, origin: .voice) }
+        if tool.readOnly { return try executeTool(tool, arguments: arguments, origin: .voice) }
         let key = operationID.uuidString + ":" + (try MochiTools.signature(name: name, arguments: arguments))
         if var result = automation.voiceResults[key] {
             result["status"] = "previously_completed"
             result["revision"] = controlRevision
             return result
         }
+        if deferredToolAction != nil, automation.scheduledVoiceToolKey == key {
+            return ["ok": true, "status": "scheduled_after_reply", "revision": controlRevision]
+        }
         automation.voiceToolKey = key
         defer { automation.voiceToolKey = nil }
-        let result = try executeTool(name, arguments: arguments, origin: .voice)
+        let result = try executeTool(tool, arguments: arguments, origin: .voice)
         if result["status"] as? String != "scheduled_after_reply" { automation.voiceResults.insert(result, for: key) }
         return result
     }
@@ -59,7 +62,9 @@ extension AppModel {
                 return cached.response
             }
             do { result = try executeTool(name, arguments: arguments, origin: .external) } catch {
-                MochiLog.failure(MochiLog.automation, "External tool \(name)", error, level: .info)
+                MochiLog.failure(
+                    MochiLog.automation, "External tool \(MochiToolName(rawValue: name)?.rawValue ?? "unknown")", error,
+                    level: .info)
                 result = MochiTools.error(AppFailure.message(for: error, fallback: "The app action failed."))
             }
             var response = try JSONSerialization.data(withJSONObject: result)
@@ -137,7 +142,48 @@ extension AppModel {
         }
     }
     func executeTool(_ name: String, arguments: [String: Any], origin: ToolOrigin) throws -> [String: Any] {
-        let tool = try MochiTools.validate(name: name, arguments: arguments, origin: origin)
+        try executeTool(
+            MochiTools.validate(name: name, arguments: arguments, origin: origin), arguments: arguments, origin: origin)
+    }
+    /// `items` in order while their serialized size fits `budget`. `make` builds an item whose texts are bounded
+    /// by a byte allowance; the first item is shortened to fit when it does not fit whole, so one long message
+    /// never leaves the result empty. Later items that do not fit whole end the list.
+    private func fitted<Item>(
+        _ items: [Item], budget: Int, _ make: (Item, Int) -> [String: Any]
+    ) throws -> [[String: Any]] {
+        var result: [[String: Any]] = []
+        var used = 0
+        func size(_ object: [String: Any]) throws -> Int { try JSONSerialization.data(withJSONObject: object).count }
+        for item in items {
+            let remaining = budget - used
+            let whole = make(item, remaining)
+            let wholeSize = try size(whole)
+            if wholeSize <= remaining {
+                result.append(whole)
+                used += wholeSize
+                continue
+            }
+            guard result.isEmpty else { break }
+            // Serialized size grows with the allowance, so the largest allowance that fits is found by bisection.
+            var low = 0
+            var high = remaining
+            var best: [String: Any]?
+            while low <= high {
+                let mid = (low + high) / 2
+                let candidate = make(item, mid)
+                if try size(candidate) <= remaining {
+                    best = candidate
+                    low = mid + 1
+                } else {
+                    high = mid - 1
+                }
+            }
+            if let best { result.append(best) }
+            break
+        }
+        return result
+    }
+    private func executeTool(_ tool: MochiTool, arguments: [String: Any], origin: ToolOrigin) throws -> [String: Any] {
         if origin == .external && !externalControlEnabled {
             throw AppFailure("External control is disabled in Mochi Settings.")
         }
@@ -193,6 +239,7 @@ extension AppModel {
                     throw AppFailure("A view or playback action is already scheduled for this reply.")
                 }
                 let key = automation.voiceToolKey
+                automation.scheduledVoiceToolKey = key
                 deferredToolAction = { [weak self] in
                     do {
                         guard let self else { return }
@@ -276,20 +323,18 @@ extension AppModel {
             ]
         case .getMessages:
             let source = Array(conversation?.messages.suffix(origin == .voice ? min(limit, 10) : limit) ?? [])
-            var messages: [[String: Any]] = []
-            var size = 0
-            for message in source.reversed() {
+            let budget = origin == .voice ? 6000 : 110000
+            let messages = try fitted(Array(source.reversed()), budget: budget) { message, bytes in
                 let text = message.contextText ?? ""
+                let shown = MochiTools.boundedText(text, characters: 2000, bytes: bytes)
                 var item: [String: Any] = [
-                    "id": message.id.uuidString, "role": message.role, "text": String(text.prefix(2000)),
-                    "text_truncated": text.count > 2000, "has_audio": message.audio != nil,
+                    "id": message.id.uuidString, "role": message.role, "text": shown,
+                    "text_truncated": shown != text, "has_audio": message.audio != nil,
                 ]
                 if message.audio != nil {
                     item["transcription_state"] = message.transcriptionState?.rawValue ?? "not_required"
                 }
-                size += try JSONSerialization.data(withJSONObject: item).count
-                if size > (origin == .voice ? 6000 : 110000) { break }
-                messages.append(item)
+                return item
             }
             return success([
                 "messages": Array(messages.reversed()),
@@ -302,18 +347,16 @@ extension AppModel {
                     && (search.query.isEmpty || $0.english.localizedCaseInsensitiveContains(search.query)
                         || $0.meaning.localizedCaseInsensitiveContains(search.query))
             }
-            var expressions: [[String: Any]] = []
-            var size = 0
-            for item in found.sorted(by: { $0.date > $1.date }).prefix(origin == .voice ? min(limit, 10) : limit) {
-                let value: [String: Any] = [
-                    "id": item.id.uuidString, "english": String(item.english.prefix(1000)),
-                    "meaning": String(item.meaning.prefix(1000)),
-                    "text_truncated": item.english.count > 1000 || item.meaning.count > 1000,
+            let count = origin == .voice ? min(limit, 10) : limit
+            let newest = Array(found.sorted(by: { $0.date > $1.date }).prefix(count))
+            let expressions = try fitted(newest, budget: origin == .voice ? 6000 : 110000) { item, bytes in
+                let english = MochiTools.boundedText(item.english, characters: 1000, bytes: bytes)
+                let meaning = MochiTools.boundedText(item.meaning, characters: 1000, bytes: bytes)
+                return [
+                    "id": item.id.uuidString, "english": english, "meaning": meaning,
+                    "text_truncated": english != item.english || meaning != item.meaning,
                     "has_reference": item.reference != nil, "attempt_count": item.attempts.count,
                 ]
-                size += try JSONSerialization.data(withJSONObject: value).count
-                if size > (origin == .voice ? 6000 : 110000) { break }
-                expressions.append(value)
             }
             return success([
                 "expressions": expressions, "has_more": found.count > expressions.count,
@@ -430,6 +473,9 @@ extension AppModel {
             guard playbackFile != nil else { throw AppFailure("No audio is playing.") }
             if (tool.name == .pauseAudio && !audio.paused) || (tool.name == .resumeAudio && audio.paused) {
                 audio.togglePause()
+            }
+            if tool.name == .resumeAudio, playbackFile == nil || audio.paused {
+                throw AppFailure("Playback could not resume.")
             }
             return success()
         case .playAudio, .seekAudio:

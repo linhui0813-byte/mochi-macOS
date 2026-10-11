@@ -6,7 +6,8 @@ import SwiftUI
     private(set) var statusItem: NSStatusItem?
     private(set) var window: NSWindow?
     private(set) var menu: NSMenu?
-    var presentMenu: (NSMenu, NSEvent, NSView) -> Void = { NSMenu.popUpContextMenu($0, with: $1, for: $2) }
+    /// Set by install(), which creates the status item the menu is shown from.
+    var presentMenu: (NSMenu, NSEvent, NSView) -> Void = { _, _, _ in }
     private weak var previousDelegate: NSWindowDelegate?
     private weak var model: AppModel?
 
@@ -51,22 +52,35 @@ import SwiftUI
 
     func attach(_ window: NSWindow, model: AppModel) {
         guard self.window !== window else { return }
+        // The replaced window gets its own delegate back, so its callbacks never act on the new window's state.
+        if let old = self.window, old.delegate === self { old.delegate = previousDelegate }
         self.window = window
         self.model = model
         previousDelegate = window.delegate
         window.delegate = self
     }
 
+    /// Ends in-progress work and saves. False only when a readable library could not be written.
+    static func finishWork(_ model: AppModel) -> Bool {
+        let saved = model.stop()
+        return !model.libraryReadable || saved
+    }
+
+    /// Hiding the workspace is refused while its latest changes are unsaved, so the failure stays visible.
+    private func finishWork() -> Bool {
+        guard let model else { return true }
+        return Self.finishWork(model)
+    }
+
     func windowShouldClose(_ sender: NSWindow) -> Bool {
-        model?.stop()
-        model?.save()
+        guard sender === window else { return true }
+        guard finishWork() else { return false }
         sender.orderOut(nil)
         return false
     }
 
     @objc func closeToTray() {
-        model?.stop()
-        model?.save()
+        guard finishWork() else { return }
         window?.orderOut(nil)
         // Hide settings and attached panels too, while retaining the status item.
         NSApp.hide(nil)

@@ -9,23 +9,10 @@ struct PracticePane: View {
     @State private var pitchOpen = false
     @State private var smoothPitch = true
     @FocusState private var thoughtFocused: Bool
+    @State private var refocusThought = false
     var body: some View {
         VStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Text(app.helpStage == .practice ? "Practise Your Expression" : "Help Me Say This").font(.title2)
-                        .fontWeight(.semibold)
-                    Spacer()
-                    Text("Conversation paused").font(.caption).foregroundStyle(.secondary)
-                }
-                HStack(spacing: 14) {
-                    stage("1  Your thought", active: app.helpStage == .thought)
-                    Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.tertiary)
-                    stage("2  Your English", active: app.helpStage == .english)
-                    Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.tertiary)
-                    stage("3  Optional practice", active: app.helpStage == .practice)
-                }.font(.caption)
-            }.padding(24)
+            header
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
@@ -42,20 +29,7 @@ struct PracticePane: View {
                 }
                 .onAppear { if app.recognizedThought != nil { proxy.scrollTo("recognized-thought", anchor: .center) } }
             }
-            if app.busy {
-                VStack(alignment: .leading, spacing: 8) {
-                    if app.turn.activity == .recording {
-                        RecordingFeedback(app: app)
-                    } else {
-                        HStack {
-                            ProgressView().controlSize(.small)
-                            Text(app.helpProgress ?? app.status).font(.callout)
-                            Spacer()
-                            Button("Cancel", action: app.cancelHelpWork)
-                        }
-                    }
-                }.padding(.horizontal, 24).padding(.vertical, 12)
-            }
+            activityFeedback
             if let notice = app.notice {
                 Text(notice).font(.caption).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 24).padding(.bottom, 10)
@@ -65,35 +39,85 @@ struct PracticePane: View {
                     .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 24).padding(.bottom, 12)
             }
             Divider()
-            VStack(spacing: 8) {
-                HStack {
-                    if app.helpStage == .thought {
-                        Button("Back to Conversation", action: app.resume).keyboardShortcut(.cancelAction)
-                        Spacer()
-                        Button("Find the English", action: app.translate).buttonStyle(.borderedProminent)
-                            .keyboardShortcut(.return, modifiers: .command)
-                            .disabled(app.busy || app.meaning.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    } else if app.helpStage == .english {
-                        Button("Return to Conversation", action: app.resume).keyboardShortcut(.cancelAction)
-                        Spacer()
-                        Button("Listen & Practise", action: app.beginPractice).buttonStyle(.borderedProminent)
-                            .disabled(app.busy || app.english.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    } else {
-                        PracticeActions(app: app)
-                    }
-                }
-                if !app.english.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Text(
-                        app.thoughtRecording != nil && !app.isSavedPractice
-                            ? "Returning saves the expression and removes its thought recording. Practice is optional."
-                            : "Returning saves this expression to My Expressions. Practice is optional."
-                    )
-                    .font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
-                }
-            }.padding(20)
+            footer
         }.background(Color(nsColor: .windowBackgroundColor))
             .onAppear { thoughtFocused = app.helpStage == .thought }
             .onChange(of: app.helpStage) { _, stage in thoughtFocused = stage == .thought }
+            .onChange(of: app.busy) { _, busy in
+                if busy {
+                    refocusThought = thoughtFocused
+                } else if refocusThought, app.helpStage == .thought {
+                    refocusThought = false
+                    DispatchQueue.main.async { thoughtFocused = true }
+                }
+            }
+    }
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text(app.helpStage == .practice ? "Practise Your Expression" : "Help Me Say This").font(.title2)
+                    .fontWeight(.semibold)
+                Spacer()
+                Text("Conversation paused").font(.caption).foregroundStyle(.secondary)
+            }
+            HStack(spacing: 14) {
+                stage("1  Your thought", active: app.helpStage == .thought)
+                Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.tertiary)
+                stage("2  Your English", active: app.helpStage == .english)
+                Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.tertiary)
+                stage("3  Optional practice", active: app.helpStage == .practice)
+            }.font(.caption)
+        }.padding(24)
+    }
+    private var activityFeedback: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if app.busy {
+                if app.turn.activity == .recording {
+                    RecordingFeedback(app: app)
+                } else {
+                    HStack {
+                        ProgressView().controlSize(.small)
+                        Text(app.helpProgress ?? app.status).font(.callout)
+                        Spacer()
+                        Button("Cancel", action: app.cancelHelpWork)
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 24, alignment: .leading)
+        .padding(.horizontal, 24).padding(.vertical, 12)
+    }
+    private var footer: some View {
+        VStack(spacing: 8) {
+            HStack {
+                if app.helpStage == .thought {
+                    Button("Back to Conversation", action: app.resume).keyboardShortcut(.cancelAction)
+                    Spacer()
+                    Button("Find the English", action: app.translate).buttonStyle(.borderedProminent)
+                        .keyboardShortcut(.return, modifiers: .command)
+                        .disabled(app.busy || app.meaning.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                } else if app.helpStage == .english {
+                    Button("Return to Conversation", action: app.resume).keyboardShortcut(.cancelAction)
+                    Spacer()
+                    Button("Listen & Practise", action: app.beginPractice).buttonStyle(.borderedProminent)
+                        .disabled(app.busy || app.english.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                } else {
+                    PracticeActions(app: app)
+                }
+            }
+            if !app.english.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Text(
+                    app.thoughtRecording != nil && !app.isSavedPractice
+                        ? "Returning saves the expression and removes its thought recording. Practice is optional."
+                        : "Returning saves this expression to My Expressions. Practice is optional."
+                )
+                .font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }.padding(20)
+    }
+    private func englishEditor(_ placeholder: String, lines: ClosedRange<Int>) -> some View {
+        TextField(placeholder, text: Binding(get: { app.english }, set: app.editEnglish), axis: .vertical)
+            .font(.system(size: 22, weight: .medium)).textFieldStyle(.roundedBorder).lineLimit(lines).disabled(app.busy)
     }
     private func stage(_ label: String, active: Bool) -> some View {
         Text(label).fontWeight(active ? .semibold : .regular).foregroundStyle(active ? Color.accentColor : .secondary)
@@ -180,9 +204,7 @@ struct PracticePane: View {
     private var englishReview: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Does this say what you mean?").font(.headline)
-            TextField("English expression", text: Binding(get: { app.english }, set: app.editEnglish), axis: .vertical)
-                .font(.system(size: 22, weight: .medium)).textFieldStyle(.roundedBorder).lineLimit(3...6).disabled(
-                    app.busy)
+            englishEditor("English expression", lines: 3...6)
             Text("Edit any words that change your meaning. You can return now or practise first.")
                 .font(.callout).foregroundStyle(.secondary)
             HStack {
@@ -199,8 +221,7 @@ struct PracticePane: View {
     }
     private var sentencePractice: some View {
         VStack(alignment: .leading, spacing: 12) {
-            TextField("English sentence", text: Binding(get: { app.english }, set: app.editEnglish), axis: .vertical)
-                .font(.system(size: 22, weight: .medium)).textFieldStyle(.plain).lineLimit(2...4).disabled(app.busy)
+            englishEditor("English sentence", lines: 2...4)
             DisclosureGroup("Example voice: \(app.settings.practiceVoiceLabel)", isExpanded: $voiceDetailsOpen) {
                 VStack(alignment: .leading, spacing: 10) {
                     PracticeVoiceControls(app: app).disabled(app.busy)
@@ -224,7 +245,7 @@ struct PracticePane: View {
                 }.pickerStyle(.segmented).labelsHidden().frame(width: 100).disabled(app.busy).help("Playback speed")
                 Spacer()
                 Menu {
-                    Button("Import Reference…", action: app.importReference)
+                    Button("Import Reference…", action: app.importReference).disabled(!app.canImportReference)
                     if app.expression?.reference != nil { Button("Regenerate Example") { app.render(force: true) } }
                 } label: {
                     Label("Reference Options", systemImage: "ellipsis")
