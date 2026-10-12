@@ -840,19 +840,23 @@
                 } else {
                     captureFailures.append("History checks need at least three conversations; found \(ids.count)")
                 }
+                model.settingsTab = .general
                 model.settingsOpen = true
                 try? await Task.sleep(nanoseconds: 500_000_000)
-                await capture("settings.png", settings: true)
-                model.settingsTab = "automation"
+                await capture("general-settings.png", settings: true)
+                model.settingsTab = .automation
                 try? await Task.sleep(nanoseconds: 350_000_000)
                 await capture("automation-settings.png", settings: true)
-                model.settingsTab = "voices"
+                model.settingsTab = .voices
                 try? await Task.sleep(nanoseconds: 350_000_000)
                 await capture("voice-settings.png", settings: true)
-                model.settingsTab = "about"
+                model.settingsTab = .about
                 try? await Task.sleep(nanoseconds: 350_000_000)
                 await capture("about-settings.png", settings: true)
-                model.settingsTab = "desktop"
+                model.settingsTab = .privacy
+                try? await Task.sleep(nanoseconds: 350_000_000)
+                await capture("privacy-settings.png", settings: true)
+                model.settingsTab = .desktopMochi
                 try? await Task.sleep(nanoseconds: 350_000_000)
                 await capture("desktop-settings.png", settings: true)
                 // The desktop Mochi: shown from the preference, mirroring the turn, and gone again when turned off.

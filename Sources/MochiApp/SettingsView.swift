@@ -1,5 +1,8 @@
 import SwiftUI
 
+/// The Settings window's tabs, in the order they appear.
+enum SettingsTab: Hashable { case general, voices, desktopMochi, automation, privacy, about }
+
 struct SettingsView: View {
     @Bindable var app: AppModel
 
@@ -17,29 +20,23 @@ struct SettingsView: View {
                     LabeledContent("Status") { Text(app.serviceStatus).foregroundStyle(.secondary) }
                     Button("Check Connection", action: app.checkConnection).disabled(app.busy)
                 }
-                Section {
-                    Text(
-                        "Checking the connection sends a short text request. Recordings are sent only when you finish a voice message or choose to translate a recorded thought."
-                    )
-                    .font(.callout).foregroundStyle(.secondary)
-                }
+                KeyboardShortcutsSection(app: app)
                 feedback
             }.formStyle(.grouped)
-                .tabItem { Label("Conversation", systemImage: "bubble.left.and.bubble.right") }.tag("conversation")
+                .tabItem { Label("General", systemImage: "gearshape") }.tag(SettingsTab.general)
 
             VoiceSettingsView(app: app)
-                .tabItem { Label("Voices", systemImage: "waveform") }.tag("voices")
+                .tabItem { Label("Voices", systemImage: "waveform") }.tag(SettingsTab.voices)
 
             DesktopPetSettingsView(app: app)
-                .tabItem { Label("Desktop", systemImage: "macwindow.on.rectangle") }.tag("desktop")
+                .tabItem { Label("Desktop Mochi", systemImage: "macwindow.on.rectangle") }.tag(SettingsTab.desktopMochi)
 
             AutomationSettingsView(app: app)
-                .tabItem { Label("Automation", systemImage: "switch.2") }.tag("automation")
+                .tabItem { Label("Automation", systemImage: "switch.2") }.tag(SettingsTab.automation)
 
             Form {
                 Section("Storage") {
                     LabeledContent("Conversations and recordings", value: "On this Mac")
-                    LabeledContent("Sign-in", value: "Your local Codex session")
                     Button("Export Library Backup…", action: app.exportLibraryBackup).disabled(!canTransferLibrary)
                     Button("Import Library Backup…", action: app.importLibraryBackup).disabled(!canTransferLibrary)
                     Button("Show Data Folder…", action: app.revealDataFolder)
@@ -55,16 +52,19 @@ struct SettingsView: View {
                         "Conversation text, context, and voice messages go to OpenAI through your Codex sign-in. Example text is voiced by OpenAI through the same sign-in. Practice attempts and pitch analysis stay on your Mac."
                     )
                     Text(
+                        "Checking the connection sends a short text request. Recordings are sent only when you finish a voice message or choose to translate a recorded thought."
+                    )
+                    Text(
                         "Library backups include conversations and practice audio, not sign-in credentials. Provider processing and retention follow your account settings."
                     ).foregroundStyle(.secondary)
                 }
                 feedback
                 if let feedback = app.history.feedback { Text(feedback).font(.callout).foregroundStyle(.secondary) }
             }.formStyle(.grouped)
-                .tabItem { Label("Data & Privacy", systemImage: "hand.raised") }.tag("privacy")
+                .tabItem { Label("Data & Privacy", systemImage: "hand.raised") }.tag(SettingsTab.privacy)
 
             AboutSettingsView()
-                .tabItem { Label("About", systemImage: "info.circle") }.tag("about")
+                .tabItem { Label("About", systemImage: "info.circle") }.tag(SettingsTab.about)
         }
         .padding(12)
         .frame(width: 620, height: 560)

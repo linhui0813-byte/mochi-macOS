@@ -236,7 +236,7 @@ final class DesktopPetTests: XCTestCase {
         menu.performActionForItem(at: 2)
         XCTAssertEqual(revealed, 1)
         XCTAssertTrue(app.settingsOpen)
-        XCTAssertEqual(app.settingsTab, "desktop")
+        XCTAssertEqual(app.settingsTab, .desktopMochi)
         menu.performActionForItem(at: 4)
         XCTAssertFalse(app.petVisible)
     }

@@ -137,7 +137,7 @@ struct MessageDeletionUndo {
     var recordingMeaning = false
     var serviceStatus = String(localized: "Not checked")
     let settings: PreferencesStore
-    var settingsTab = "conversation"
+    var settingsTab = SettingsTab.general
     let audio: AudioController
     let demo: Bool
     /// A preview library created in the temporary folder for this launch, discarded on quit.

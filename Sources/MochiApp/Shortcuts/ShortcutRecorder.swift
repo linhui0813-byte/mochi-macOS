@@ -129,18 +129,26 @@ struct DesktopPetSettingsView: View {
                     "Mochi follows the conversation: she listens while you record, thinks while a reply is prepared, and talks while it plays. Click her to start or finish a voice message, drag her to move her, and Control-click her for more."
                 ).font(.callout).foregroundStyle(.secondary)
             }
-            Section("Keyboard Shortcuts") {
-                ForEach(ShortcutAction.allCases) { action in ShortcutRecorder(action: action, app: app) }
-                Button("Reset to Defaults") {
-                    for action in ShortcutAction.allCases { app.setShortcut(action.defaultShortcut, for: action) }
-                }.disabled(app.settings.shortcuts == ShortcutAction.defaults)
-                Text(
-                    "These shortcuts work in every app. Press Talk to Mochi once to start a voice message and again to send it, or hold it down while you speak and let go to send."
-                ).font(.callout).foregroundStyle(.secondary)
-                if !app.shortcuts.enabled {
-                    Text("Shortcuts are saved but stay off in the preview.").font(.caption).foregroundStyle(.secondary)
-                }
-            }
         }.formStyle(.grouped)
+    }
+}
+
+/// The shortcuts that work in every app, whether or not Mochi is on the desktop.
+struct KeyboardShortcutsSection: View {
+    @Bindable var app: AppModel
+
+    var body: some View {
+        Section("Keyboard Shortcuts") {
+            ForEach(ShortcutAction.allCases) { action in ShortcutRecorder(action: action, app: app) }
+            Button("Reset to Defaults") {
+                for action in ShortcutAction.allCases { app.setShortcut(action.defaultShortcut, for: action) }
+            }.disabled(app.settings.shortcuts == ShortcutAction.defaults)
+            Text(
+                "These shortcuts work in every app. Press Talk to Mochi once to start a voice message and again to send it, or hold it down while you speak and let go to send."
+            ).font(.callout).foregroundStyle(.secondary)
+            if !app.shortcuts.enabled {
+                Text("Shortcuts are saved but stay off in the preview.").font(.caption).foregroundStyle(.secondary)
+            }
+        }
     }
 }

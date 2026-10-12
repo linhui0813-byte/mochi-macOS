@@ -226,7 +226,7 @@ import MochiCore
     @objc private func openSettings() {
         guard let model else { return }
         model.revealWorkspace?()
-        model.settingsTab = "desktop"
+        model.settingsTab = .desktopMochi
         model.settingsOpen = true
     }
     @objc private func hidePet() { model?.petVisible = false }
