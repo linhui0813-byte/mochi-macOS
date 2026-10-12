@@ -469,6 +469,7 @@ struct WorkspaceView: View {
 private struct SidebarChatRow: View {
     @Bindable var app: AppModel
     var chat: Conversation
+    private var selected: Bool { app.selectedID == chat.id && !app.showExpressions }
     /// The character is named when the list is ordered by character or the conversation has a character of its own.
     private var showsCharacter: Bool { app.settings.historySort == .companion || chat.characterName != nil }
     private var preview: String {
@@ -484,7 +485,10 @@ private struct SidebarChatRow: View {
                     ? "pin.fill"
                     : chat.archived ? "archivebox" : "bubble.left.and.bubble.right.fill"
             )
-            .font(.system(size: 18)).foregroundStyle(.secondary)
+            .font(.system(size: 18))
+            // The selected row's highlight is the accent colour, so its icon turns white to stay visible.
+            .foregroundStyle(selected ? Color.white : CharacterColor.color(for: chat.displayCharacterName))
+            .help(chat.displayCharacterName).accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 4) {
                 Text(chat.displayTitle).fontWeight(.medium).lineLimit(1)
                 Text(showsCharacter ? "\(chat.displayCharacterName) · \(preview)" : preview)
