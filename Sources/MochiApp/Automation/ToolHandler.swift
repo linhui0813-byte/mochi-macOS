@@ -227,6 +227,7 @@ import MochiKernel
                     result["instructions"] = preview
                     result["instructions_truncated"] = preview != chat.instructions
                     result["coaching"] = chat.preferences.coaching.rawValue
+                    result["language"] = chat.preferences.language.rawValue
                     result["character_name"] =
                         chat.characterName.map { $0.bounded(characters: 80, bytes: 1024) } as Any?
                         ?? NSNull()
@@ -314,7 +315,7 @@ import MochiKernel
                 try patch.apply(to: &source)
                 chat = try source.conversation(title: create.title)
             } else {
-                chat = Conversation()
+                chat = app.freshConversation()
                 try patch.apply(to: &chat)
             }
             if let title = create.title?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty {
@@ -357,6 +358,9 @@ import MochiKernel
         case .saveExpression, .prepareExpression:
             let input = try MochiTools.decode(ExpressionArguments.self, from: arguments)
             let chatID = try conversationID()
+            guard app.language(of: chatID).isPractised else {
+                throw AppFailure("Expressions need a conversation language. This conversation matches the user's.")
+            }
             let english = input.english.trimmingCharacters(in: .whitespacesAndNewlines)
             let meaning = input.meaning ?? ""
             var candidate = app.library
@@ -364,7 +368,9 @@ import MochiKernel
                 let item =
                     candidate.expressions.first {
                         $0.conversationID == chatID && $0.english == english && $0.meaning == meaning
-                    } ?? PracticeExpression(conversationID: chatID, meaning: meaning, english: english)
+                    }
+                    ?? PracticeExpression(
+                        conversationID: chatID, meaning: meaning, english: english, language: app.language(of: chatID))
                 if !candidate.expressions.contains(where: { $0.id == item.id }) {
                     candidate.expressions.insert(item, at: 0)
                     try persist(candidate)

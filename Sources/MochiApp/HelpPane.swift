@@ -65,7 +65,7 @@ struct PracticePane: View {
             HStack(spacing: 14) {
                 stage("1  Your thought", active: app.help.stage == .thought)
                 Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.tertiary)
-                stage("2  Your English", active: app.help.stage == .english)
+                stage("2  Your Words", active: app.help.stage == .english)
                 Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.tertiary)
                 stage("3  Optional practice", active: app.help.stage == .practice)
             }.font(.caption)
@@ -95,7 +95,7 @@ struct PracticePane: View {
                 if app.help.stage == .thought {
                     Button("Back to Conversation", action: app.resume).keyboardShortcut(.cancelAction)
                     Spacer()
-                    Button("Find the English", action: app.translate).buttonStyle(.borderedProminent)
+                    Button("Find the Words", action: app.translate).buttonStyle(.borderedProminent)
                         .keyboardShortcut(.return, modifiers: .command)
                         .disabled(app.busy || app.help.meaning.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 } else if app.help.stage == .english {
@@ -146,7 +146,7 @@ struct PracticePane: View {
                 Spacer()
                 Button("Edit thought", action: app.editThought).buttonStyle(.link).disabled(app.busy)
             }
-            Text(app.help.meaning.isEmpty ? String(localized: "Your English sentence") : app.help.meaning).font(
+            Text(app.help.meaning.isEmpty ? String(localized: "Your sentence") : app.help.meaning).font(
                 .callout
             )
             .textSelection(.enabled)
@@ -156,7 +156,7 @@ struct PracticePane: View {
     private var meaningInput: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("What would you like to say?").font(.headline)
-            Text("Type your thought in your own language or in English, or record it first.").font(.callout)
+            Text("Type your thought in any language, or record it first.").font(.callout)
                 .foregroundStyle(
                     .secondary)
             if let question = app.help.clarification {
@@ -172,7 +172,9 @@ struct PracticePane: View {
                             systemImage: app.turn.activity == .recording ? "stop.fill" : "mic")
                     }.disabled(app.busy && app.turn.activity != .recording)
                 }
-                if !app.help.english.isEmpty { Button("Review English", action: app.reviewEnglish).disabled(app.busy) }
+                if !app.help.english.isEmpty {
+                    Button("Review the Words", action: app.reviewEnglish).disabled(app.busy)
+                }
             }
             if let file = app.help.thoughtRecording {
                 VStack(alignment: .leading, spacing: 8) {
@@ -190,7 +192,9 @@ struct PracticePane: View {
                     if let warning = app.recordingWarning {
                         Label(warning, systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(.orange)
                     }
-                    Text("Transcribe sends this recording to OpenAI. Check the words before finding the English.").font(
+                    Text(
+                        "Transcribe sends this recording to OpenAI. Check the words before finding the right ones to say."
+                    ).font(
                         .caption
                     ).foregroundStyle(.secondary)
                 }.padding(12).background(
@@ -211,10 +215,11 @@ struct PracticePane: View {
                     Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 10)
                 ).id("recognized-thought")
             }
-            DisclosureGroup("I already have an English sentence") {
+            DisclosureGroup("I already have a sentence in \(app.languageName)") {
                 HStack {
-                    TextField("English sentence", text: $directEnglish).textFieldStyle(.roundedBorder).disabled(
-                        app.busy)
+                    TextField("Sentence in \(app.languageName)", text: $directEnglish).textFieldStyle(.roundedBorder)
+                        .disabled(
+                            app.busy)
                     Button("Review") { app.editEnglish(directEnglish.trimmingCharacters(in: .whitespacesAndNewlines)) }
                         .disabled(app.busy || directEnglish.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }.padding(.top, 8)
@@ -224,7 +229,7 @@ struct PracticePane: View {
     private var englishReview: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Does this say what you mean?").font(.headline)
-            englishEditor("English expression", lines: 3...6)
+            englishEditor("Expression in \(app.languageName)", lines: 3...6)
             Text("Edit any words that change your meaning. You can return now or practise first.")
                 .font(.callout).foregroundStyle(.secondary)
             HStack {
@@ -241,7 +246,7 @@ struct PracticePane: View {
     }
     private var sentencePractice: some View {
         VStack(alignment: .leading, spacing: 12) {
-            englishEditor("English sentence", lines: 2...4)
+            englishEditor("Sentence in \(app.languageName)", lines: 2...4)
             DisclosureGroup("Example voice: \(app.settings.practiceVoiceLabel)", isExpanded: $voiceDetailsOpen) {
                 VStack(alignment: .leading, spacing: 10) {
                     PracticeVoiceControls(app: app).disabled(app.busy)

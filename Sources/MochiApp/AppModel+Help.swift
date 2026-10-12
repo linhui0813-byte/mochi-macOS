@@ -12,8 +12,11 @@ extension AppModel {
         help.expression = nil
         showExpressions = true
     }
+    /// Help Me Say This finds words in the language being practised; a conversation that matches the user's
+    /// language has none.
+    var canHelp: Bool { writableConversation && conversation?.preferences.language.isPractised == true }
     func startHelp() {
-        guard writableConversation else { return }
+        guard canHelp else { return }
         let cancelledReply = !practice && task != nil && turn.activity == .generating
         cancelHelpWork()
         error = nil
@@ -111,7 +114,7 @@ extension AppModel {
                 help.recognizedThought = clean
             }
             job.finish()
-            notice = String(localized: "Check the recognized thought before finding the English.")
+            notice = String(localized: "Check the recognized thought before finding the words.")
         }
     }
     func useRecognizedThought(replace: Bool) {
@@ -120,7 +123,7 @@ extension AppModel {
             replace || help.meaning.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             ? recognized : help.meaning + "\n" + recognized
         help.recognizedThought = nil
-        notice = String(localized: "Check your thought before finding the English.")
+        notice = String(localized: "Check your thought before finding the words.")
     }
     func discardThoughtRecording() {
         help.thoughtRecording = nil
@@ -135,13 +138,15 @@ extension AppModel {
         let service = settings.conversationService()
         let requestText =
             alternative && !help.english.isEmpty
-            ? "Intended thought: \(input)\nPrevious English wording: \(help.english)\nOffer a different natural wording with exactly the same meaning."
+            ? "Intended thought: \(input)\nPrevious wording: \(help.english)\nOffer a different natural wording with exactly the same meaning."
             : input
         let textReply = speech.textReply
-        runExclusive("Find the English", progress: "Finding the English…") { [weak self] job in
+        let preferences = conversation?.preferences ?? ConversationPreferences()
+        runExclusive("Find the words", progress: "Finding the words…") { [weak self] job in
             guard let self else { return }
             let result = try await textReply(
-                service, ConversationRequest(history: history, text: requestText, help: true))
+                service,
+                ConversationRequest(history: history, text: requestText, help: true, preferences: preferences))
             guard job.isCurrent() else { return }
             let suggestion = try HelpSuggestion.parse(result)
             if suggestion.kind == .clarification {
@@ -149,7 +154,8 @@ extension AppModel {
                 help.stage = .thought
             } else {
                 help.english = suggestion.text.trimmingCharacters(in: .whitespacesAndNewlines)
-                help.expression = PracticeExpression(conversationID: id, meaning: input, english: help.english)
+                help.expression = PracticeExpression(
+                    conversationID: id, meaning: input, english: help.english, language: language(of: id))
                 help.referencePitch = []
                 help.attemptPitch = []
                 help.clarification = nil
@@ -176,7 +182,7 @@ extension AppModel {
         if help.expression == nil {
             help.expression = PracticeExpression(
                 conversationID: id, meaning: help.meaning,
-                english: help.english.trimmingCharacters(in: .whitespacesAndNewlines))
+                english: help.english.trimmingCharacters(in: .whitespacesAndNewlines), language: language(of: id))
         }
     }
     @discardableResult func saveExpression() -> Bool {
@@ -280,7 +286,9 @@ extension AppModel {
         var sourceID = item.conversationID
         if !library.conversations.contains(where: { $0.id == sourceID && !$0.isDeleted && !$0.archived }) {
             var candidate = library
-            let chat = Conversation(title: "Practice: " + String(item.english.prefix(42)))
+            // The expression's own language, so practising it continues in the language it was saved in.
+            var chat = Conversation(title: "Practice: " + String(item.english.prefix(42)))
+            chat.preferences.language = item.language ?? ConversationPreferences().language
             candidate.conversations.insert(chat, at: 0)
             candidate.selectedConversationID = chat.id
             // Point the expression at its new home, so reopening it does not create yet another conversation.

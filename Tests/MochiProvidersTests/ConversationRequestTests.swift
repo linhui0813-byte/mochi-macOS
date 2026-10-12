@@ -92,3 +92,18 @@ final class ConversationRequestTests: XCTestCase {
         }
     }
 }
+
+extension ConversationRequestTests {
+    func testHelpFindsWordsInTheConversationsLanguageAndReadingAloudAssumesNone() {
+        var preferences = ConversationPreferences()
+        preferences.language = .japanese
+        let help = ConversationRequest(history: [], text: "迷っています", help: true, preferences: preferences)
+        XCTAssertTrue(help.resolvedInstructions.contains("natural spoken Japanese"))
+        XCTAssertFalse(help.resolvedInstructions.contains("English"))
+        let reading = ConversationRequest(history: [], text: "こんにちは", reference: true)
+        XCTAssertFalse(reading.resolvedInstructions.contains("English"))
+        let reply = ConversationRequest(history: [], text: "hi", userName: "Ana", preferences: preferences)
+        XCTAssertTrue(reply.resolvedInstructions.contains("Speak only Japanese."))
+        XCTAssertTrue(reply.resolvedInstructions.contains(#""Ana""#))
+    }
+}

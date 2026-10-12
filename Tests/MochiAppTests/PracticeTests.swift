@@ -15,7 +15,7 @@ final class PracticeTests: XCTestCase {
         app.help.thoughtRecording = "thought.wav"
         app.resume()
         let item = PracticeExpression(
-            conversationID: app.selectedID!, meaning: "Saved meaning", english: "Saved English")
+            conversationID: app.selectedID!, meaning: "Saved meaning", english: "Saved English", language: .english)
         app.openExpression(item)
         app.resume()
         app.startHelp()
@@ -29,7 +29,9 @@ final class PracticeTests: XCTestCase {
         let root = TestScratch.folder()
         defer { try? FileManager.default.removeItem(at: root) }
         let app = makeApp(root: root)
-        app.openExpression(PracticeExpression(conversationID: app.selectedID!, meaning: "Meaning", english: "English"))
+        app.openExpression(
+            PracticeExpression(
+                conversationID: app.selectedID!, meaning: "Meaning", english: "English", language: .english))
         await waitUntil { !app.busy }
         app.editThought()
         app.recordMeaning()
@@ -62,7 +64,8 @@ final class PracticeTests: XCTestCase {
 
     @MainActor func testReopeningAnExpressionWithoutItsConversationReusesTheReplacement() async throws {
         let app = makeApp(root: makeTemporaryFolder())
-        let item = PracticeExpression(conversationID: UUID(), meaning: "Meaning", english: "Orphaned sentence")
+        let item = PracticeExpression(
+            conversationID: UUID(), meaning: "Meaning", english: "Orphaned sentence", language: .english)
         app.library.expressions = [item]
         app.openExpression(item)
         await waitUntil { !app.busy }
@@ -80,7 +83,8 @@ final class PracticeTests: XCTestCase {
         let root = makeTemporaryFolder()
         let app = makeApp(root: root)
         try tone().write(to: root.appendingPathComponent("attempt.wav"))
-        var item = PracticeExpression(conversationID: try XCTUnwrap(app.selectedID), meaning: "", english: "Hello.")
+        var item = PracticeExpression(
+            conversationID: try XCTUnwrap(app.selectedID), meaning: "", english: "Hello.", language: .english)
         item.reference = "missing.wav"
         item.attempts = [Attempt(file: "attempt.wav")]
         app.library.expressions = [item]

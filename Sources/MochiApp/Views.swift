@@ -247,9 +247,15 @@ struct WorkspaceView: View {
                         MochiView().frame(width: 72, height: 78)
                         Text("A little conversation. A little practice.")
                     } description: {
-                        Text(
-                            "Talk with \(app.displayCharacterName) in English. When you get stuck,\nwe’ll find the words and practise them in your own voice."
-                        )
+                        if app.canHelp {
+                            Text(
+                                "Talk with \(app.displayCharacterName) in \(app.languageName). When you get stuck,\nwe’ll find the words and practise them in your own voice."
+                            )
+                        } else {
+                            Text(
+                                "Talk with \(app.displayCharacterName) in any language.\nReplies follow the language you speak."
+                            )
+                        }
                     }
                 }
             } else {
@@ -362,9 +368,16 @@ struct WorkspaceView: View {
                 Button(action: app.startHelp) {
                     Image(systemName: "waveform.badge.plus").font(.system(size: 18))
                 }.buttonStyle(.borderless)
-                    .help("Help Me Say This (⇧⌘H)")
+                    .help(
+                        app.canHelp
+                            ? Text("Help Me Say This (⇧⌘H)")
+                            : Text(
+                                "Help Me Say This needs a language to practise. Choose one in Conversation Instructions."
+                            )
+                    )
                     .accessibilityLabel("Help Me Say This")
-                    .disabled(app.turn.activity == .recording || app.turn.activity == .requestingPermission)
+                    .disabled(
+                        !app.canHelp || app.turn.activity == .recording || app.turn.activity == .requestingPermission)
                 TextField("Message \(app.displayCharacterName)", text: $app.draft, axis: .vertical)
                     .accessibilityIdentifier("conversation-composer")
                     #if MOCHI_DEVELOPMENT

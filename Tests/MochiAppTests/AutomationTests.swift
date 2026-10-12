@@ -467,7 +467,9 @@ extension AutomationTests {
         let id = try XCTUnwrap(app.selectedID)
         let english = String(repeating: "我", count: 1000)
         let meaning = String(repeating: "意", count: 1000)
-        app.library.expressions = [PracticeExpression(conversationID: id, meaning: meaning, english: english)]
+        app.library.expressions = [
+            PracticeExpression(conversationID: id, meaning: meaning, english: english, language: .english)
+        ]
         let result = try app.tools.execute(
             "search_expressions", arguments: ["conversation_id": id.uuidString, "query": ""], origin: .voice)
         let expressions = try XCTUnwrap(result["expressions"] as? [[String: Any]])
@@ -602,7 +604,7 @@ extension AutomationTests {
                 try? FileManager.default.removeItem(at: app.store.root)
             }
             let id = try XCTUnwrap(app.selectedID)
-            var item = PracticeExpression(conversationID: id, meaning: "", english: "Hello")
+            var item = PracticeExpression(conversationID: id, meaning: "", english: "Hello", language: .english)
             item.reference = "fixture.wav"
             app.library.expressions = [item]
             try PCM.wav(Data(repeating: 0, count: 4800)).write(to: app.store.root.appendingPathComponent("fixture.wav"))

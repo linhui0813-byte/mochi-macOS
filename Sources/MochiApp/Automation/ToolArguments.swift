@@ -10,7 +10,7 @@ extension ConversationSettingsPatch {
             characterName: arguments.clearCharacterName == true
                 ? .clear : arguments.characterName.map(Change.set) ?? .keep,
             speed: arguments.clearSpeed == true ? .clear : arguments.speed.map(Change.set) ?? .keep,
-            coaching: arguments.coaching)
+            coaching: arguments.coaching, language: arguments.language)
     }
     init(toolArguments arguments: [String: Any]) throws {
         self.init(try MochiTools.decode(ConversationSettingsArguments.self, from: arguments))

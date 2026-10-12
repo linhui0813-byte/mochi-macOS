@@ -2,6 +2,20 @@ import MochiCore
 import MochiKernel
 import SwiftUI
 
+/// The language a conversation is held in: one to speak and practise, or Match Me last, apart from the others.
+struct LanguagePicker: View {
+    @Binding var selection: ConversationLanguage
+    var body: some View {
+        Picker("Language", selection: $selection) {
+            ForEach(ConversationLanguage.allCases.filter(\.isPractised), id: \.self) {
+                Text(verbatim: $0.displayName).tag($0)
+            }
+            Divider()
+            Text(verbatim: ConversationLanguage.match.displayName).tag(ConversationLanguage.match)
+        }
+    }
+}
+
 struct ConversationSettingsFields: View {
     @FocusState private var instructionsFocused: Bool
     @Binding var instructions: String
@@ -37,10 +51,15 @@ struct ConversationSettingsFields: View {
             )
             .font(.caption).foregroundStyle(.red)
         }
+        LanguagePicker(selection: $preferences.language)
         Picker("Coaching", selection: $preferences.coaching) {
             Text("Natural conversation").tag(CoachingStyle.natural)
             Text("Occasional gentle corrections").tag(CoachingStyle.gentle)
             Text("Direct corrections").tag(CoachingStyle.direct)
+        }.disabled(!preferences.language.isPractised)
+        if !preferences.language.isPractised {
+            Text("Replies follow the language you speak, so there is nothing to correct and no Help Me Say This.")
+                .font(.caption).foregroundStyle(.secondary)
         }
         Toggle(
             "Use a custom speech speed",

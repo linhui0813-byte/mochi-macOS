@@ -22,14 +22,16 @@ public struct ConversationSettingsPatch: Equatable {
     public var characterName: Change<String> = .keep
     public var speed: Change<Double> = .keep
     public var coaching: CoachingStyle?
+    public var language: ConversationLanguage?
     public init(
         instructions: String? = nil, characterName: Change<String> = .keep, speed: Change<Double> = .keep,
-        coaching: CoachingStyle? = nil
+        coaching: CoachingStyle? = nil, language: ConversationLanguage? = nil
     ) {
         self.instructions = instructions
         self.characterName = characterName
         self.speed = speed
         self.coaching = coaching
+        self.language = language
     }
     public var isEmpty: Bool { self == ConversationSettingsPatch() }
     /// Applies every change or none: everything is validated before `settings` is touched, even for class conformers.
@@ -51,6 +53,7 @@ public struct ConversationSettingsPatch: Equatable {
         case .set(let value): preferences.speed = value
         }
         if let coaching { preferences.coaching = coaching }
+        if let language { preferences.language = language }
         try preferences.validate()
         if let instructions { settings.instructions = instructions.trimmingCharacters(in: .whitespacesAndNewlines) }
         if let name { settings.characterName = name }

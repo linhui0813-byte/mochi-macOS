@@ -92,7 +92,8 @@ final class PreferencesStoreTests: XCTestCase {
         prefs.set(options, forKey: "elevenLabsOptions")
         let app = makeApp(root: root, preferences: prefs)
         XCTAssertEqual(app.settings.practiceVoiceLabel, "Marin · Codex voice")
-        var item = PracticeExpression(conversationID: app.selectedID!, meaning: "", english: "Let me think.")
+        var item = PracticeExpression(
+            conversationID: app.selectedID!, meaning: "", english: "Let me think.", language: .english)
         item.reference = "elevenlabs-\(String(repeating:"a",count:64)).mp3"
         item.referenceKind = "Xiaolai · ElevenLabs"
         app.library.expressions = [item]
@@ -116,7 +117,8 @@ final class PreferencesStoreTests: XCTestCase {
             try? FileManager.default.removeItem(at: root)
         }
         let app = makeApp(root: root, preferences: prefs)
-        var item = PracticeExpression(conversationID: app.selectedID!, meaning: "", english: "Hello")
+        var item = PracticeExpression(
+            conversationID: app.selectedID!, meaning: "", english: "Hello", language: .english)
         item.reference = "reference-old.mp3"
         item.referenceKind = "My Voice · Legacy"
         app.library.expressions = [item]

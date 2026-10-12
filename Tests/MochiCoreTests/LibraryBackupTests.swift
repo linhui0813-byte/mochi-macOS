@@ -62,7 +62,7 @@ final class LibraryBackupTests: XCTestCase {
         a.messages = [Message(role: "user", text: "One", audio: "shared.wav")]
         var b = Conversation()
         b.messages = [Message(role: "assistant", text: "Two", audio: "shared.wav")]
-        var expression = PracticeExpression(conversationID: a.id, meaning: "", english: "One")
+        var expression = PracticeExpression(conversationID: a.id, meaning: "", english: "One", language: .english)
         expression.reference = "shared.wav"
         var imported = Library()
         imported.conversations = [a, b]
@@ -88,7 +88,7 @@ final class LibraryBackupTests: XCTestCase {
         var library = Library()
         let chat = Conversation()
         library.conversations = [chat]
-        var item = PracticeExpression(conversationID: chat.id, meaning: "", english: "Hello")
+        var item = PracticeExpression(conversationID: chat.id, meaning: "", english: "Hello", language: .english)
         item.reference = "ref.wav"
         item.attempts = [Attempt(file: "try1.wav"), Attempt(file: "try2.wav")]
         library.expressions = [item]

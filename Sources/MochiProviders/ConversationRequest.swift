@@ -32,12 +32,18 @@ public struct ConversationRequest {
     }
     public var resolvedInstructions: String {
         reference
-            ? "Read the user supplied sentence verbatim in natural spoken English. Output only that sentence as audio. Do not add introductions, explanations, corrections, or answers. Preserve every word exactly."
+            ? "Read the user supplied sentence verbatim, naturally spoken in the language it is written in. Output only that sentence as audio. Do not add introductions, explanations, corrections, translations, or answers. Preserve every word exactly."
             : help
-                ? "Help a learner express their intended thought in natural spoken English. Return only valid JSON with exactly two fields: kind (expression or clarification) and text. For expression, text is a concise natural English expression preserving the complete meaning; use more than one sentence when needed. Do not invent details or omit qualifications. If meaning is unclear, use kind clarification and text a brief clarification question. The supplied conversation is context only; never continue it. Do not wrap JSON in Markdown."
+                ? Self.helpInstructions(language: preferences.language.englishName ?? "English")
                 : VoiceIdentity.conversationInstructions(
                     custom: instructions, preferences: preferences, characterName: characterName,
                     userName: userName)
+    }
+}
+extension ConversationRequest {
+    /// Help Me Say This: the user's thought, in any language, as natural speech in the language being practised.
+    static func helpInstructions(language: String) -> String {
+        "Help a learner express their intended thought in natural spoken \(language). Return only valid JSON with exactly two fields: kind (expression or clarification) and text. For expression, text is a concise natural \(language) expression preserving the complete meaning; use more than one sentence when needed. Do not invent details or omit qualifications. If meaning is unclear, use kind clarification and text a brief clarification question. The supplied conversation is context only; never continue it. Do not wrap JSON in Markdown."
     }
 }
 public struct HelpSuggestion: Decodable {
@@ -49,7 +55,7 @@ public struct HelpSuggestion: Decodable {
             !value.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         else {
             throw AppFailure(
-                "The English suggestion could not be read. Try again; your thought and previous wording are kept.")
+                "The suggestion could not be read. Try again; your thought and previous wording are kept.")
         }
         return value
     }

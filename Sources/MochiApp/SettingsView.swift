@@ -22,6 +22,11 @@ struct SettingsView: View {
                     Text("Mochi calls you by this name. Leave it empty and she won’t use one.").font(.callout)
                         .foregroundStyle(.secondary)
                 }
+                Section("New Conversations") {
+                    LanguagePicker(selection: Bindable(app.settings).defaultLanguage)
+                    Text("Existing conversations and templates keep their own language.").font(.callout)
+                        .foregroundStyle(.secondary)
+                }
                 Section("Connection") {
                     LabeledContent("Sign-in", value: "Codex")
                     Text("Sign in through Codex on this Mac, then check the connection here.").font(.callout)

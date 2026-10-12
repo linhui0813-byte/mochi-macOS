@@ -62,7 +62,7 @@ import SwiftUI
                     Divider()
                     Button("Help Me Say This", action: model.startHelp).keyboardShortcut(
                         "h", modifiers: [.command, .shift]
-                    ).disabled(!model.writableConversation || model.automationModal)
+                    ).disabled(!model.canHelp || model.automationModal)
                     Button("Stop") {
                         if model.find.isOpen { model.find.close() } else { model.stop() }
                     }.keyboardShortcut(.escape, modifiers: [])

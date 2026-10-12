@@ -91,8 +91,10 @@ public struct ConversationTemplate: Codable, Identifiable, Equatable {
         guard
             !instructions.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || characterName != nil
                 || preferences.coaching != .natural || preferences.speed != nil
+                || preferences.language != ConversationPreferences().language
         else {
-            throw AppFailure("Add instructions, a character name, coaching, or speech speed to this template.")
+            throw AppFailure(
+                "Add instructions, a character name, a language, coaching, or speech speed to this template.")
         }
     }
     /// One edit to a template: its catalog title and description, and the settings a conversation copies from it.
@@ -170,7 +172,7 @@ public struct ConversationTemplate: Codable, Identifiable, Equatable {
         [
             "id": id.uuidString, "template_revision": revision, "title": title, "description": description,
             "character_name": characterName as Any? ?? NSNull(), "instructions": instructions,
-            "coaching": preferences.coaching.rawValue,
+            "coaching": preferences.coaching.rawValue, "language": preferences.language.rawValue,
             "speed": preferences.speed as Any? ?? NSNull(), "origin": isBuiltin ? "built_in" : "user",
             "created_at": createdAt.formatted(.iso8601), "updated_at": updatedAt.formatted(.iso8601),
         ]

@@ -64,7 +64,7 @@ final class MessageDeletionTests: XCTestCase {
         app.deleteMessage(a.id)
         app.deleteMessage(b.id)
         XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
-        var item = PracticeExpression(conversationID: id, meaning: "", english: "Saved")
+        var item = PracticeExpression(conversationID: id, meaning: "", english: "Saved", language: .english)
         item.reference = "shared.wav"
         app.library.expressions = [item]
         app.save()

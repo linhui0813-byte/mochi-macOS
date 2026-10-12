@@ -10,6 +10,14 @@ extension AppModel {
             return
         }
         if let chat = conversation, writableConversation, chat.isPristine {
+            // Reusing it starts it over, in today's default language.
+            if chat.preferences.language != settings.defaultLanguage,
+                let index = library.conversations.firstIndex(where: { $0.id == chat.id })
+            {
+                var candidate = library
+                candidate.conversations[index].preferences.language = settings.defaultLanguage
+                guard commitHistory(candidate) else { return }
+            }
             stop()
             leavePractice()
             help.expression = nil
@@ -19,7 +27,7 @@ extension AppModel {
             return
         }
         var candidate = library
-        let chat = Conversation()
+        let chat = freshConversation()
         candidate.conversations.insert(chat, at: 0)
         candidate.selectedConversationID = chat.id
         guard commitHistory(candidate) else { return }

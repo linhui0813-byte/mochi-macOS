@@ -69,7 +69,7 @@ final class HistoryModelTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: root) }
         let model = makeApp(root: root)
         let id = try XCTUnwrap(model.selectedID)
-        var item = PracticeExpression(conversationID: id, meaning: "", english: "A useful sentence")
+        var item = PracticeExpression(conversationID: id, meaning: "", english: "A useful sentence", language: .english)
         item.reference = "shared.wav"
         model.library.expressions = [item]
         try Data([1]).write(to: root.appendingPathComponent("shared.wav"))

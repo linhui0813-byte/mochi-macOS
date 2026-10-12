@@ -103,9 +103,13 @@ public struct Conversation: Codable, Identifiable {
         characterName != nil && (try? ConversationTemplate.validateName(characterName)) == nil
     }
     public var displayCharacterName: String { characterNameNeedsReview ? "Companion" : characterName ?? "Mochi" }
+    /// Nothing has happened here yet. Its language is not counted: a new conversation starts in the user's default
+    /// language, and reusing it takes the default again.
     public var isPristine: Bool {
-        messages.isEmpty && !customTitle && instructions.isEmpty && draft.isEmpty && helpDraft == nil
-            && preferences == ConversationPreferences() && characterName == nil && sourceTemplateID == nil
+        var settings = preferences
+        settings.language = ConversationPreferences().language
+        return messages.isEmpty && !customTitle && instructions.isEmpty && draft.isEmpty && helpDraft == nil
+            && settings == ConversationPreferences() && characterName == nil && sourceTemplateID == nil
             && sourceTemplateRevision == nil
     }
     public var voiceIntroduced = false
@@ -159,15 +163,19 @@ public struct PracticeExpression: Codable, Identifiable {
     public var id = UUID()
     public var conversationID: UUID
     public var meaning: String
+    /// The expression in the language practised; named for the English-only expressions saved before languages.
     public var english: String
+    /// The language of `english`; nil for expressions saved before languages existed, which are English.
+    public var language: ConversationLanguage?
     public var reference: String?
     public var referenceKind: String = "Your voice"
     public var attempts: [Attempt] = []
     public var date = Date()
-    public init(conversationID: UUID, meaning: String, english: String) {
+    public init(conversationID: UUID, meaning: String, english: String, language: ConversationLanguage) {
         self.conversationID = conversationID
         self.meaning = meaning
         self.english = english
+        self.language = language
     }
 }
 public struct Library: Codable {

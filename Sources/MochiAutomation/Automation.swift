@@ -78,11 +78,17 @@ public enum MochiTools {
         let boolean: [String: Any] = ["type": "boolean"]
         let character: [String: Any] = ["type": "string", "maxLength": 80]
         let coaching: [String: Any] = ["type": "string", "enum": CoachingStyle.allCases.map(\.rawValue)]
+        let language: [String: Any] = [
+            "type": "string", "enum": ConversationLanguage.allCases.map(\.rawValue),
+            "description":
+                "Language code of the language spoken and practised; match replies in the user's language without corrections.",
+        ]
         let speed: [String: Any] = ["type": "number", "minimum": 0.25, "maximum": 1.5]
         let limit: [String: Any] = ["type": "integer", "minimum": 1, "maximum": 100]
         let templateFields: [String: [String: Any]] = [
             "title": ["type": "string", "maxLength": 160], "description": ["type": "string", "maxLength": 500],
             "instructions": string, "character_name": character, "coaching": coaching, "speed": speed,
+            "language": language,
         ]
         return [
             Definition(
@@ -98,7 +104,7 @@ public enum MochiTools {
             Definition(
                 name: .prepareExpression,
                 description:
-                    "Prepare an English expression for user review in Help Me Say This. Refuses to replace any existing Help draft. During a voice reply, preparation is saved and opened only after speaking completes; Stop cancels it.",
+                    "Prepare an expression, in the conversation's language, for user review in Help Me Say This. Refuses to replace any existing Help draft. During a voice reply, preparation is saved and opened only after speaking completes; Stop cancels it.",
                 properties: ["english": string, "meaning": string], required: ["english"], deferred: true),
             Definition(
                 name: .startPractice,
@@ -107,7 +113,8 @@ public enum MochiTools {
                 properties: ["expression_id": uuid], required: ["expression_id"], deferred: true),
             Definition(
                 name: .saveExpression,
-                description: "Save an English expression to My Expressions. Preserve the user's meaning.",
+                description:
+                    "Save an expression, in the conversation's language, to My Expressions. Preserve the user's meaning.",
                 properties: ["english": string, "meaning": string], required: ["english"], idempotent: true),
             Definition(
                 name: .searchExpressions,
@@ -133,8 +140,9 @@ public enum MochiTools {
             Definition(
                 name: .setConversationPreferences,
                 description:
-                    "Set this conversation's spoken reply speed or coaching style when requested. natural discusses content, gentle offers occasional corrections, direct offers concise corrections.",
-                properties: ["speed": speed, "coaching": coaching], required: [], destructive: true, idempotent: true),
+                    "Set this conversation's spoken reply speed, coaching style or language when requested. natural discusses content, gentle offers occasional corrections, direct offers concise corrections.",
+                properties: ["speed": speed, "coaching": coaching, "language": language], required: [],
+                destructive: true, idempotent: true),
             Definition(
                 name: .listConversations, description: "List active conversations; no archived or deleted data.",
                 properties: ["limit": limit], required: [], readOnly: true, idempotent: true, scope: .app,
@@ -146,7 +154,7 @@ public enum MochiTools {
                 properties: [
                     "title": ["type": "string", "maxLength": 160], "instructions": string, "template_id": uuid,
                     "expected_template_revision": string, "character_name": character, "clear_character_name": boolean,
-                    "coaching": coaching, "speed": speed,
+                    "coaching": coaching, "speed": speed, "language": language,
                 ], required: [], scope: .app, origins: [.external]),
             Definition(
                 name: .openConversation, description: "Open an active conversation.", properties: [:], required: [],
@@ -174,7 +182,7 @@ public enum MochiTools {
             Definition(
                 name: .createConversationTemplate,
                 description:
-                    "Create a user template with at least one setting: instructions, name, coaching, or speed. No conversation or app revision required. Pass the same idempotency_key when retrying so a repeated request cannot create a duplicate.",
+                    "Create a user template with at least one setting: instructions, name, language, coaching, or speed. No conversation or app revision required. Pass the same idempotency_key when retrying so a repeated request cannot create a duplicate.",
                 properties: templateFields.merging(["idempotency_key": ["type": "string", "maxLength": 200]]) {
                     _, new in new
                 }, required: ["title"], scope: .catalog, origins: [.external]),
@@ -280,7 +288,7 @@ public enum MochiTools {
                 throw AppFailure("A template_id is required for template revision or clearing an inherited name.")
             }
         case .updateConversationTemplate, .setConversationInstructions:
-            let fields = ["title", "description", "instructions", "character_name", "coaching", "speed"]
+            let fields = ["title", "description", "instructions", "character_name", "coaching", "speed", "language"]
             guard
                 fields.contains(where: { arguments[$0] != nil }) || arguments["clear_speed"] as? Bool == true
                     || arguments["clear_character_name"] as? Bool == true
@@ -291,11 +299,11 @@ public enum MochiTools {
             }
         case .saveExpression, .prepareExpression:
             if (arguments["english"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                throw AppFailure("An English expression is required.")
+                throw AppFailure("An expression is required.")
             }
         case .setConversationPreferences:
-            if arguments["speed"] == nil && arguments["coaching"] == nil {
-                throw AppFailure("Specify speed or coaching.")
+            if arguments["speed"] == nil && arguments["coaching"] == nil && arguments["language"] == nil {
+                throw AppFailure("Specify speed, coaching or language.")
             }
         default: break
         }
@@ -321,7 +329,7 @@ public enum MochiTools {
 
 // MARK: Typed arguments
 
-/// Changes to a conversation's instructions, character name, speed or coaching.
+/// Changes to a conversation's instructions, character name, speed, coaching or language.
 public struct ConversationSettingsArguments: Decodable {
     public var instructions: String?
     public var characterName: String?
@@ -329,13 +337,14 @@ public struct ConversationSettingsArguments: Decodable {
     public var speed: Double?
     public var clearSpeed: Bool?
     public var coaching: CoachingStyle?
+    public var language: ConversationLanguage?
     private enum CodingKeys: String, CodingKey {
         case instructions
         case characterName = "character_name"
         case clearCharacterName = "clear_character_name"
         case speed
         case clearSpeed = "clear_speed"
-        case coaching
+        case coaching, language
     }
 }
 public struct CreateConversationArguments: Decodable {

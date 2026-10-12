@@ -15,7 +15,7 @@ struct AboutSettingsView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(AppIdentity.name).font(.title2.bold())
                         Text(Self.versionDescription).foregroundStyle(.secondary).textSelection(.enabled)
-                        Text("English conversation and speaking practice.").font(.callout)
+                        Text("Conversation and speaking practice.").font(.callout)
                     }
                 }
                 .padding(.vertical, 4)

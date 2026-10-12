@@ -166,7 +166,7 @@ extension ConversationTemplateTests {
         XCTAssertTrue(loki.contains("\"Loki\""))
         XCTAssertEqual(
             VoiceIdentity.conversationInstructions(custom: "Be brief", preferences: prefs),
-            VoiceIdentity.instructions
+            VoiceIdentity.instructions + "\nSpeak only English."
                 + "\nConversation-specific instructions (these override the conversational defaults above when they conflict):\nBe brief"
         )
     }

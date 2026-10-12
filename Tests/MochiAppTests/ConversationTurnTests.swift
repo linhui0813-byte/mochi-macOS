@@ -35,7 +35,8 @@ final class ConversationTurnTests: XCTestCase {
             } else {
                 app.openExpression(
                     PracticeExpression(
-                        conversationID: app.selectedID!, meaning: "Saved meaning", english: "Saved English"))
+                        conversationID: app.selectedID!, meaning: "Saved meaning", english: "Saved English",
+                        language: .english))
             }
             await gate.release()
             await job.value

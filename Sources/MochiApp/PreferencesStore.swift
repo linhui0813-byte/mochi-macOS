@@ -39,6 +39,10 @@ import MochiProviders
     var externalControlEnabled: Bool {
         didSet { defaults.set(externalControlEnabled, forKey: "externalControlEnabled") }
     }
+    /// The language new conversations start in.
+    var defaultLanguage: ConversationLanguage {
+        didSet { defaults.set(defaultLanguage.rawValue, forKey: "defaultLanguage") }
+    }
     /// The order of the conversation list.
     var historySort: HistorySort { didSet { defaults.set(historySort.rawValue, forKey: "historySort") } }
     /// Whether Mochi sits on the desktop outside the workspace.
@@ -114,6 +118,8 @@ import MochiProviders
         }
         modelName = defaults.string(forKey: "model").flatMap(Self.trimmed) ?? RealtimeService.defaultModel
         userName = defaults.string(forKey: "userName") ?? ""
+        defaultLanguage =
+            defaults.string(forKey: "defaultLanguage").flatMap(ConversationLanguage.init(rawValue:)) ?? .english
         historySort = defaults.string(forKey: "historySort").flatMap(HistorySort.init(rawValue:)) ?? .recent
         conversationVoice = voice("conversationVoice")
         builtInPracticeVoice = voice("builtInPracticeVoice")

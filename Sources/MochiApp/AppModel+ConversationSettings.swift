@@ -5,6 +5,18 @@ import MochiKernel
 /// A conversation's instructions, character name and preferences, and when they can be edited.
 extension AppModel {
     var displayCharacterName: String { conversation?.displayCharacterName ?? "Mochi" }
+    /// A conversation as the user starts one: empty, in their default language.
+    func freshConversation(title: String = Conversation.untitled) -> Conversation {
+        var chat = Conversation(title: title)
+        chat.preferences.language = settings.defaultLanguage
+        return chat
+    }
+    /// The open conversation's language, named in the interface's language.
+    var languageName: String { (conversation?.preferences.language ?? ConversationPreferences().language).displayName }
+    /// The language a conversation is held in; English for one that no longer exists, as before languages.
+    func language(of id: UUID) -> ConversationLanguage {
+        library.conversations.first { $0.id == id }?.preferences.language ?? ConversationPreferences().language
+    }
     var automationModal: Bool {
         customization.isPresented || practice || history.isEditing
     }
@@ -34,7 +46,7 @@ extension AppModel {
                 instructions: instructions == current.instructions ? nil : instructions,
                 characterName: characterName.map { .set($0) } ?? .clear,
                 speed: preferences.speed.map { .set($0) } ?? .clear,
-                coaching: preferences.coaching)
+                coaching: preferences.coaching, language: preferences.language)
             try updateConversationSettings(id, patch)
             error = nil
             return true

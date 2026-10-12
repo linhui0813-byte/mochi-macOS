@@ -51,7 +51,7 @@ final class HistoryTests: XCTestCase {
             Message(role: "user", text: "Hello", audio: "shared.wav"),
             Message(role: "assistant", text: "Hi", audio: "only.wav"),
         ]
-        var item = PracticeExpression(conversationID: chat.id, meaning: "", english: "Hello")
+        var item = PracticeExpression(conversationID: chat.id, meaning: "", english: "Hello", language: .english)
         item.reference = "shared.wav"
         var library = Library()
         library.conversations = [chat]

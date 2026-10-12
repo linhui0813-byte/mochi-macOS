@@ -302,6 +302,9 @@ extension AppModel {
         greetingActive = true
         error = nil
         let speakerName = conversation?.displayCharacterName ?? "Mochi"
+        let spoken = Greetings.spoken(
+            conversation?.preferences.language ?? ConversationPreferences().language,
+            interface: Bundle.main.preferredLocalizations.first ?? "en")
         let service = settings.conversationService(speed: conversation?.preferences.speed)
         task = Task { [self] in
             do {
@@ -315,7 +318,8 @@ extension AppModel {
                 // Each asynchronous stage is guarded by its epoch; Stop invalidates either stage.
                 let generationToken = turn.begin(.generating)
                 let recent = settings.recentGreetings
-                let greeting = VoiceIdentity.namedGreeting(name: speakerName, excluding: recent)
+                let greeting = VoiceIdentity.namedGreeting(
+                    name: speakerName, language: spoken.language, script: spoken.script, excluding: recent)
                 let text = greeting.text
                 do {
                     let url = try await speech.referenceAudio(text, service, store.root, false)

@@ -237,7 +237,7 @@ struct MessageDeletionUndo {
         if demo {
             seedPreview()
         } else if library.conversations.isEmpty && libraryReadable {
-            library.conversations = [Conversation()]
+            library.conversations = [freshConversation()]
         }
         selectedID =
             library.selectedConversationID.flatMap { id in
@@ -262,7 +262,7 @@ struct MessageDeletionUndo {
             try libraryController.restorePrevious()
             guard libraryReadable else { return }
             error = nil
-            if library.conversations.isEmpty { library.conversations = [Conversation()] }
+            if library.conversations.isEmpty { library.conversations = [freshConversation()] }
             selectedID =
                 library.selectedConversationID.flatMap { id in
                     library.conversations.contains(where: { $0.id == id }) ? id : nil
@@ -445,7 +445,8 @@ struct MessageDeletionUndo {
         help.stage = .practice
         help.meaning = "I know what I mean. I just need the words."
         help.english = "I keep putting it off because I don't know where to start."
-        var item = PracticeExpression(conversationID: chat.id, meaning: help.meaning, english: help.english)
+        var item = PracticeExpression(
+            conversationID: chat.id, meaning: help.meaning, english: help.english, language: .english)
         item.referenceKind = "Preview · illustrative contours"
         help.expression = item
         help.referencePitch = (0..<180).map { i in
