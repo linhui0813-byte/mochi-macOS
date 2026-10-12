@@ -166,6 +166,37 @@ final class DesktopPetTests: XCTestCase {
         XCTAssertFalse(panel.isVisible)
     }
 
+    @MainActor func testSheBreathesOnlyWhileIdleAndNeverWithReducedMotion() throws {
+        _ = NSApplication.shared
+        let app = makeApp(demo: true)
+        let pet = DesktopPet()
+        var reduced = false
+        pet.reducesMotion = { reduced }
+        pet.attach(app)
+        defer { app.petVisible = false }
+        app.petVisible = true
+        let view = try XCTUnwrap(pet.panel?.contentView as? PetView)
+        let idle = pet.arrived.addingTimeInterval(PetPose.waving.cycle + 0.1)
+        pet.tick(pet.arrived)
+        XCTAssertFalse(view.breathing, "Not while she waves hello")
+        pet.tick(idle)
+        XCTAssertEqual(pet.currentPose, .idle)
+        XCTAssertTrue(view.breathing)
+        app.turn.begin(.recording)
+        pet.tick(idle.addingTimeInterval(0.1))
+        XCTAssertFalse(view.breathing, "Listening has its own animation")
+        app.turn.stop()
+        pet.tick(idle.addingTimeInterval(0.2))
+        XCTAssertTrue(view.breathing)
+        let cell = try XCTUnwrap(view.layer?.sublayers?.first)
+        XCTAssertNotNil(cell.animation(forKey: "breath"), "The breath is on the layer she is drawn in")
+        XCTAssertEqual(cell.anchorPoint, CGPoint(x: 0.5, y: 0), "She breathes from her feet")
+        reduced = true
+        pet.tick(idle.addingTimeInterval(0.3))
+        XCTAssertFalse(view.breathing, "Reduce Motion stops it at once")
+        XCTAssertNil(cell.animation(forKey: "breath"))
+    }
+
     @MainActor func testHerEyesFollowThePointerOnlyWhenThatIsOn() throws {
         _ = NSApplication.shared
         let preferences = makePreferences()

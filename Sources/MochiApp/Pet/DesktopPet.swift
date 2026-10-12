@@ -11,6 +11,10 @@ import MochiCore
     static let dragThreshold: CGFloat = 3
     /// She looks at the pointer only while it is moving, then goes back to breathing.
     static let gazeLinger: TimeInterval = 2
+    /// One slow breath while she is idle: seconds per breath, and how much taller and wider she is at its top.
+    static let breath = (period: 4.0, rise: 1.025, widen: 1.01)
+    /// The system's Reduce Motion setting; replaceable so tests can turn it on.
+    var reducesMotion: () -> Bool = { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
 
     private(set) var panel: NSPanel?
     private var view: PetView?
@@ -142,6 +146,7 @@ import MochiCore
         let cell = currentCell(now: now, mouse: mouse, gaze: model.settings.petFollowsPointer)
         currentFrame = cell
         view.show(sprite.cell(row: cell.row, column: cell.column))
+        view.breathe(pose == .idle && !reducesMotion())
         routeClicks(at: mouse)
         describe(model, in: view)
     }
@@ -163,7 +168,7 @@ import MochiCore
 
     /// The pose's current frame, or, when her eyes follow the pointer, a glance at it while she is idle and it moves.
     private func currentCell(now: Date, mouse: CGPoint, gaze following: Bool) -> (row: Int, column: Int) {
-        let still = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        let still = reducesMotion()
         if following, pose == .idle, !still, now.timeIntervalSince(pointerMoved) < Self.gazeLinger, let panel,
             let gaze = PetGaze.cell(dx: mouse.x - panel.frame.midX, dy: mouse.y - panel.frame.midY)
         {
@@ -267,23 +272,50 @@ private final class PetPanel: NSPanel {
 final class PetView: NSView {
     weak var pet: DesktopPet?
     private(set) var dragging = false
+    private(set) var breathing = false
+    /// The cell, scaled from her feet so a breath never lifts her off the ground.
+    private let cell = CALayer()
     private var pressStart: CGPoint?
     private var originAtPress: CGPoint?
 
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
-        layer?.contentsGravity = .resizeAspect
-        layer?.magnificationFilter = .trilinear
-        layer?.minificationFilter = .trilinear
+        cell.contentsGravity = .resizeAspect
+        cell.magnificationFilter = .trilinear
+        cell.minificationFilter = .trilinear
+        cell.anchorPoint = CGPoint(x: 0.5, y: 0)
+        cell.bounds = bounds
+        cell.position = CGPoint(x: bounds.midX, y: 0)
+        // A new frame replaces the last at once; a layer's default would cross-fade them.
+        cell.actions = ["contents": NSNull()]
+        layer?.addSublayer(cell)
         setAccessibilityElement(true)
         setAccessibilityRole(.button)
     }
     required init?(coder: NSCoder) { nil }
 
     func show(_ image: CGImage?) {
-        guard let image, (layer?.contents as AnyObject?) !== image else { return }
-        layer?.contents = image
+        guard let image, (cell.contents as AnyObject?) !== image else { return }
+        cell.contents = image
+    }
+
+    /// Starts or stops one slow breath after another. Core Animation runs it, so it stays smooth between ticks.
+    func breathe(_ on: Bool) {
+        guard on != breathing else { return }
+        breathing = on
+        guard on else {
+            cell.removeAnimation(forKey: "breath")
+            return
+        }
+        let breath = CABasicAnimation(keyPath: "transform")
+        breath.fromValue = CATransform3DIdentity
+        breath.toValue = CATransform3DMakeScale(DesktopPet.breath.widen, DesktopPet.breath.rise, 1)
+        breath.duration = DesktopPet.breath.period / 2
+        breath.autoreverses = true
+        breath.repeatCount = .infinity
+        breath.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        cell.add(breath, forKey: "breath")
     }
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
