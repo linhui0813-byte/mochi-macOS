@@ -7688,6 +7688,62 @@
         }
       }
     },
+    "Mochi calls you by this name. Leave it empty and she won’t use one." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochi はこの名前であなたを呼びます。空欄にすると名前を使いません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochi가 이 이름으로 당신을 부릅니다. 비워 두면 이름을 사용하지 않습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochi 会用这个名字称呼你。留空则不使用名字。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochi 會用這個名字稱呼你。留空則不使用名字。"
+          }
+        }
+      }
+    },
+    "Mochi can’t use this name. Use up to %lld characters on one line." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochi はこの名前を使えません。1 行、%lld 文字以内にしてください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochi가 이 이름을 사용할 수 없습니다. 한 줄, %lld자 이내로 입력하세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochi 无法使用这个名字。请使用一行、不超过 %lld 个字符。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochi 無法使用這個名字。請使用一行、不超過 %lld 個字元。"
+          }
+        }
+      }
+    },
     "Mochi could not complete that response. Please retry." : {
       "localizations" : {
         "ja" : {
@@ -17148,6 +17204,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "無法使用你的資料庫。未儲存任何變更。"
+          }
+        }
+      }
+    },
+    "Your name" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "あなたの名前"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "내 이름"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的名字"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的名字"
           }
         }
       }

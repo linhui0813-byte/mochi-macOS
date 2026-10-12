@@ -18,6 +18,18 @@ import MochiProviders
     }
     /// The model services use: the typed name without surrounding spaces, or the default when it is blank.
     var effectiveModelName: String { Self.trimmed(modelName) ?? RealtimeService.defaultModel }
+    /// What Mochi calls the user, as typed. Empty until the user gives a name, and a blank name is not stored.
+    var userName: String {
+        didSet {
+            if Self.trimmed(userName) == nil {
+                defaults.removeObject(forKey: "userName")
+            } else {
+                defaults.set(userName, forKey: "userName")
+            }
+        }
+    }
+    /// The name replies use: the typed name without surrounding spaces, or nil when it is blank or unusable.
+    var effectiveUserName: String? { VoiceIdentity.usable(userName) }
     var conversationVoice: String { didSet { defaults.set(conversationVoice, forKey: "conversationVoice") } }
     var builtInPracticeVoice: String { didSet { defaults.set(builtInPracticeVoice, forKey: "builtInPracticeVoice") } }
     var conversationVoiceOptions: OpenAIVoiceOptions {
@@ -99,6 +111,7 @@ import MochiProviders
             }
         }
         modelName = defaults.string(forKey: "model").flatMap(Self.trimmed) ?? RealtimeService.defaultModel
+        userName = defaults.string(forKey: "userName") ?? ""
         conversationVoice = voice("conversationVoice")
         builtInPracticeVoice = voice("builtInPracticeVoice")
         conversationVoiceOptions = options("conversationVoiceOptions")

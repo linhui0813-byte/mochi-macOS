@@ -10,14 +10,17 @@ public struct ConversationRequest {
     public var help: Bool
     public var reference: Bool
     public var characterName: String?
+    /// What the user asked to be called; nil when they have not said.
+    public var userName: String?
     public var instructions: String
     public var preferences: ConversationPreferences
     public init(
         history: [Message], text: String, pcm: Data? = nil, spoken: Bool = false, help: Bool = false,
-        reference: Bool = false, instructions: String = "", characterName: String? = nil,
+        reference: Bool = false, instructions: String = "", characterName: String? = nil, userName: String? = nil,
         preferences: ConversationPreferences = ConversationPreferences()
     ) {
         self.characterName = characterName
+        self.userName = userName
         self.instructions = instructions
         self.preferences = preferences
         self.history = history
@@ -33,7 +36,8 @@ public struct ConversationRequest {
             : help
                 ? "Help a learner express their intended thought in natural spoken English. Return only valid JSON with exactly two fields: kind (expression or clarification) and text. For expression, text is a concise natural English expression preserving the complete meaning; use more than one sentence when needed. Do not invent details or omit qualifications. If meaning is unclear, use kind clarification and text a brief clarification question. The supplied conversation is context only; never continue it. Do not wrap JSON in Markdown."
                 : VoiceIdentity.conversationInstructions(
-                    custom: instructions, preferences: preferences, characterName: characterName)
+                    custom: instructions, preferences: preferences, characterName: characterName,
+                    userName: userName)
     }
 }
 public struct HelpSuggestion: Decodable {

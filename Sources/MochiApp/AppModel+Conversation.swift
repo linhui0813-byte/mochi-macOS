@@ -94,6 +94,7 @@ extension AppModel {
         let instructions = ConversationInstructions.bounded(chat?.instructions ?? "")
         let preferences = chat?.preferences ?? ConversationPreferences()
         let characterName = chat?.characterName
+        let userName = settings.effectiveUserName
         let speakerName = chat?.displayCharacterName ?? "Mochi"
         let service = settings.conversationService(speed: preferences.speed)
         let voiceID = pcm == nil ? nil : userID
@@ -136,7 +137,7 @@ extension AppModel {
                     })
                 let request = ConversationRequest(
                     history: history, text: text, pcm: pcm, spoken: audioFile != nil, instructions: instructions,
-                    characterName: characterName, preferences: preferences)
+                    characterName: characterName, userName: userName, preferences: preferences)
                 try await reply(service, request, callbacks)
             } catch {
                 // The deferred block marks a still-pending transcript as interrupted.

@@ -1,3 +1,4 @@
+import MochiCore
 import SwiftUI
 
 /// The Settings window's tabs, in the order they appear.
@@ -9,6 +10,18 @@ struct SettingsView: View {
     var body: some View {
         TabView(selection: $app.settingsTab) {
             Form {
+                Section("You") {
+                    TextField("Your name", text: Bindable(app.settings).userName).textFieldStyle(.roundedBorder)
+                    if app.settings.effectiveUserName == nil
+                        && !app.settings.userName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    {
+                        Text(
+                            "Mochi can’t use this name. Use up to \(ConversationTemplate.nameLimit.characters) characters on one line."
+                        ).font(.caption).foregroundStyle(.red)
+                    }
+                    Text("Mochi calls you by this name. Leave it empty and she won’t use one.").font(.callout)
+                        .foregroundStyle(.secondary)
+                }
                 Section("Connection") {
                     LabeledContent("Sign-in", value: "Codex")
                     Text("Sign in through Codex on this Mac, then check the connection here.").font(.callout)
