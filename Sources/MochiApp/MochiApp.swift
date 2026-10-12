@@ -76,6 +76,7 @@ import SwiftUI
 @MainActor final class AppDelegate: NSObject, NSApplicationDelegate {
     var model: AppModel?
     let tray = TrayController()
+    let pet = DesktopPet()
     #if MOCHI_DEVELOPMENT
         private let instanceE2E = SingleInstanceE2E()
     #endif
@@ -95,6 +96,8 @@ import SwiftUI
         self.model = model
         model.revealWorkspace = { [weak self] in self?.tray.showWindow() }
         model.configureAutomation()
+        model.configureShortcuts()
+        pet.attach(model)
     }
     func runDevelopmentActions(_ model: AppModel) {
         #if MOCHI_DEVELOPMENT

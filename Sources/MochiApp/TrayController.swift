@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 /// Close and ⌘Q retain the workspace; Quit Mochi Completely terminates.
-@MainActor final class TrayController: NSObject, NSWindowDelegate {
+@MainActor final class TrayController: NSObject, NSWindowDelegate, NSMenuDelegate {
     private(set) var statusItem: NSStatusItem?
     private(set) var window: NSWindow?
     private(set) var menu: NSMenu?
@@ -10,6 +10,7 @@ import SwiftUI
     var presentMenu: (NSMenu, NSEvent, NSView) -> Void = { _, _, _ in }
     private weak var previousDelegate: NSWindowDelegate?
     private weak var model: AppModel?
+    private(set) var petItem: NSMenuItem?
 
     func install() {
         guard statusItem == nil else { return }
@@ -21,6 +22,11 @@ import SwiftUI
         let show = menu.addItem(
             withTitle: String(localized: "Open Mochi"), action: #selector(showWindow), keyEquivalent: "")
         show.target = self
+        let pet = menu.addItem(
+            withTitle: String(localized: "Show Desktop Mochi"), action: #selector(togglePet), keyEquivalent: "")
+        pet.target = self
+        petItem = pet
+        menu.delegate = self
         menu.addItem(.separator())
         let quit = menu.addItem(
             withTitle: String(localized: "Quit Mochi Completely"), action: #selector(quitApp), keyEquivalent: "")
@@ -96,11 +102,19 @@ import SwiftUI
         if window.isMiniaturized { window.deminiaturize(nil) }
         window.makeKeyAndOrderFront(nil)
         // Since macOS 14, activation is cooperative: the request is honoured when it follows the user's own input,
-        // such as a click on the menu bar icon.
+        // such as a click on the menu bar icon or the desktop Mochi, whose window never activates the app itself.
         NSApp.activate()
     }
 
     @objc func quitApp() { NSApp.terminate(nil) }
+
+    @objc func togglePet() { model?.petVisible.toggle() }
+
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        petItem?.title =
+            model?.petVisible == true
+            ? String(localized: "Hide Desktop Mochi") : String(localized: "Show Desktop Mochi")
+    }
 
     // Preserve SwiftUI's other window delegate callbacks.
     override func responds(to selector: Selector!) -> Bool {

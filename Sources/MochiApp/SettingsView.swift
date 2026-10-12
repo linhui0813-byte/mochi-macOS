@@ -30,6 +30,9 @@ struct SettingsView: View {
             VoiceSettingsView(app: app)
                 .tabItem { Label("Voices", systemImage: "waveform") }.tag("voices")
 
+            DesktopPetSettingsView(app: app)
+                .tabItem { Label("Desktop", systemImage: "macwindow.on.rectangle") }.tag("desktop")
+
             AutomationSettingsView(app: app)
                 .tabItem { Label("Automation", systemImage: "switch.2") }.tag("automation")
 

@@ -1385,6 +1385,34 @@
         }
       }
     },
+    "Already used for %@." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已用于“%@”。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已用於「%@」。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「%@」で使用中です。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이미 '%@'에 사용 중입니다."
+          }
+        }
+      }
+    },
     "An English expression is required." : {
       "localizations" : {
         "ja" : {
@@ -1465,6 +1493,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "另一個 Mochi 實例擁有外部控制權。"
+          }
+        }
+      }
+    },
+    "Another app is using this shortcut. Choose a different one." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "另一个应用正在使用此快捷键。请换一个。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "另一個應用程式正在使用此快速鍵。請換一個。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "別のアプリがこのショートカットを使用しています。別のものを選んでください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "다른 앱이 이 단축키를 사용 중입니다. 다른 단축키를 선택하세요."
           }
         }
       }
@@ -4661,6 +4717,90 @@
         }
       }
     },
+    "Desktop" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "桌面"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "桌面"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "デスクトップ"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "데스크탑"
+          }
+        }
+      }
+    },
+    "Desktop Mochi" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "桌面 Mochi"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "桌面 Mochi"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "デスクトップのMochi"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "데스크탑 Mochi"
+          }
+        }
+      }
+    },
+    "Desktop Mochi Settings…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "桌面 Mochi 设置…"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "桌面 Mochi 設定⋯"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "デスクトップのMochiの設定…"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "데스크탑 Mochi 설정…"
+          }
+        }
+      }
+    },
     "Development build" : {
       "localizations" : {
         "ja" : {
@@ -5641,6 +5781,34 @@
         }
       }
     },
+    "Eyes follow the pointer" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "眼睛跟随指针"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "眼睛跟隨指標"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "目がポインタを追う"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "눈이 포인터를 따라가기"
+          }
+        }
+      }
+    },
     "Find in Conversation" : {
       "localizations" : {
         "ja" : {
@@ -5973,6 +6141,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已儲存求助草稿。"
+          }
+        }
+      }
+    },
+    "Hide Desktop Mochi" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "隐藏桌面 Mochi"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "隱藏桌面 Mochi"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "デスクトップのMochiを隠す"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "데스크탑 Mochi 가리기"
           }
         }
       }
@@ -6817,6 +7013,34 @@
         }
       }
     },
+    "Keyboard Shortcuts" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "键盘快捷键"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "鍵盤快速鍵"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "キーボードショートカット"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "키보드 단축키"
+          }
+        }
+      }
+    },
     "Library backup exported." : {
       "localizations" : {
         "ja" : {
@@ -7436,6 +7660,34 @@
     "Mochi" : {
       "shouldTranslate" : false
     },
+    "Mochi already uses this shortcut for %@." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochi 已将此快捷键用于“%@”。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochi 已將此快速鍵用於「%@」。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochiはこのショートカットを「%@」に使用しています。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochi가 이미 이 단축키를 '%@'에 사용하고 있습니다."
+          }
+        }
+      }
+    },
     "Mochi could not complete that response. Please retry." : {
       "localizations" : {
         "ja" : {
@@ -7572,6 +7824,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Mochi 無法安全啟動"
+          }
+        }
+      }
+    },
+    "Mochi follows the conversation: she listens while you record, thinks while a reply is prepared, and talks while it plays. Click her to start or finish a voice message, drag her to move her, and Control-click her for more." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochi 会跟随对话：你录音时她在倾听，准备回复时她在思考，播放回复时她在说话。点按她可开始或结束语音消息，拖移可移动她，按住 Control 键点按可查看更多选项。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochi 會跟隨對話：你錄音時她在聆聽，準備回覆時她在思考，播放回覆時她在說話。按一下她可開始或結束語音訊息，拖移可移動她，按住 Control 鍵並按一下可查看更多選項。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochiは会話に合わせて動きます。録音中は耳を傾け、返事の準備中は考え、再生中は話します。クリックすると音声メッセージを開始または終了し、ドラッグすると移動し、Controlキーを押しながらクリックするとその他の操作が表示されます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochi는 대화를 따라 움직입니다. 녹음하는 동안 귀를 기울이고, 답장을 준비하는 동안 생각하고, 재생되는 동안 말합니다. 클릭하면 음성 메시지를 시작하거나 끝내고, 드래그하면 옮기며, Control-클릭하면 더 많은 항목이 표시됩니다."
           }
         }
       }
@@ -10068,6 +10348,34 @@
         }
       }
     },
+    "Press a key together with the modifiers." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请在按住修饰键的同时按下一个按键。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "請在按住輔助鍵的同時按下一個按鍵。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "修飾キーと一緒にキーを押してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "보조 키와 함께 키를 누르세요."
+          }
+        }
+      }
+    },
     "Preview" : {
       "localizations" : {
         "ja" : {
@@ -10484,6 +10792,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "錄製嘗試"
+          }
+        }
+      }
+    },
+    "Record Shortcut" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "录制快捷键"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "錄製快速鍵"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ショートカットを記録"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "단축키 기록"
           }
         }
       }
@@ -10960,6 +11296,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "版本附註"
+          }
+        }
+      }
+    },
+    "Remove Shortcut" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除快捷键"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除快速鍵"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ショートカットを削除"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "단축키 제거"
           }
         }
       }
@@ -12168,6 +12532,34 @@
         }
       }
     },
+    "Shortcuts are saved but stay off in the preview." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "快捷键已存储，但在预览中不会生效。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "快速鍵已儲存，但在預覽中不會生效。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ショートカットは保存されますが、プレビューでは無効です。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "단축키는 저장되지만 미리보기에서는 꺼져 있습니다."
+          }
+        }
+      }
+    },
     "Show Data Folder…" : {
       "localizations" : {
         "ja" : {
@@ -12196,6 +12588,62 @@
         }
       }
     },
+    "Show Desktop Mochi" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示桌面 Mochi"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "顯示桌面 Mochi"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "デスクトップのMochiを表示"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "데스크탑 Mochi 보기"
+          }
+        }
+      }
+    },
+    "Show Mochi on the desktop" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在桌面上显示 Mochi"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在桌面上顯示 Mochi"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "デスクトップにMochiを表示"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "데스크탑에 Mochi 보기"
+          }
+        }
+      }
+    },
     "Show Recording in Finder" : {
       "localizations" : {
         "ja" : {
@@ -12220,6 +12668,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "在 Finder 中顯示錄音"
+          }
+        }
+      }
+    },
+    "Show or Hide Desktop Mochi" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示或隐藏桌面 Mochi"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "顯示或隱藏桌面 Mochi"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "デスクトップのMochiを表示/非表示"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "데스크탑 Mochi 보기 또는 가리기"
           }
         }
       }
@@ -12332,6 +12808,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "平滑曲線"
+          }
+        }
+      }
+    },
+    "Space" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "空格"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "空白鍵"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "スペース"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스페이스"
           }
         }
       }
@@ -12724,6 +13228,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "儲存空間"
+          }
+        }
+      }
+    },
+    "Talk to Mochi" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "和 Mochi 说话"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "和 Mochi 說話"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochiに話しかける"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochi에게 말하기"
           }
         }
       }
@@ -14212,6 +14744,34 @@
         }
       }
     },
+    "These shortcuts work in every app. Press Talk to Mochi once to start a voice message and again to send it, or hold it down while you speak and let go to send." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这些快捷键在任何应用中都可使用。按一次“和 Mochi 说话”开始语音消息，再按一次发送；也可以在说话时按住它，松开即发送。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "這些快速鍵在任何應用程式中都可使用。按一次「和 Mochi 說話」開始語音訊息，再按一次傳送；也可以在說話時按住它，放開即傳送。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "これらのショートカットはどのアプリでも使えます。「Mochiに話しかける」を1回押すと音声メッセージを開始し、もう1回押すと送信します。話している間押し続け、離して送信することもできます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 단축키는 모든 앱에서 작동합니다. 'Mochi에게 말하기'를 한 번 누르면 음성 메시지를 시작하고 다시 누르면 보냅니다. 말하는 동안 누르고 있다가 떼면 보낼 수도 있습니다."
+          }
+        }
+      }
+    },
     "This Mochi tool is not available." : {
       "localizations" : {
         "ja" : {
@@ -14912,6 +15472,34 @@
         }
       }
     },
+    "This shortcut could not be turned on. Choose a different one." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法启用此快捷键。请换一个。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法啟用此快速鍵。請換一個。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このショートカットを有効にできませんでした。別のものを選んでください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 단축키를 켤 수 없습니다. 다른 단축키를 선택하세요."
+          }
+        }
+      }
+    },
     "This template changed. Read it again before deleting." : {
       "localizations" : {
         "ja" : {
@@ -15500,6 +16088,34 @@
         }
       }
     },
+    "Type Shortcut…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请按下快捷键…"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "請按下快速鍵⋯"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ショートカットを入力…"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "단축키 입력…"
+          }
+        }
+      }
+    },
     "Type your thought in your own language or in English, or record it first." : {
       "localizations" : {
         "ja" : {
@@ -15776,6 +16392,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "不支援的錄音格式。"
+          }
+        }
+      }
+    },
+    "Use Command, Option or Control in the shortcut." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "快捷键需包含 Command、Option 或 Control 键。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "快速鍵需包含 Command、Option 或 Control 鍵。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ショートカットにはCommand、Option、Controlのいずれかを含めてください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "단축키에 Command, Option 또는 Control을 포함하세요."
           }
         }
       }
@@ -16728,6 +17372,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "你的聲音"
+          }
+        }
+      }
+    },
+    "macOS already uses this shortcut." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS 已在使用此快捷键。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS 已在使用此快速鍵。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このショートカットはmacOSで使用されています。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS에서 이미 이 단축키를 사용하고 있습니다."
           }
         }
       }

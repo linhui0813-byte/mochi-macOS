@@ -108,6 +108,7 @@ extension AppModel {
                 }
                 _ = turn.finish(token)
                 _ = turn.startRecording()
+                recordingRequest = token
                 recordingSeconds = 0
                 lastAudibleRecordingTime = 0
                 recordingWarning = nil

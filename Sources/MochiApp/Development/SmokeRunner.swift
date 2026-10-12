@@ -849,6 +849,33 @@
                 model.settingsTab = "about"
                 try? await Task.sleep(nanoseconds: 350_000_000)
                 await capture("about-settings.png", settings: true)
+                model.settingsTab = "desktop"
+                try? await Task.sleep(nanoseconds: 350_000_000)
+                await capture("desktop-settings.png", settings: true)
+                // The desktop Mochi: shown from the preference, mirroring the turn, and gone again when turned off.
+                // A capture left by an earlier run must never stand in for this one.
+                if !removeStaleEvidence(directory.appendingPathComponent("desktop-pet.png")) {
+                    captureFailures.append("desktop-pet.png: stale capture could not be removed")
+                }
+                model.petVisible = true
+                if await waitFor(2, { self.pet.panel?.isVisible == true }), let petPanel = pet.panel {
+                    if petPanel.canHide || petPanel.canBecomeKey || petPanel.frame.size != DesktopPet.size {
+                        captureFailures.append("Desktop Mochi window can hide, take focus, or has the wrong size")
+                    }
+                    try? await Task.sleep(nanoseconds: 300_000_000)
+                    await capture("desktop-pet.png", window: petPanel)
+                    let epoch = model.turn.begin(.recording)
+                    // Her own timer has to notice; a tick from here would hide a stopped timer.
+                    if await !waitFor(2, { self.pet.currentPose == .review }) {
+                        captureFailures.append("Desktop Mochi does not listen while recording")
+                    }
+                    _ = model.turn.finish(epoch)
+                    model.petVisible = false
+                    if petPanel.isVisible { captureFailures.append("Desktop Mochi stays after being turned off") }
+                } else {
+                    captureCount += 1
+                    captureFailures.append("desktop-pet.png: Desktop Mochi did not appear")
+                }
                 let pitchFixture = (0..<150).map { i -> PitchPoint in
                     let t = Double(i) * 0.015
                     let value = 7 + 3 * sin(t * 5) + (i.isMultiple(of: 2) ? 0.45 : -0.45) + (i == 88 ? 12 : 0)

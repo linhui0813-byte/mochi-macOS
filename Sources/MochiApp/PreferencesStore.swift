@@ -27,6 +27,37 @@ import MochiProviders
     var externalControlEnabled: Bool {
         didSet { defaults.set(externalControlEnabled, forKey: "externalControlEnabled") }
     }
+    /// Whether Mochi sits on the desktop outside the workspace.
+    var petVisible: Bool { didSet { defaults.set(petVisible, forKey: "desktopPetVisible") } }
+    /// Whether the desktop Mochi's eyes follow the pointer while she is idle; off unless turned on.
+    var petFollowsPointer: Bool { didSet { defaults.set(petFollowsPointer, forKey: "desktopPetFollowsPointer") } }
+    /// Where the desktop Mochi was left, in screen coordinates; nil until she is first moved.
+    var petOrigin: CGPoint? {
+        didSet {
+            if let petOrigin, petOrigin.x.isFinite, petOrigin.y.isFinite {
+                defaults.set([Double(petOrigin.x), Double(petOrigin.y)], forKey: "desktopPetOrigin")
+            } else {
+                defaults.removeObject(forKey: "desktopPetOrigin")
+            }
+        }
+    }
+    /// Shortcuts that work in every app. An action without one is absent.
+    /// Stored only when it differs from the default: a removed shortcut is stored as empty data, so it stays removed,
+    /// and an action left at its default follows the default.
+    var shortcuts: [ShortcutAction: Shortcut] {
+        didSet {
+            for action in ShortcutAction.allCases {
+                switch shortcuts[action] {
+                case action.defaultShortcut: defaults.removeObject(forKey: action.preferenceKey)
+                case nil: defaults.set(Data(), forKey: action.preferenceKey)
+                case let shortcut?:
+                    do { defaults.set(try JSONEncoder().encode(shortcut), forKey: action.preferenceKey) } catch {
+                        MochiLog.failure(MochiLog.app, "Save preference \(action.preferenceKey)", error)
+                    }
+                }
+            }
+        }
+    }
     var practiceVoiceLabel: String {
         "\(RealtimeVoice(rawValue: builtInPracticeVoice)?.name ?? RealtimeService.defaultVoice.capitalized) · Codex voice"
     }
@@ -73,6 +104,33 @@ import MochiProviders
         conversationVoiceOptions = options("conversationVoiceOptions")
         practiceVoiceOptions = options("practiceVoiceOptions")
         externalControlEnabled = allowExternalControl && defaults.bool(forKey: "externalControlEnabled")
+        petVisible = defaults.bool(forKey: "desktopPetVisible")
+        petFollowsPointer = defaults.bool(forKey: "desktopPetFollowsPointer")
+        if let point = defaults.array(forKey: "desktopPetOrigin") as? [Double], point.count == 2,
+            point.allSatisfy(\.isFinite)
+        {
+            petOrigin = CGPoint(x: point[0], y: point[1])
+        } else {
+            petOrigin = nil
+        }
+        var shortcuts = ShortcutAction.defaults
+        for action in ShortcutAction.allCases {
+            guard let data = defaults.data(forKey: action.preferenceKey) else { continue }
+            if data.isEmpty {
+                shortcuts[action] = nil
+                continue
+            }
+            do {
+                let shortcut = try JSONDecoder().decode(Shortcut.self, from: data)
+                if let problem = shortcut.problem { throw AppFailure(verbatim: problem) }
+                shortcuts[action] = shortcut
+            } catch {
+                MochiLog.failure(
+                    MochiLog.app, "Stored preference \(action.preferenceKey) was rejected; using the default", error,
+                    level: .default)
+            }
+        }
+        self.shortcuts = shortcuts
     }
     /// Mochi's conversation voice, optionally at one conversation's own speed.
     func conversationService(speed: Double? = nil) -> RealtimeService {

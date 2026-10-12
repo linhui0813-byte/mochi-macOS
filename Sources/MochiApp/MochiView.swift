@@ -3,13 +3,8 @@ import SwiftUI
 
 struct MochiView: View {
     @Environment(\.accessibilityReduceMotion) private var reducedMotion
-    /// The idle animation: the first six cells of the sprite sheet's top row.
-    static let frames: [CGImage] = {
-        guard let url = Bundle.module.url(forResource: "mochi", withExtension: "webp"),
-            let image = NSImage(contentsOf: url), let cg = image.cgImage(forProposedRect: nil, context: nil, hints: nil)
-        else { return [] }
-        return (0..<6).compactMap { cg.cropping(to: CGRect(x: $0 * 192, y: 0, width: 192, height: 208)) }
-    }()
+    /// The idle animation, the first row of the sprite sheet.
+    static let frames: [CGImage] = PetSprite.shared.frames(.idle)
     var body: some View {
         TimelineView(.animation(minimumInterval: 0.18, paused: reducedMotion)) { context in
             let frames = Self.frames

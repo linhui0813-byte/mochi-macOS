@@ -31,6 +31,14 @@ struct MessageDeletionUndo {
     func updateLibraryQuietly(_ change: (inout Library) -> Void) { libraryController.updateQuietly(change) }
     @ObservationIgnored var deferredToolAction: (() -> Void)?
     @ObservationIgnored var revealWorkspace: (() -> Void)?
+    /// Shows or hides the desktop Mochi to match the preference; set by the app delegate, which owns her window.
+    @ObservationIgnored var updateDesktopPet: (() -> Void)?
+    /// Shortcuts that work in every app.
+    let shortcuts: ShortcutCenter
+    /// When the Talk shortcut went down, and the recording request that press started, if any.
+    @ObservationIgnored var talkPress: (time: Date, request: UUID?)?
+    /// The request that started the recording now running: the turn of its microphone permission step.
+    @ObservationIgnored var recordingRequest: UUID?
     /// The instructions or template sheet, and the drafts it edits.
     var customization = CustomizationSheet()
     var externalControlEnabled: Bool {
@@ -190,6 +198,8 @@ struct MessageDeletionUndo {
         settings = PreferencesStore(
             preferences ?? (demo ? UserDefaults(suiteName: AppIdentity.bundleIdentifier + ".preview")! : .standard),
             importLegacy: !demo && libraryRoot == nil, allowExternalControl: !demo)
+        // Previews and tests never take keys from other apps.
+        shortcuts = ShortcutCenter(system: .live, enabled: !demo && !TestEnvironment.active)
         let support =
             applicationSupport ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         let managed = !demo && libraryRoot == nil
@@ -205,6 +215,8 @@ struct MessageDeletionUndo {
         find.matching = { [weak self] in self?.conversation?.matchingMessageIDs($0) ?? [] }
         help.persist = { [weak self] typing in self?.persistHelpDraft(typing: typing) ?? false }
         help.removeRecording = { [weak self] in self?.removeUnreferencedRecording($0) }
+        shortcuts.bindings = { [weak self] in self?.settings.shortcuts ?? [:] }
+        shortcuts.perform = { [weak self] action, pressed in self?.shortcutTriggered(action, pressed: pressed) }
         libraryController.open(managedIn: managed ? support : nil, isolated: libraryRoot != nil) { [weak self] in
             self?.libraryOpened()
         }
