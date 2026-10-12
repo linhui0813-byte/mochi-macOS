@@ -57,14 +57,20 @@ struct WorkspaceView: View {
                                 .contextMenu { ChatActions(app: app, chat: chat) }
                         }
                     } header: {
-                        if !group.chats.isEmpty { Text(group.title) }
+                        if !group.chats.isEmpty, let title = group.title { Text(title) }
                     }
                 }
                 Section {
                     if app.visibleChats.isEmpty {
-                        Text(app.history.query.isEmpty ? "No conversations here" : "No matching conversations")
-                            .foregroundStyle(.secondary).font(.callout)
+                        Text(
+                            app.history.query.isEmpty && app.history.character == nil
+                                ? "No conversations here" : "No matching conversations"
+                        )
+                        .foregroundStyle(.secondary).font(.callout)
                         if !app.history.query.isEmpty { Button("Clear Search") { app.history.query = "" } }
+                        if app.history.character != nil {
+                            Button("Show All Characters") { app.history.character = nil }
+                        }
                     }
                 }
 
@@ -72,11 +78,12 @@ struct WorkspaceView: View {
             .listStyle(.sidebar)
             .searchable(
                 text: $app.history.query, isPresented: $app.history.searchOpen, placement: .sidebar,
-                prompt: "Search titles and messages"
+                prompt: "Search titles, characters and messages"
             )
             .historySearchFocus($searchFocused)
             .navigationTitle("")
             .toolbar {
+                ToolbarItem(placement: .automatic) { HistoryOrderMenu(app: app) }
                 ToolbarItem(placement: .primaryAction) {
                     Button(action: app.newChat) { Label("New Conversation", systemImage: "square.and.pencil") }
                         .labelStyle(.iconOnly).help("New Conversation (⌘N)")
@@ -180,15 +187,24 @@ struct WorkspaceView: View {
     /// Every group is always present, empty or not. Inserting a whole section into the live
     /// sidebar table (for example Pinned, when switching to Conversations) makes SwiftUI
     /// update NSTableView reentrantly; with a fixed section list only rows change.
-    private var historyGroups: [(id: String, title: LocalizedStringKey, chats: [Conversation])] {
+    private var historyGroups: [(id: String, title: LocalizedStringKey?, chats: [Conversation])] {
         let chats = app.visibleChats
         let searching = !app.history.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let listed = searching ? [] : chats
         let pinned = listed.filter { $0.pinned && app.history.scope == .active }
         let remaining = listed.filter { !($0.pinned && app.history.scope == .active) }
         let calendar = Calendar.current
+        let sort = app.settings.historySort
         func rowDate(_ chat: Conversation) -> Date {
-            app.history.scope == .deleted ? chat.deletedAt ?? chat.updatedAt : chat.updatedAt
+            if sort == .created { return chat.date }
+            return app.history.scope == .deleted ? chat.deletedAt ?? chat.updatedAt : chat.updatedAt
+        }
+        // Alphabetical orders have no dates to group by: everything unpinned is one untitled section.
+        guard sort == .recent || sort == .created else {
+            return [
+                ("search", "Search Results", searching ? chats : []), ("pinned", "Pinned", pinned),
+                ("today", nil, []), ("yesterday", nil, []), ("earlier", nil, remaining),
+            ]
         }
         return [
             ("search", "Search Results", searching ? chats : []),
@@ -440,6 +456,14 @@ struct WorkspaceView: View {
 private struct SidebarChatRow: View {
     @Bindable var app: AppModel
     var chat: Conversation
+    /// The character is named when the list is ordered by character or the conversation has a character of its own.
+    private var showsCharacter: Bool { app.settings.historySort == .companion || chat.characterName != nil }
+    private var preview: String {
+        chat.matchingMessage(app.history.query)?.text
+            ?? (chat.draft.isEmpty
+                ? chat.messages.last?.text ?? String(localized: "New conversation")
+                : String(localized: "Draft: \(chat.draft)"))
+    }
     var body: some View {
         HStack(spacing: 10) {
             Image(
@@ -450,13 +474,8 @@ private struct SidebarChatRow: View {
             .font(.system(size: 18)).foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: 4) {
                 Text(chat.displayTitle).fontWeight(.medium).lineLimit(1)
-                Text(
-                    chat.matchingMessage(app.history.query)?.text
-                        ?? (chat.draft.isEmpty
-                            ? chat.messages.last?.text ?? String(localized: "New conversation")
-                            : String(localized: "Draft: \(chat.draft)"))
-                )
-                .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                Text(showsCharacter ? "\(chat.displayCharacterName) · \(preview)" : preview)
+                    .font(.caption).foregroundStyle(.secondary).lineLimit(1)
             }
             Spacer(minLength: 0)
             Menu {
@@ -610,3 +629,33 @@ extension View {
         func updateNSView(_ view: NSView, context: Context) {}
     }
 #endif
+
+/// Orders the conversation list and narrows it to one character.
+private struct HistoryOrderMenu: View {
+    @Bindable var app: AppModel
+
+    var body: some View {
+        Menu {
+            Picker("Sort By", selection: Bindable(app.settings).historySort) {
+                ForEach(HistorySort.allCases, id: \.self) { Text($0.title).tag($0) }
+            }.pickerStyle(.inline)
+            Picker("Character", selection: $app.history.character) {
+                Text("All Characters").tag(String?.none)
+                ForEach(characters, id: \.self) { Text(verbatim: $0).tag(String?.some($0)) }
+            }.pickerStyle(.inline)
+        } label: {
+            Image(
+                systemName: app.history.character == nil
+                    ? "line.3.horizontal.decrease.circle" : "line.3.horizontal.decrease.circle.fill")
+        }
+        .menuIndicator(.hidden).help("Sort and Filter Conversations")
+        .accessibilityLabel("Sort and Filter Conversations")
+    }
+
+    /// The characters in the listed collection, and the chosen one even when it no longer has conversations there.
+    private var characters: [String] {
+        let listed = app.library.companions(in: app.history.scope)
+        guard let chosen = app.history.character, !listed.contains(chosen) else { return listed }
+        return listed + [chosen]
+    }
+}

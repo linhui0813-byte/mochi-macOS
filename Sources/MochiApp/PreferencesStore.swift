@@ -39,6 +39,8 @@ import MochiProviders
     var externalControlEnabled: Bool {
         didSet { defaults.set(externalControlEnabled, forKey: "externalControlEnabled") }
     }
+    /// The order of the conversation list.
+    var historySort: HistorySort { didSet { defaults.set(historySort.rawValue, forKey: "historySort") } }
     /// Whether Mochi sits on the desktop outside the workspace.
     var petVisible: Bool { didSet { defaults.set(petVisible, forKey: "desktopPetVisible") } }
     /// Whether the desktop Mochi's eyes follow the pointer while she is idle; off unless turned on.
@@ -112,6 +114,7 @@ import MochiProviders
         }
         modelName = defaults.string(forKey: "model").flatMap(Self.trimmed) ?? RealtimeService.defaultModel
         userName = defaults.string(forKey: "userName") ?? ""
+        historySort = defaults.string(forKey: "historySort").flatMap(HistorySort.init(rawValue:)) ?? .recent
         conversationVoice = voice("conversationVoice")
         builtInPracticeVoice = voice("builtInPracticeVoice")
         conversationVoiceOptions = options("conversationVoiceOptions")

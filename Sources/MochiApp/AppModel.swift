@@ -159,7 +159,10 @@ struct MessageDeletionUndo {
     @ObservationIgnored var chooseFile: @MainActor (PanelRequest) -> URL? = FilePanels.choose
     var conversation: Conversation? { library.conversations.first { $0.id == selectedID } }
     var writableConversation: Bool { conversation.map { !$0.archived && !$0.isDeleted } ?? false }
-    var visibleChats: [Conversation] { library.history(in: history.scope, query: history.query) }
+    var visibleChats: [Conversation] {
+        library.history(
+            in: history.scope, query: history.query, sort: settings.historySort, companion: history.character)
+    }
     var busy: Bool { turn.activity != .idle }
     var practice: Bool { turn.mode == .practice }
     var status: String {

@@ -128,3 +128,46 @@ extension HistoryTests {
         }
     }
 }
+
+extension HistoryTests {
+    /// Three conversations whose order differs by every key: by activity, by creation, by title and by companion.
+    private func sortable() -> Library {
+        let base = Date(timeIntervalSince1970: 1_000_000)
+        func chat(_ title: String, companion: String?, created: Double, active: Double) -> Conversation {
+            var c = Conversation(title: title)
+            c.characterName = companion
+            c.date = base.addingTimeInterval(created)
+            c.messages = [Message(role: "user", text: "Hello from \(title)")]
+            c.messages[0].date = base.addingTimeInterval(active)
+            return c
+        }
+        var library = Library()
+        library.conversations = [
+            chat("Banana", companion: "Loki", created: 0, active: 30),
+            chat("apple", companion: nil, created: 20, active: 10),
+            chat("Cherry", companion: "Ana", created: 10, active: 20),
+        ]
+        return library
+    }
+
+    func testHistorySortsByActivityCreationTitleOrCompanion() {
+        let library = sortable()
+        func titles(_ sort: HistorySort) -> [String] { library.history(in: .active, sort: sort).map(\.title) }
+        XCTAssertEqual(titles(.recent), ["Banana", "Cherry", "apple"])
+        XCTAssertEqual(titles(.created), ["apple", "Cherry", "Banana"])
+        XCTAssertEqual(titles(.title), ["apple", "Banana", "Cherry"], "Alphabetical, ignoring case")
+        // A conversation without a custom name is with Mochi.
+        XCTAssertEqual(titles(.companion), ["Cherry", "Banana", "apple"])
+    }
+
+    func testHistoryFiltersByCompanionAndSearchFindsCompanions() {
+        var library = sortable()
+        XCTAssertEqual(library.companions(in: .active), ["Ana", "Loki", "Mochi"])
+        XCTAssertEqual(library.history(in: .active, companion: "Loki").map(\.title), ["Banana"])
+        XCTAssertEqual(library.history(in: .active, companion: "Mochi").map(\.title), ["apple"])
+        XCTAssertEqual(library.history(in: .active, query: "loki").map(\.title), ["Banana"])
+        // Pinned conversations still lead, whatever the order.
+        library.conversations[2].pinned = true
+        XCTAssertEqual(library.history(in: .active, sort: .title).map(\.title), ["Cherry", "apple", "Banana"])
+    }
+}

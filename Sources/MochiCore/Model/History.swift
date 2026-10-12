@@ -29,37 +29,74 @@ extension Conversation {
     public func matchingMessage(_ query: String) -> Message? {
         messageMatcher(query).flatMap { messages.first(where: $0) }
     }
+    /// Whether the conversation belongs in `scope` without a search.
+    func isListed(in scope: HistoryScope) -> Bool {
+        switch scope {
+        case .active: return !isDeleted && !archived
+        case .archived: return !isDeleted && archived
+        case .deleted: return isDeleted
+        }
+    }
     public func matchingMessageIDs(_ query: String) -> [UUID] {
         messageMatcher(query).map { messages.filter($0).map(\.id) } ?? []
     }
     public func matches(_ query: String) -> Bool {
-        title.range(of: query, options: [.caseInsensitive, .diacriticInsensitive]) != nil
+        let options: String.CompareOptions = [.caseInsensitive, .diacriticInsensitive]
+        return title.range(of: query, options: options) != nil
+            || displayCharacterName.range(of: query, options: options) != nil
             || matchingMessage(query) != nil
     }
 }
-extension Library {
-    /// The number of conversations `history(in:)` would list, without sorting them.
-    public func count(in scope: HistoryScope) -> Int {
-        conversations.reduce(0) { total, c in
-            switch scope {
-            case .active: return total + (!c.isDeleted && !c.archived ? 1 : 0)
-            case .archived: return total + (!c.isDeleted && c.archived ? 1 : 0)
-            case .deleted: return total + (c.isDeleted ? 1 : 0)
-            }
+/// How the history list is ordered. Pinned conversations lead in every order.
+public enum HistorySort: String, CaseIterable, Sendable {
+    /// Latest activity first; in Recently Deleted, latest deletion first.
+    case recent
+    /// Newest conversation first.
+    case created
+    /// Alphabetical by title.
+    case title
+    /// Alphabetical by the companion's name, then latest activity first.
+    case companion
+    public var title: String {
+        switch self {
+        case .recent: return String(localized: "Recent Activity")
+        case .created: return String(localized: "Date Created")
+        case .title: return String(localized: "Title")
+        case .companion: return String(localized: "Character Name")
         }
     }
-    public func history(in scope: HistoryScope, query: String = "") -> [Conversation] {
+}
+extension Library {
+    /// Every companion name used in this scope, alphabetically; Mochi names conversations without a custom one.
+    public func companions(in scope: HistoryScope) -> [String] {
+        Set(conversations.filter { $0.isListed(in: scope) }.map(\.displayCharacterName))
+            .sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+    }
+    /// The number of conversations `history(in:)` would list, without sorting them.
+    public func count(in scope: HistoryScope) -> Int {
+        conversations.reduce(0) { $0 + ($1.isListed(in: scope) ? 1 : 0) }
+    }
+    /// The conversations listed in `scope`, optionally only those matching `query` or with one companion, in `sort`
+    /// order. A search in Conversations also finds archived ones.
+    public func history(
+        in scope: HistoryScope, query: String = "", sort: HistorySort = .recent, companion: String? = nil
+    ) -> [Conversation] {
         let term = query.trimmingCharacters(in: .whitespacesAndNewlines)
         return conversations.filter { c in
-            let included: Bool
-            switch scope {
-            case .active: included = !c.isDeleted && (!c.archived || !term.isEmpty)
-            case .archived: included = !c.isDeleted && c.archived
-            case .deleted: included = c.isDeleted
-            }
+            let included = c.isListed(in: scope) || (scope == .active && !term.isEmpty && !c.isDeleted)
             return included && (term.isEmpty || c.matches(term))
+                && (companion == nil || c.displayCharacterName == companion)
         }.sorted {
             if scope == .active && $0.pinned != $1.pinned { return $0.pinned }
+            let order: ComparisonResult
+            switch sort {
+            case .recent: order = .orderedSame
+            case .created:
+                order = $0.date == $1.date ? .orderedSame : $0.date > $1.date ? .orderedAscending : .orderedDescending
+            case .title: order = $0.displayTitle.localizedStandardCompare($1.displayTitle)
+            case .companion: order = $0.displayCharacterName.localizedStandardCompare($1.displayCharacterName)
+            }
+            if order != .orderedSame { return order == .orderedAscending }
             let lhs = scope == .deleted ? $0.deletedAt! : $0.updatedAt
             let rhs = scope == .deleted ? $1.deletedAt! : $1.updatedAt
             return lhs == rhs ? $0.id.uuidString < $1.id.uuidString : lhs > rhs

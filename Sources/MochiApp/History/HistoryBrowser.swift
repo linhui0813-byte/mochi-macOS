@@ -5,6 +5,8 @@ import MochiCore
 struct HistoryBrowser {
     var scope: HistoryScope = .active
     var query = ""
+    /// Only conversations with this character are listed; nil lists every character.
+    var character: String?
     var searchOpen = false
     /// Incremented to move keyboard focus to the history search field.
     var searchFocusRequest = 0
