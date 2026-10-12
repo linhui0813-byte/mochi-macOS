@@ -1,3 +1,4 @@
+import MochiKernel
 import XCTest
 
 @testable import MochiProviders
@@ -151,6 +152,37 @@ final class RealtimeLifecycleTests: XCTestCase {
             XCTAssertTrue(RealtimeService.replyFailure(error).message.contains("reply timed out"))
         }
         XCTAssertGreaterThan(socket.closeCount, 0)
+    }
+    /// A connection that closes underneath can surface as a CancellationError although nothing cancelled the reply.
+    /// Taken for the user's cancellation, it would end a greeting or a reply without a word; it is a failed
+    /// connection. A reply that was cancelled still ends as cancelled.
+    func testAConnectionCancelledUnderneathFailsInsteadOfPassingForCancellation() async throws {
+        do {
+            _ = try await RealtimeService(model: "test-model").reply(
+                ConversationRequest(history: [], text: "Hello", reference: true), credential: { "session" },
+                connect: { _ in
+                    RealtimeChannel(
+                        send: { _ in },
+                        receive: {
+                            try await RealtimeChannel.surfacing { () async throws -> [String: Any] in
+                                throw CancellationError()
+                            }
+                        }, close: {})
+                })
+            XCTFail("A dropped connection passed silently")
+        } catch {
+            XCTAssertTrue(error is AppFailure, "\(error)")
+        }
+        let cancelled = Task {
+            withUnsafeCurrentTask { $0?.cancel() }
+            return try await RealtimeChannel.surfacing { () async throws -> Int in throw CancellationError() }
+        }
+        do {
+            _ = try await cancelled.value
+            XCTFail("A cancelled reply was not reported as cancelled")
+        } catch {
+            XCTAssertTrue(error is CancellationError, "\(error)")
+        }
     }
     func testPreCommitAndMismatchedEventsCannotCompleteReplyTranscript() throws {
         var accumulator = RealtimeAccumulator()

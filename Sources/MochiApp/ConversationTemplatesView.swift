@@ -2,82 +2,6 @@ import MochiCore
 import MochiKernel
 import SwiftUI
 
-/// The language a conversation is held in: one to speak and practise, or Match Me last, apart from the others.
-struct LanguagePicker: View {
-    @Binding var selection: ConversationLanguage
-    var body: some View {
-        Picker("Language", selection: $selection) {
-            ForEach(ConversationLanguage.allCases.filter(\.isPractised), id: \.self) {
-                Text(verbatim: $0.displayName).tag($0)
-            }
-            Divider()
-            Text(verbatim: ConversationLanguage.match.displayName).tag(ConversationLanguage.match)
-        }
-    }
-}
-
-struct ConversationSettingsFields: View {
-    @FocusState private var instructionsFocused: Bool
-    @Binding var instructions: String
-    @Binding var characterName: String?
-    @Binding var preferences: ConversationPreferences
-    var body: some View {
-        Toggle(
-            "Use a custom character name",
-            isOn: Binding(get: { characterName != nil }, set: { characterName = $0 ? "Mochi" : nil }))
-        if characterName != nil {
-            TextField("Character name", text: Binding(get: { characterName ?? "" }, set: { characterName = $0 }))
-                .textFieldStyle(.roundedBorder).accessibilityIdentifier("character-name")
-        }
-        Text(
-            characterName == nil
-                ? "Default identity: Mochi. Instructions can override its conversational name."
-                : "This name takes precedence over naming in instructions. Saved messages keep their original speaker name."
-        )
-        .font(.caption).foregroundStyle(.secondary)
-        Text("Instructions").font(.headline)
-        TextEditor(text: $instructions).font(.body).padding(6).frame(height: 150).focused($instructionsFocused)
-            .fieldFrame(cornerRadius: 8, focused: instructionsFocused)
-            .accessibilityLabel("Conversation instructions")
-        Text(
-            "\(instructions.count)/\(ConversationInstructions.maxCharacters.formatted()) characters · \(instructions.utf8.count)/\(ConversationInstructions.maxBytes.formatted()) bytes"
-        )
-        .font(.caption).foregroundStyle(.secondary)
-        if instructions.count > ConversationInstructions.maxCharacters
-            || instructions.utf8.count > ConversationInstructions.maxBytes
-        {
-            Text(
-                "The full original text is preserved. Future replies use a bounded preview. Shorten it to \(ConversationInstructions.maxCharacters.formatted()) characters and \(ConversationInstructions.maxBytes / 1024) KB to save edited text or a new template. Unchanged conversation text can be preserved when changing other settings."
-            )
-            .font(.caption).foregroundStyle(.red)
-        }
-        LanguagePicker(selection: $preferences.language)
-        Picker("Coaching", selection: $preferences.coaching) {
-            Text("Natural conversation").tag(CoachingStyle.natural)
-            Text("Occasional gentle corrections").tag(CoachingStyle.gentle)
-            Text("Direct corrections").tag(CoachingStyle.direct)
-        }.disabled(!preferences.language.isPractised)
-        if !preferences.language.isPractised {
-            Text("Replies follow the language you speak, so there is nothing to correct and no Help Me Say This.")
-                .font(.caption).foregroundStyle(.secondary)
-        }
-        Toggle(
-            "Use a custom speech speed",
-            isOn: Binding(get: { preferences.speed != nil }, set: { preferences.speed = $0 ? 1 : nil }))
-        if preferences.speed != nil {
-            HStack {
-                Slider(
-                    value: Binding(get: { preferences.speed ?? 1 }, set: { preferences.speed = $0 }),
-                    in: ConversationPreferences.speedRange,
-                    step: 0.05
-                )
-                .accessibilityLabel("Conversation speech speed")
-                Text(String(format: "%.2f×", preferences.speed ?? 1)).monospacedDigit().frame(width: 60)
-            }
-        }
-    }
-}
-
 struct ConversationTemplatesView: View {
     @Bindable var app: AppModel
     @State private var query = ""
@@ -86,12 +10,6 @@ struct ConversationTemplatesView: View {
     @State private var error: String?
     @State private var pendingDelete: ConversationTemplate?
     private var mode: TemplatePresentation { app.customization.templatePresentation ?? .picker }
-    private var values: [ConversationTemplate] {
-        app.templates.all.filter {
-            query.isEmpty || $0.title.localizedCaseInsensitiveContains(query)
-                || $0.description.localizedCaseInsensitiveContains(query)
-        }
-    }
     private var draftBinding: Binding<ConversationTemplate> {
         Binding(
             get: { app.customization.templateDraft?.value ?? ConversationTemplate(title: "") },
@@ -146,9 +64,9 @@ struct ConversationTemplatesView: View {
     }
     private var templateList: some View {
         List(selection: $selection) {
-            ForEach([true, false], id: \.self) { builtin in
-                Section(builtin ? "Built-in" : "My Templates") {
-                    ForEach(values.filter { $0.isBuiltin == builtin }) { t in
+            ForEach(app.templates.sections(matching: query), id: \.section) { group in
+                Section(group.section.title) {
+                    ForEach(group.templates) { t in
                         VStack(alignment: .leading, spacing: 4) {
                             Text(t.displayTitle).fontWeight(.medium)
                             Text(t.displayDescription).font(.caption).foregroundStyle(.secondary).lineLimit(2)
@@ -165,8 +83,7 @@ struct ConversationTemplatesView: View {
                 guard let id, app.customization.templateDraft?.value.id != id,
                     let t = app.templates.all.first(where: { $0.id == id })
                 else { return }
-                app.customization.templateDraft = TemplateEditorDraft(
-                    value: t, editingID: nil, expectedRevision: t.revision)
+                app.customization.previewTemplate(t)
                 error = nil
             }
     }
@@ -176,16 +93,9 @@ struct ConversationTemplatesView: View {
                 Text(draft.value.displayTitle).font(.headline)
                 Text(draft.value.displayDescription).foregroundStyle(.secondary)
                 if mode == .picker {
-                    ConversationSettingsFields(
-                        instructions: draftBinding.instructions,
-                        characterName: draftBinding.characterName, preferences: draftBinding.preferences)
+                    ConversationSettingsFields(app: app, settings: draftBinding)
                 } else {
-                    Text(
-                        draft.value.instructions.isEmpty
-                            ? String(localized: "No additional instructions") : draft.value.instructions
-                    )
-                    .font(.callout)
-                    Text(draft.value.characterName.map { "Character: \($0)" } ?? "Character: Default").font(.caption)
+                    TemplateSummary(app: app, template: draft.value)
                 }
                 sourceStatus(draft)
                 HStack {
@@ -211,8 +121,7 @@ struct ConversationTemplatesView: View {
             if source.revision != draft.expectedRevision {
                 Text("The source changed. Your preview is kept.").font(.caption).foregroundStyle(.orange)
                 Button("Refresh from Source") {
-                    app.customization.templateDraft = TemplateEditorDraft(
-                        value: source, editingID: nil, expectedRevision: source.revision)
+                    app.customization.previewTemplate(source)
                     error = nil
                 }
             }
@@ -227,9 +136,7 @@ struct ConversationTemplatesView: View {
                 TextField("Template title", text: draftBinding.title).textFieldStyle(.roundedBorder)
                 TextField("Description", text: draftBinding.description, axis: .vertical).textFieldStyle(
                     .roundedBorder)
-                ConversationSettingsFields(
-                    instructions: draftBinding.instructions, characterName: draftBinding.characterName,
-                    preferences: draftBinding.preferences)
+                ConversationSettingsFields(app: app, settings: draftBinding)
             }
         }
     }
@@ -269,27 +176,36 @@ struct ConversationTemplatesView: View {
         }
     }
     private func save(asNew: Bool) {
-        guard let draft = app.customization.templateDraft else { return }
-        // Saving over a template clears a name or speed the draft no longer has; a new template just omits them.
-        let replacing = draft.editingID != nil && !asNew
-        let patch = ConversationTemplate.Patch(
-            title: draft.value.title, description: draft.value.description,
-            settings: ConversationSettingsPatch(
-                instructions: draft.value.instructions,
-                characterName: draft.value.characterName.map { .set($0) } ?? (replacing ? .clear : .keep),
-                speed: draft.value.preferences.speed.map { .set($0) } ?? (replacing ? .clear : .keep),
-                coaching: draft.value.preferences.coaching))
         do {
-            if replacing, let id = draft.editingID, let revision = draft.expectedRevision {
-                _ = try app.templates.update(id: id, revision: revision, patch)
-            } else {
-                _ = try app.templates.create(patch)
-            }
+            try app.saveTemplateDraft(asNew: asNew)
             error = nil
-            app.customization.closeTemplateEditor()
         } catch {
             self.error =
                 (error as? AppFailure)?.message ?? String(localized: "Could not save template. Your draft is kept.")
+        }
+    }
+}
+
+/// A template's settings as text, for the manager's preview.
+struct TemplateSummary: View {
+    @Bindable var app: AppModel
+    let template: ConversationTemplate
+    var body: some View {
+        let shown = template.withBuiltinTextTranslated()
+        Text(
+            template.instructions.isEmpty ? String(localized: "No additional instructions") : template.instructions
+        )
+        .font(.callout)
+        Text(template.characterName.map { "Character: \($0)" } ?? "Character: Default").font(.caption)
+        if !template.personality.isEmpty {
+            Text("Personality: \(template.personality)").font(.caption).lineLimit(3)
+        }
+        Text(
+            "Voice: \(template.preferences.voice.map { RealtimeVoice(rawValue: $0)?.name ?? $0 } ?? String(localized: "Settings voice"))"
+        ).font(.caption)
+        if !shown.greeting.isEmpty { Text("Greeting: \(shown.greeting)").font(.caption) }
+        if !shown.phrases.isEmpty {
+            Text("Phrases: \(shown.phrases.joined(separator: " · "))").font(.caption)
         }
     }
 }

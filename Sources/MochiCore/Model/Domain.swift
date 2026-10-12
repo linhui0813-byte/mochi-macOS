@@ -97,6 +97,12 @@ public struct Conversation: Codable, Identifiable {
     public var instructions = ""
     public var preferences = ConversationPreferences()
     public var characterName: String?
+    /// How the companion comes across; empty for Mochi's own manner.
+    public var personality = ""
+    /// What the companion says first when the user starts talking; empty for a standard greeting.
+    public var greeting = ""
+    /// Lines the user can send with one click.
+    public var phrases: [String] = []
     public var sourceTemplateID: UUID?
     public var sourceTemplateRevision: String?
     public var characterNameNeedsReview: Bool {
@@ -109,10 +115,13 @@ public struct Conversation: Codable, Identifiable {
         var settings = preferences
         settings.language = ConversationPreferences().language
         return messages.isEmpty && !customTitle && instructions.isEmpty && draft.isEmpty && helpDraft == nil
-            && settings == ConversationPreferences() && characterName == nil && sourceTemplateID == nil
-            && sourceTemplateRevision == nil
+            && settings == ConversationPreferences() && characterName == nil && personality.isEmpty
+            && greeting.isEmpty && phrases.isEmpty && sourceTemplateID == nil && sourceTemplateRevision == nil
     }
     public var voiceIntroduced = false
+    /// Whether the companion speaks a greeting before the first recording: only in a conversation that has not
+    /// started, so a conversation begun by typing is never greeted midway.
+    public var greetsBeforeRecording: Bool { messages.isEmpty && !voiceIntroduced }
     public var isDeleted: Bool { deletedAt != nil }
     public var updatedAt: Date { messages.last?.date ?? date }
     /// The stored title of an untitled conversation. It stays English on disk: older libraries are read by comparing to it.
@@ -125,7 +134,7 @@ public struct Conversation: Codable, Identifiable {
     private enum CodingKeys: String, CodingKey {
         case id, title, messages, date, pinned, archived, deletedAt, wasArchivedBeforeDeletion, customTitle, draft,
             helpDraft, voiceIntroduced, instructions, preferences, characterName, sourceTemplateID,
-            sourceTemplateRevision
+            sourceTemplateRevision, personality, greeting, phrases
     }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -143,6 +152,9 @@ public struct Conversation: Codable, Identifiable {
         draft = try c.decodeIfPresent(String.self, forKey: .draft) ?? ""
         helpDraft = try c.decodeIfPresent(HelpDraft.self, forKey: .helpDraft)
         characterName = try c.decodeIfPresent(String.self, forKey: .characterName)
+        personality = try c.decodeIfPresent(String.self, forKey: .personality) ?? ""
+        greeting = try c.decodeIfPresent(String.self, forKey: .greeting) ?? ""
+        phrases = try c.decodeIfPresent([String].self, forKey: .phrases) ?? []
         sourceTemplateID = try c.decodeIfPresent(UUID.self, forKey: .sourceTemplateID)
         sourceTemplateRevision = try c.decodeIfPresent(String.self, forKey: .sourceTemplateRevision)
         instructions = try c.decodeIfPresent(String.self, forKey: .instructions) ?? ""
@@ -179,14 +191,19 @@ public struct PracticeExpression: Codable, Identifiable {
     }
 }
 public struct Library: Codable {
+    /// The format this version of Mochi writes. Version 4 added characters and each setup's personality, greeting,
+    /// phrases and voice; older Mochi refuses it rather than dropping them.
+    public static let currentVersion = 4
     public var conversationTemplates: [ConversationTemplate] = []
-    public var version = 3
+    /// The user's own characters; the built-in ones are defined in code.
+    public var characters: [ConversationCharacter] = []
+    public var version = Library.currentVersion
     public var selectedConversationID: UUID?
     public var conversations: [Conversation] = []
     public var expressions: [PracticeExpression] = []
     public init() {}
     private enum CodingKeys: String, CodingKey {
-        case version, selectedConversationID, conversations, expressions, conversationTemplates
+        case version, selectedConversationID, conversations, expressions, conversationTemplates, characters
     }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -195,9 +212,16 @@ public struct Library: Codable {
         conversations = try c.decode([Conversation].self, forKey: .conversations)
         expressions = try c.decode([PracticeExpression].self, forKey: .expressions)
         conversationTemplates = try c.decodeIfPresent([ConversationTemplate].self, forKey: .conversationTemplates) ?? []
+        characters = try c.decodeIfPresent([ConversationCharacter].self, forKey: .characters) ?? []
     }
 }
 extension Library {
+    /// Whether any conversation has a Help draft or a transcription, which the oldest libraries could not hold.
+    var usesHelpOrTranscription: Bool {
+        conversations.contains(where: {
+            $0.helpDraft != nil || $0.messages.contains(where: { $0.transcriptionState != nil })
+        })
+    }
     /// Transcriptions recorded as pending have no running job once the library is read back from disk.
     public mutating func interruptPendingTranscriptions() {
         for ci in conversations.indices {

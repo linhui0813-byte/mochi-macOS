@@ -15,13 +15,16 @@ final class ToolCatalogTests: XCTestCase {
                 .playAudio, .seekAudio, .setConversationPreferences,
             ])
         for tool in external {
-            XCTAssertEqual(tool.properties["conversation_id"] != nil, tool.scope == .conversation, tool.name.rawValue)
+            XCTAssertEqual(
+                tool.properties["conversation_id"] != nil, tool.scope == .conversation || tool.scope == .history,
+                tool.name.rawValue)
             XCTAssertEqual(
                 tool.properties["expected_revision"] != nil, !tool.readOnly && tool.scope != .catalog,
                 tool.name.rawValue)
             XCTAssertEqual(
                 tool.scope == .catalog,
-                tool.name.rawValue.hasSuffix("_conversation_template") || tool.name == .listConversationTemplates,
+                tool.name.rawValue.hasSuffix("_conversation_template") || tool.name == .listConversationTemplates
+                    || tool.name == .listCharacters,
                 tool.name.rawValue)
             if tool.readOnly {
                 XCTAssertTrue(tool.idempotent, tool.name.rawValue)
@@ -34,9 +37,62 @@ final class ToolCatalogTests: XCTestCase {
         XCTAssertEqual(
             Set(external.filter(\.destructive).map(\.name)),
             [
-                .setConversationInstructions, .setConversationPreferences, .updateConversationTemplate,
-                .deleteConversationTemplate,
+                .setConversationInstructions, .setConversationPreferences, .renameConversation, .archiveConversation,
+                .updateConversationTemplate, .deleteConversationTemplate,
             ])
+        XCTAssertEqual(
+            Set(external.filter { $0.scope == .history }.map(\.name)),
+            [.openConversation, .renameConversation, .archiveConversation])
+    }
+
+    /// Clients show titles; models choose arguments from descriptions and read results through the output schema.
+    func testEveryToolDocumentsItselfForClientsAndModels() throws {
+        for origin in [ToolOrigin.voice, .external] {
+            for tool in MochiTools.catalog(origin: origin) {
+                XCTAssertFalse(tool.title.isEmpty, tool.name.rawValue)
+                for (key, property) in tool.properties {
+                    XCTAssertFalse(
+                        (property["description"] as? String ?? "").isEmpty,
+                        "\(tool.name.rawValue).\(key) is undescribed")
+                }
+            }
+        }
+        for tool in MochiTools.catalog(origin: .external) {
+            let mcp = tool.mcp
+            XCTAssertEqual(mcp["title"] as? String, tool.title)
+            let output = try XCTUnwrap(mcp["outputSchema"] as? [String: Any], tool.name.rawValue)
+            XCTAssertEqual(output["type"] as? String, "object")
+            XCTAssertEqual(output["required"] as? [String], ["ok", "revision"])
+            let fields = try XCTUnwrap(output["properties"] as? [String: [String: Any]])
+            XCTAssertEqual(fields["ok"]?["const"] as? Bool, true)
+            // A tool's own field never redefines one every result shares.
+            XCTAssertTrue(Set(tool.output.keys).isDisjoint(with: ["ok", "revision", "untrusted_fields"]))
+        }
+    }
+
+    /// A model can only correct a call it was told the problem with.
+    func testArgumentErrorsNameTheArgument() {
+        func message(_ name: String, _ arguments: [String: Any]) -> String {
+            do {
+                _ = try MochiTools.validate(name: name, arguments: arguments, origin: .external)
+                return ""
+            } catch { return AppFailure.message(for: error, fallback: "") }
+        }
+        let id = UUID().uuidString
+        XCTAssertEqual(
+            message("get_session", ["verbose": true]), "Unexpected argument verbose. This tool takes no arguments.")
+        let misspelled = message("get_messages", ["conversation_id": id, "limt": 5])
+        XCTAssertTrue(misspelled.hasPrefix("Unexpected argument limt."), misspelled)
+        XCTAssertTrue(misspelled.contains("conversation_id, limit"), misspelled)
+        XCTAssertEqual(
+            message("save_expression", ["conversation_id": id, "expected_revision": "r"]),
+            "Missing required argument: text.")
+        XCTAssertEqual(
+            message("save_expression", ["conversation_id": id, "expected_revision": "r", "english": "Hi"]),
+            "Unexpected argument english. Allowed arguments: conversation_id, expected_revision, meaning, text.")
+        XCTAssertEqual(
+            message("rename_conversation", ["conversation_id": id, "expected_revision": "r", "title": "  "]),
+            "A conversation title is required.")
     }
 
     func testTypedArgumentsFailAsErrorsNotCrashes() {
@@ -90,19 +146,19 @@ final class ToolCatalogTests: XCTestCase {
             try MochiTools.validate(
                 name: "save_expression",
                 arguments: [
-                    "conversation_id": UUID().uuidString, "english": String(repeating: "a", count: 8001),
+                    "conversation_id": UUID().uuidString, "text": String(repeating: "a", count: 8001),
                 ], origin: .voice))
         XCTAssertThrowsError(
             try MochiTools.validate(
-                name: "save_expression", arguments: ["conversation_id": UUID().uuidString, "english": "  "],
+                name: "save_expression", arguments: ["conversation_id": UUID().uuidString, "text": "  "],
                 origin: .voice))
         XCTAssertNoThrow(
             try MochiTools.validate(
                 name: "save_expression",
-                arguments: ["conversation_id": UUID().uuidString, "english": String(repeating: "a", count: 8000)],
+                arguments: ["conversation_id": UUID().uuidString, "text": String(repeating: "a", count: 8000)],
                 origin: .voice))
         let advertised = MochiTools.catalog(origin: .external).first { $0.name == .saveExpression }
-        XCTAssertEqual(advertised?.properties["english"]?["maxLength"] as? Int, ConversationInstructions.maxCharacters)
+        XCTAssertEqual(advertised?.properties["text"]?["maxLength"] as? Int, ConversationInstructions.maxCharacters)
         XCTAssertEqual(
             advertised?.properties["expected_revision"]?["maxLength"] as? Int, ConversationInstructions.maxCharacters)
     }

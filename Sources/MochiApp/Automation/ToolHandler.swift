@@ -62,15 +62,16 @@ import MochiKernel
     }
 
     /// The app state external writes must name, so a call made against an older state is refused.
+    /// Pausing and finishing audio are left out: they change no conversation, and every playback tool names its
+    /// audio, so they must not force a client to read the session again.
     var revision: String {
         [
             app.libraryRevision.uuidString, app.selectedID?.uuidString ?? "none", app.turn.epoch.uuidString,
             String(app.practice), String(app.history.managerOpen),
             app.customization.instructionsID?.uuidString ?? "none",
             app.customization.templatePresentation?.rawValue ?? "none",
+            app.customization.characterPresentation?.rawValue ?? "none",
             app.history.renameID?.uuidString ?? "none", String(app.history.permanentDeleteIDs.count),
-            String(app.audio.paused),
-            app.playbackFile ?? "none",
         ].joined(separator: ":")
     }
 
@@ -127,11 +128,11 @@ import MochiKernel
         }
         let requestedID = (arguments["conversation_id"] as? String).flatMap(UUID.init(uuidString:))
         let limit = (arguments["limit"] as? NSNumber)?.intValue ?? 30
-        if tool.scope == .conversation {
+        if tool.scope == .conversation || tool.scope == .history {
             guard let requestedID, let chat = app.library.conversations.first(where: { $0.id == requestedID }),
                 !chat.archived, !chat.isDeleted
             else { throw AppFailure("An active conversation is required.") }
-            if tool.name != .openConversation, requestedID != app.selectedID {
+            if tool.scope == .conversation, requestedID != app.selectedID {
                 throw AppFailure("That conversation is not currently open. Read get_session again.")
             }
         }
@@ -241,25 +242,44 @@ import MochiKernel
                         result["source_template_revision"] = chat.sourceTemplateRevision
                     }
                     result["speed"] = chat.preferences.speed ?? app.settings.conversationVoiceOptions.speed
+                    let personality = chat.personality.bounded(
+                        characters: origin == .voice ? 1000 : ConversationPersonality.maxCharacters,
+                        bytes: origin == .voice ? 6000 : ConversationPersonality.maxBytes)
+                    result["personality"] = personality
+                    result["personality_truncated"] = personality != chat.personality
+                    result["greeting"] = chat.greeting.bounded(
+                        characters: ConversationGreeting.maxCharacters, bytes: ConversationGreeting.maxBytes)
+                    result["phrases"] = chat.phrases.prefix(ConversationPhrases.maxCount).map {
+                        $0.bounded(characters: ConversationPhrases.maxCharacters, bytes: ConversationPhrases.maxBytes)
+                    }
+                    result["voice"] = chat.preferences.voice as Any? ?? NSNull()
+                    result["effective_voice"] = app.settings.conversationService(for: chat).voice
                     result["audio_message_ids"] = chat.messages.filter { $0.audio != nil }.suffix(
                         origin == .voice ? 20 : 100
                     ).map { $0.id.uuidString }
                     result["expression_ids"] = app.library.expressions.filter { $0.conversationID == chat.id }.sorted {
                         $0.date > $1.date
                     }.prefix(origin == .voice ? 20 : 100).map { $0.id.uuidString }
-                    untrusted += ["instructions", "character_name", "display_character_name"]
+                    untrusted += [
+                        "instructions", "character_name", "display_character_name", "personality", "greeting",
+                        "phrases",
+                    ]
                 }
                 result["untrusted_fields"] = untrusted
             }
             if let expression = app.help.expression { result["selected_expression_id"] = expression.id.uuidString }
             return result
         case .listConversations:
-            return [
-                "ok": true, "revision": revision,
-                "conversations": app.library.history(in: .active).prefix(limit).map {
-                    ["id": $0.id.uuidString, "title": $0.title]
-                }, "untrusted_fields": ["conversations.title"],
-            ]
+            let page = try MochiTools.decode(PageArguments.self, from: arguments)
+            // The app's search also finds archived conversations; only active ones are exposed.
+            let active = app.library.history(in: .active, query: page.query ?? "").filter { !$0.archived }
+            let offset = min(page.offset ?? 0, active.count)
+            let shown = active[offset...].prefix(limit)
+            return success(
+                [
+                    "conversations": shown.map { ["id": $0.id.uuidString, "title": $0.title] },
+                    "untrusted_fields": ["conversations.title"],
+                ].merging(Self.paging(next: offset + shown.count, total: active.count)) { _, new in new })
         case .getMessages:
             let source = Array(app.conversation?.messages.suffix(origin == .voice ? min(limit, 10) : limit) ?? [])
             let budget = origin == .voice ? 6000 : 110000
@@ -289,19 +309,30 @@ import MochiKernel
             }
             let count = origin == .voice ? min(limit, 10) : limit
             let newest = Array(found.sorted(by: { $0.date > $1.date }).prefix(count))
-            let expressions = try fitted(newest, budget: origin == .voice ? 6000 : 110000) { item, bytes in
-                let english = item.english.bounded(characters: 1000, bytes: bytes)
-                let meaning = item.meaning.bounded(characters: 1000, bytes: bytes)
-                return [
-                    "id": item.id.uuidString, "english": english, "meaning": meaning,
-                    "text_truncated": english != item.english || meaning != item.meaning,
-                    "has_reference": item.reference != nil, "attempt_count": item.attempts.count,
-                ]
+            let expressions = try fitted(newest, budget: origin == .voice ? 6000 : 110000) {
+                Self.summary(of: $0, bytes: $1)
             }
             return success([
                 "expressions": expressions, "has_more": found.count > expressions.count,
-                "untrusted_fields": ["expressions.english", "expressions.meaning"],
+                "untrusted_fields": Self.expressionText,
             ])
+        case .searchAllExpressions:
+            let page = try MochiTools.decode(PageArguments.self, from: arguments)
+            let query = page.query ?? ""
+            let found = app.library.expressions.filter {
+                query.isEmpty || $0.english.localizedCaseInsensitiveContains(query)
+                    || $0.meaning.localizedCaseInsensitiveContains(query)
+            }.sorted { $0.date > $1.date }
+            let offset = min(page.offset ?? 0, found.count)
+            let expressions = try fitted(Array(found[offset...].prefix(limit)), budget: 110000) { item, bytes in
+                Self.summary(of: item, bytes: bytes).merging(["conversation_id": item.conversationID.uuidString]) {
+                    _, new in new
+                }
+            }
+            return success(
+                ["expressions": expressions, "untrusted_fields": Self.expressionText].merging(
+                    Self.paging(next: offset + expressions.count, total: found.count)
+                ) { _, new in new })
         case .createConversation:
             let create = try MochiTools.decode(CreateConversationArguments.self, from: arguments)
             let patch = try ConversationSettingsPatch(toolArguments: arguments)
@@ -330,9 +361,7 @@ import MochiKernel
                 var reused = current
                 reused.title = chat.title
                 reused.customTitle = chat.customTitle
-                reused.instructions = chat.instructions
-                reused.characterName = chat.characterName
-                reused.preferences = chat.preferences
+                reused.adoptSettings(from: chat)
                 chat = reused
                 candidate.conversations[index] = reused
             } else {
@@ -350,6 +379,24 @@ import MochiKernel
             app.history.scope = .active
             app.revealWorkspace?()
             return success(["conversation_id": id.uuidString])
+        case .renameConversation:
+            let id = try conversationID()
+            let title = try MochiTools.decode(RenameArguments.self, from: arguments).title
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            var candidate = app.library
+            guard let index = candidate.conversations.firstIndex(where: { $0.id == id }) else {
+                throw AppFailure("An active conversation is required.")
+            }
+            candidate.conversations[index].title = title
+            candidate.conversations[index].customTitle = true
+            try persist(candidate)
+            return success(["conversation_id": id.uuidString])
+        case .archiveConversation:
+            let id = try conversationID()
+            guard app.archiveChats([id]) else {
+                throw AppFailure("The app action could not be saved; nothing was changed.")
+            }
+            return success(["conversation_id": id.uuidString])
         case .setConversationInstructions, .setConversationPreferences:
             try app.updateConversationSettings(
                 try conversationID(),
@@ -361,7 +408,7 @@ import MochiKernel
             guard app.language(of: chatID).isPractised else {
                 throw AppFailure("Expressions need a conversation language. This conversation matches the user's.")
             }
-            let english = input.english.trimmingCharacters(in: .whitespacesAndNewlines)
+            let english = input.text.trimmingCharacters(in: .whitespacesAndNewlines)
             let meaning = input.meaning ?? ""
             var candidate = app.library
             if tool.name == .saveExpression {
@@ -424,6 +471,10 @@ import MochiKernel
                 throw AppFailure("Playback could not resume.")
             }
             return success()
+        case .stopAudio:
+            guard app.playbackFile != nil else { throw AppFailure("No audio is playing.") }
+            app.stopPlayback()
+            return success()
         case .playAudio, .seekAudio:
             let input = try MochiTools.decode(AudioArguments.self, from: arguments)
             var file: String?
@@ -453,7 +504,42 @@ import MochiKernel
         case .listConversationTemplates, .getConversationTemplate, .createConversationTemplate,
             .updateConversationTemplate, .deleteConversationTemplate:
             return try executeTemplateTool(tool.name, arguments: arguments)
+        case .listCharacters:
+            let list = try MochiTools.decode(TemplateListArguments.self, from: arguments)
+            let query = (list.query ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let origin = list.origin ?? "all"
+            let found = app.characters.all.filter {
+                (origin == "all" || ($0.isBuiltin ? "built_in" : "user") == origin)
+                    && (query.isEmpty || $0.name.localizedCaseInsensitiveContains(query)
+                        || $0.description.localizedCaseInsensitiveContains(query))
+            }
+            let offset = min(list.offset ?? 0, found.count)
+            let shown = try fitted(Array(found[offset...].prefix(limit)), budget: 110000) { item, _ in
+                item.representation()
+            }
+            return success(
+                [
+                    "characters": shown,
+                    "untrusted_fields": ["characters.name", "characters.description", "characters.personality"],
+                ].merging(Self.paging(next: offset + shown.count, total: found.count)) { _, new in new })
         }
+    }
+
+    /// Expression search results name these fields as library text.
+    private static let expressionText = ["expressions.text", "expressions.meaning"]
+    /// A saved expression as search results show it, its texts bounded by `bytes`.
+    private static func summary(of item: PracticeExpression, bytes: Int) -> [String: Any] {
+        let text = item.english.bounded(characters: 1000, bytes: bytes)
+        let meaning = item.meaning.bounded(characters: 1000, bytes: bytes)
+        return [
+            "id": item.id.uuidString, "text": text, "meaning": meaning,
+            "text_truncated": text != item.english || meaning != item.meaning,
+            "has_reference": item.reference != nil, "attempt_count": item.attempts.count,
+        ]
+    }
+    /// Where the next page of an offset-paged list starts, and whether there is one.
+    private static func paging(next: Int, total: Int) -> [String: Any] {
+        ["has_more": next < total, "next_offset": next < total ? next as Any : NSNull()]
     }
 
     var templateCatalogRevision: String {
@@ -494,6 +580,7 @@ import MochiKernel
     }
     private static let templateFields = [
         "template.title", "template.description", "template.character_name", "template.instructions",
+        "template.personality", "template.greeting", "template.phrases",
     ]
     /// `untrusted` names the fields of `fields` that hold library text; by default those of one `template`.
     /// `catalogRevision` lets a caller that builds many candidate responses compute it once.
@@ -523,7 +610,10 @@ import MochiKernel
             if $0.title != $1.title { return $0.title.utf8.lexicographicallyPrecedes($1.title.utf8) }
             return $0.id.uuidString < $1.id.uuidString
         }
-        let untrusted = ["templates.title", "templates.description", "templates.character_name"]
+        let untrusted = [
+            "templates.title", "templates.description", "templates.character_name", "templates.greeting",
+            "templates.phrases",
+        ]
         func page(_ items: [[String: Any]], next: Int?) -> [String: Any] {
             templateResult(
                 ["templates": items, "next_offset": next.map { $0 as Any } ?? NSNull()], untrusted: untrusted,

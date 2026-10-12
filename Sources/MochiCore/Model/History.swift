@@ -140,6 +140,9 @@ extension Library {
                 $0.isBuiltin || $0.revision.isEmpty || $0.revision.utf8.count > 200
             })
         else { throw AppFailure("The library contains invalid or duplicate template IDs/revisions.") }
+        guard Set(characters.map(\.id)).count == characters.count,
+            !characters.contains(where: { $0.isBuiltin || $0.revision.isEmpty || $0.revision.utf8.count > 200 })
+        else { throw AppFailure("The library contains invalid or duplicate character IDs/revisions.") }
         let attempts = expressions.flatMap(\.attempts)
         guard Set(attempts.map(\.id)).count == attempts.count else {
             throw AppFailure("The library contains duplicate attempt IDs.")
@@ -150,8 +153,10 @@ extension Library {
         }
         for chat in conversations { try chat.preferences.validate() }
         for name in referencedAudio {
+            // The v4 backups are matched by their suffix too: an older library may name a recording with that prefix.
             guard !name.isEmpty, name != ".", name != "..", !name.contains("/"), !name.contains("\\"),
                 !name.hasPrefix("."), !name.hasPrefix("library-before-character-templates-v3"),
+                !(name.hasPrefix(LibraryStore.characterLibraryBackupPrefix) && name.hasSuffix(".json")),
                 !name.hasPrefix("library-unreadable-"), !LibraryStore.reservedNames.contains(name)
             else { throw AppFailure("The library contains an unsafe recording filename.") }
         }

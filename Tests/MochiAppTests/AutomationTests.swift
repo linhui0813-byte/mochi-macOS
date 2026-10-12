@@ -68,7 +68,7 @@ final class AutomationTests: XCTestCase {
         app.externalControlEnabled = true
         let args: [String: Any] = [
             "conversation_id": id.uuidString, "expected_revision": app.tools.revision,
-            "english": "Could you give me a moment?",
+            "text": "Could you give me a moment?",
         ]
         let result = try app.tools.execute("save_expression", arguments: args, origin: .external)
         XCTAssertEqual(result["ok"] as? Bool, true)
@@ -92,13 +92,13 @@ final class AutomationTests: XCTestCase {
         let id = try XCTUnwrap(app.selectedID)
         _ = app.turn.begin(.generating)
         _ = try app.tools.execute(
-            "prepare_expression", arguments: ["conversation_id": id.uuidString, "english": "Let me think."],
+            "prepare_expression", arguments: ["conversation_id": id.uuidString, "text": "Let me think."],
             origin: .voice)
         XCTAssertFalse(app.practice)
         XCTAssertNotNil(app.deferredToolAction)
         XCTAssertThrowsError(
             try app.tools.execute(
-                "prepare_expression", arguments: ["conversation_id": id.uuidString, "english": "Overwrite this"],
+                "prepare_expression", arguments: ["conversation_id": id.uuidString, "text": "Overwrite this"],
                 origin: .voice))
         XCTAssertNil(app.conversation?.helpDraft)
         app.stop()
@@ -115,7 +115,7 @@ final class AutomationTests: XCTestCase {
         XCTAssertEqual(app.conversation?.instructions, "")
         XCTAssertThrowsError(
             try app.tools.execute(
-                "save_expression", arguments: ["conversation_id": id.uuidString, "english": "Hello"], origin: .voice))
+                "save_expression", arguments: ["conversation_id": id.uuidString, "text": "Hello"], origin: .voice))
         XCTAssertTrue(app.library.expressions.isEmpty)
     }
     @MainActor func testRequestUsesConversationInstructionsAndCustomizedEmptyChatIsNotReused() async throws {
@@ -162,7 +162,7 @@ final class AutomationTests: XCTestCase {
                 try app.tools.execute(
                     "save_expression",
                     arguments: [
-                        "conversation_id": id.uuidString, "expected_revision": app.tools.revision, "english": "Hello",
+                        "conversation_id": id.uuidString, "expected_revision": app.tools.revision, "text": "Hello",
                     ], origin: .external))
         }
         app.stop()
@@ -171,7 +171,7 @@ final class AutomationTests: XCTestCase {
             try app.tools.execute(
                 "save_expression",
                 arguments: [
-                    "conversation_id": id.uuidString, "expected_revision": app.tools.revision, "english": "Hello",
+                    "conversation_id": id.uuidString, "expected_revision": app.tools.revision, "text": "Hello",
                 ], origin: .external))
         app.customization.instructionsID = nil
         app.startHelp()
@@ -179,7 +179,7 @@ final class AutomationTests: XCTestCase {
             try app.tools.execute(
                 "prepare_expression",
                 arguments: [
-                    "conversation_id": id.uuidString, "expected_revision": app.tools.revision, "english": "Hello",
+                    "conversation_id": id.uuidString, "expected_revision": app.tools.revision, "text": "Hello",
                 ], origin: .external))
         XCTAssertTrue(app.library.expressions.isEmpty)
         app.externalControlEnabled = false
@@ -244,7 +244,7 @@ final class AutomationTests: XCTestCase {
         let app = makeApp(root: root, preferences: makePreferences())
         let id = try XCTUnwrap(app.selectedID)
         let saved = try app.tools.execute(
-            "save_expression", arguments: ["conversation_id": id.uuidString, "english": "Let me think."], origin: .voice
+            "save_expression", arguments: ["conversation_id": id.uuidString, "text": "Let me think."], origin: .voice
         )
         let token = app.turn.begin(.generating)
         let args: [String: Any] = ["conversation_id": id.uuidString, "expression_id": saved["expression_id"]!]
@@ -271,7 +271,7 @@ final class AutomationTests: XCTestCase {
             app.audio.makePlayer = { _ in player }
             app.speech.conversationReply = { _, _, callbacks in
                 _ = try app.tools.execute(
-                    "prepare_expression", arguments: ["conversation_id": id.uuidString, "english": "Let me think."],
+                    "prepare_expression", arguments: ["conversation_id": id.uuidString, "text": "Let me think."],
                     origin: .voice)
                 var response = RealtimeAccumulator()
                 response.text = "Let's practise."
@@ -341,7 +341,7 @@ extension AutomationTests {
             try? FileManager.default.removeItem(at: app.store.root)
         }
         let id = try XCTUnwrap(app.selectedID)
-        let args: [String: Any] = ["conversation_id": id.uuidString, "english": "New sentence"]
+        let args: [String: Any] = ["conversation_id": id.uuidString, "text": "New sentence"]
         app.library.conversations[0].helpDraft = HelpDraft(
             meaning: "My thought", english: "My draft", recording: "recording.wav")
         XCTAssertThrowsError(try app.tools.execute("prepare_expression", arguments: args, origin: .voice))
@@ -420,7 +420,10 @@ extension AutomationTests {
         let session = try app.tools.execute("get_session", arguments: [:], origin: .external)
         XCTAssertEqual(
             Set(session["untrusted_fields"] as? [String] ?? []),
-            ["title", "instructions", "character_name", "display_character_name"])
+            [
+                "title", "instructions", "character_name", "display_character_name", "personality", "greeting",
+                "phrases",
+            ])
         let messages = try app.tools.execute(
             "get_messages", arguments: ["conversation_id": id.uuidString], origin: .external)
         XCTAssertEqual(messages["untrusted_fields"] as? [String], ["messages.text"])
@@ -475,7 +478,7 @@ extension AutomationTests {
         let expressions = try XCTUnwrap(result["expressions"] as? [[String: Any]])
         XCTAssertEqual(expressions.count, 1)
         XCTAssertEqual(expressions.first?["text_truncated"] as? Bool, true)
-        XCTAssertTrue(english.hasPrefix(try XCTUnwrap(expressions.first?["english"] as? String)))
+        XCTAssertTrue(english.hasPrefix(try XCTUnwrap(expressions.first?["text"] as? String)))
         XCTAssertLessThanOrEqual(try JSONSerialization.data(withJSONObject: expressions[0]).count, 6000)
     }
 
@@ -487,9 +490,9 @@ extension AutomationTests {
         }
         let id = try XCTUnwrap(app.selectedID)
         let first = try app.tools.execute(
-            "save_expression", arguments: ["conversation_id": id.uuidString, "english": "First"], origin: .voice)
+            "save_expression", arguments: ["conversation_id": id.uuidString, "text": "First"], origin: .voice)
         let last = try app.tools.execute(
-            "save_expression", arguments: ["conversation_id": id.uuidString, "english": "Last"], origin: .voice)
+            "save_expression", arguments: ["conversation_id": id.uuidString, "text": "Last"], origin: .voice)
         let search = try app.tools.execute(
             "search_expressions", arguments: ["conversation_id": id.uuidString, "query": "", "limit": 1], origin: .voice
         )
@@ -551,7 +554,7 @@ extension AutomationTests {
         XCTAssertEqual(replay["status"] as? String, "previously_completed")
         XCTAssertEqual(app.conversation?.preferences.speed, 1.0)
         _ = app.turn.begin(.generating)
-        let prepare: [String: Any] = ["conversation_id": id.uuidString, "english": "Let me think."]
+        let prepare: [String: Any] = ["conversation_id": id.uuidString, "text": "Let me think."]
         _ = try app.tools.executeVoice("prepare_expression", arguments: prepare, operationID: operation)
         app.stop()
         XCTAssertNil(app.conversation?.helpDraft)
@@ -578,7 +581,7 @@ extension AutomationTests {
         }
         let id = try XCTUnwrap(app.selectedID)
         let operation = UUID()
-        let args: [String: Any] = ["conversation_id": id.uuidString, "english": "Let me think."]
+        let args: [String: Any] = ["conversation_id": id.uuidString, "text": "Let me think."]
         _ = app.turn.begin(.generating)
         let first = try app.tools.executeVoice("prepare_expression", arguments: args, operationID: operation)
         XCTAssertEqual(first["status"] as? String, "scheduled_after_reply")
@@ -586,7 +589,7 @@ extension AutomationTests {
         XCTAssertEqual(retry["status"] as? String, "scheduled_after_reply")
         XCTAssertThrowsError(
             try app.tools.executeVoice(
-                "prepare_expression", arguments: ["conversation_id": id.uuidString, "english": "Something else"],
+                "prepare_expression", arguments: ["conversation_id": id.uuidString, "text": "Something else"],
                 operationID: operation))
         app.stop()
         XCTAssertNil(app.deferredToolAction)
@@ -635,7 +638,7 @@ extension AutomationTests {
         app.audio.makePlayer = { _ in player }
         app.speech.conversationReply = { _, _, callbacks in
             _ = try app.tools.execute(
-                "prepare_expression", arguments: ["conversation_id": id.uuidString, "english": "A sentence."],
+                "prepare_expression", arguments: ["conversation_id": id.uuidString, "text": "A sentence."],
                 origin: .voice)
             var reply = RealtimeAccumulator()
             reply.text = "Ready."

@@ -6,9 +6,9 @@ import MochiKernel
 /// deleting messages with undo, and exporting or importing the library.
 extension AppModel {
     func newChat() {
-        guard libraryReadable, customization.templatePresentation == nil, customization.instructionsID == nil else {
-            return
-        }
+        guard libraryReadable, customization.templatePresentation == nil, customization.instructionsID == nil,
+            customization.characterPresentation == nil
+        else { return }
         if let chat = conversation, writableConversation, chat.isPristine {
             // Reusing it starts it over, in today's default language.
             if chat.preferences.language != settings.defaultLanguage,
@@ -137,15 +137,16 @@ extension AppModel {
         }
         _ = commitHistory(candidate)
     }
-    func archiveChats(_ ids: Set<UUID>) {
+    /// False when the change could not be saved; the failure is already reported.
+    @discardableResult func archiveChats(_ ids: Set<UUID>) -> Bool {
         var candidate = library
         for i in candidate.conversations.indices
         where ids.contains(candidate.conversations[i].id) && !candidate.conversations[i].isDeleted {
             candidate.conversations[i].archived = true
         }
-        if finishHistoryChange(candidate, affected: ids) {
-            history.feedback = String(localized: "Conversations archived.")
-        }
+        guard finishHistoryChange(candidate, affected: ids) else { return false }
+        history.feedback = String(localized: "Conversations archived.")
+        return true
     }
     func deleteChats(_ ids: Set<UUID>) {
         var candidate = library

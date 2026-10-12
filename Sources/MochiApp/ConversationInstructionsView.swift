@@ -6,49 +6,47 @@ struct ConversationInstructionsView: View {
     @Bindable var app: AppModel
     let id: UUID
     @State private var saveError: String?
-    @State private var instructions = ""
-    @State private var characterName: String?
-    @State private var preferences = ConversationPreferences()
+    @State private var draft: ConversationSettingsDraft
+    init(app: AppModel, id: UUID) {
+        self.app = app
+        self.id = id
+        // A draft kept while Save as Template or Save as Character was open comes back; otherwise the stored one.
+        let retained = app.customization.retainedInstructionsDraft.flatMap { $0.id == id ? $0 : nil }
+        let stored = app.library.conversations.first(where: { $0.id == id }).map(ConversationSettingsDraft.init)
+        _draft = State(initialValue: retained ?? stored ?? ConversationSettingsDraft(id: id))
+    }
+    private var stored: Conversation? { app.library.conversations.first { $0.id == id } }
+    /// The save's own validation, run on a copy: only what the draft changed is checked.
     private var validationError: String? {
+        guard var copy = stored else { return nil }
         do {
-            if instructions != app.library.conversations.first(where: { $0.id == id })?.instructions {
-                try ConversationInstructions.validate(instructions)
-            }
-            try ConversationTemplate.validateName(characterName?.trimmingCharacters(in: .whitespacesAndNewlines))
-            try preferences.validate()
+            try ConversationSettingsPatch(changing: copy, to: draft).apply(to: &copy)
             return nil
         } catch { return (error as? AppFailure)?.message ?? String(localized: "Review these settings.") }
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Conversation Instructions").font(.title2).fontWeight(.semibold)
-            Text(app.library.conversations.first(where: { $0.id == id })?.displayTitle ?? "").foregroundStyle(
-                .secondary
-            )
-            .lineLimit(1)
+            Text(stored?.displayTitle ?? "").foregroundStyle(.secondary).lineLimit(1)
             Text(
-                "Tell \((characterName ?? "Mochi").bounded(characters: 80, bytes: 1024)) how you want to practise. These settings apply to future replies."
+                "Tell \((draft.characterName ?? "Mochi").bounded(characters: 80, bytes: 1024)) how you want to practise. These settings apply to future replies."
             ).font(.callout).foregroundStyle(.secondary)
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
                     ConversationSettingsFields(
-                        instructions: $instructions, characterName: $characterName, preferences: $preferences)
-                }
+                        app: app, settings: $draft,
+                        saveAsCharacter: { app.saveConversationAsCharacter(id, draft: draft) })
+                }.padding(.trailing, 12)
             }
             if let error = saveError ?? validationError { Text(error).font(.callout).foregroundStyle(.red) }
             HStack {
                 Button("Reset to Defaults") {
-                    instructions = ""
-                    characterName = nil
-                    preferences = ConversationPreferences()
+                    // What a new conversation gets, including the default language from Settings.
+                    draft = ConversationSettingsDraft(id: id)
+                    draft.adoptSettings(from: app.freshConversation())
                     saveError = nil
                 }
-                Button("Save as Template…") {
-                    app.saveConversationAsTemplate(
-                        id,
-                        draft: ConversationSettingsDraft(
-                            id: id, instructions: instructions, characterName: characterName, preferences: preferences))
-                }.disabled(app.busy)
+                Button("Save as Template…") { app.saveConversationAsTemplate(id, draft: draft) }.disabled(app.busy)
                 Spacer()
                 Button("Cancel") {
                     app.customization.instructionsID = nil
@@ -56,9 +54,7 @@ struct ConversationInstructionsView: View {
                 }.keyboardShortcut(.cancelAction)
                 Button("Save") {
                     let existingError = app.error
-                    if app.setConversationInstructions(
-                        id, instructions: instructions, preferences: preferences, characterName: characterName)
-                    {
+                    if app.saveConversationSettings(id, draft) {
                         app.customization.instructionsID = nil
                         app.customization.retainedInstructionsDraft = nil
                     } else {
@@ -67,20 +63,7 @@ struct ConversationInstructionsView: View {
                     app.error = existingError
                 }.keyboardShortcut(.defaultAction).disabled(validationError != nil || app.busy)
             }
-        }.padding(24).frame(width: 620, height: 570)
-            .onChange(of: instructions) { saveError = nil }
-            .onChange(of: characterName) { saveError = nil }
-            .onChange(of: preferences) { saveError = nil }
-            .onAppear {
-                if let draft = app.customization.retainedInstructionsDraft, draft.id == id {
-                    instructions = draft.instructions
-                    characterName = draft.characterName
-                    preferences = draft.preferences
-                } else if let chat = app.library.conversations.first(where: { $0.id == id }) {
-                    instructions = chat.instructions
-                    characterName = chat.characterName
-                    preferences = chat.preferences
-                }
-            }
+        }.padding(24).frame(width: 620, height: 640)
+            .onChange(of: draft) { saveError = nil }
     }
 }

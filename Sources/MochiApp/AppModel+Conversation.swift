@@ -19,12 +19,28 @@ extension AppModel {
     }
     func send() {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, !busy, !practice, writableConversation, libraryReadable, let id = selectedID else {
-            return
-        }
+        guard !text.isEmpty else { return }
+        submit(text, fromComposer: true)
+    }
+    /// Whether a phrase can be sent now; the same conditions as Send, apart from the composer.
+    var canSendPhrase: Bool { !busy && !practice && writableConversation && libraryReadable }
+    /// Sends one of the conversation's phrases as the user's message, exactly as shown. The composer and its draft
+    /// are left alone, whether the phrase is sent or not.
+    func sendPhrase(_ phrase: String) {
+        let text = phrase.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        submit(text, fromComposer: false)
+    }
+    /// Adds `text` as the user's message and asks for a reply. Nothing is added when the message cannot be saved.
+    private func submit(_ text: String, fromComposer: Bool) {
+        guard !busy, !practice, writableConversation, libraryReadable, let id = selectedID else { return }
         if conversation?.characterNameNeedsReview == true {
-            error = String(
-                localized: "Review the character name in Conversation Instructions before sending. Your draft is kept.")
+            error =
+                fromComposer
+                ? String(
+                    localized:
+                        "Review the character name in Conversation Instructions before sending. Your draft is kept.")
+                : String(localized: "Review the character name in Conversation Instructions before sending.")
             return
         }
         notice = nil
@@ -33,14 +49,14 @@ extension AppModel {
         let typed = draft
         let before = library.conversations.first { $0.id == id }
         // Cleared first, so the save that writes the message also writes the empty composer.
-        draft = ""
+        if fromComposer { draft = "" }
         guard append(Message(role: "user", text: text), to: id) else {
-            // Nothing is sent: the draft returns to the composer and the unsaved message leaves memory,
-            // so memory never holds a message the disk lacks. The save failure is already reported.
+            // Nothing is sent: the unsaved message leaves memory, so memory never holds a message the disk lacks,
+            // and a typed draft returns to the composer. The save failure is already reported.
             if let before, let i = library.conversations.firstIndex(where: { $0.id == id }) {
                 library.conversations[i] = before
             }
-            draft = typed
+            if fromComposer { draft = typed }
             return
         }
         requestReply(history: history, text: text, pcm: nil, audioFile: nil, conversationID: id)
@@ -92,11 +108,12 @@ extension AppModel {
         let token = turn.begin(.generating)
         let chat = library.conversations.first { $0.id == conversationID }
         let instructions = ConversationInstructions.bounded(chat?.instructions ?? "")
+        let personality = chat?.personality ?? ""
         let preferences = chat?.preferences ?? ConversationPreferences()
         let characterName = chat?.characterName
         let userName = settings.effectiveUserName
         let speakerName = chat?.displayCharacterName ?? "Mochi"
-        let service = settings.conversationService(speed: preferences.speed)
+        let service = settings.conversationService(for: chat)
         let voiceID = pcm == nil ? nil : userID
         let reply = speech.conversationReply
         let operation = Task { [weak self] in
@@ -137,7 +154,8 @@ extension AppModel {
                     })
                 let request = ConversationRequest(
                     history: history, text: text, pcm: pcm, spoken: audioFile != nil, instructions: instructions,
-                    characterName: characterName, userName: userName, preferences: preferences)
+                    characterName: characterName, userName: userName, preferences: preferences,
+                    personality: personality)
                 try await reply(service, request, callbacks)
             } catch {
                 // The deferred block marks a still-pending transcript as interrupted.
@@ -294,18 +312,20 @@ extension AppModel {
             return
         }
         guard !busy || turn.activity == .recording else { return }
-        guard turn.activity != .recording, conversation?.voiceIntroduced == false, let id = selectedID else {
+        guard turn.activity != .recording, let chat = conversation, chat.greetsBeforeRecording, let id = selectedID
+        else {
             beginRecording(forMeaning: false)
             return
         }
         let token = turn.begin(.requestingPermission)
         greetingActive = true
         error = nil
-        let speakerName = conversation?.displayCharacterName ?? "Mochi"
+        let speakerName = chat.displayCharacterName
         let spoken = Greetings.spoken(
-            conversation?.preferences.language ?? ConversationPreferences().language,
-            interface: Bundle.main.preferredLocalizations.first ?? "en")
-        let service = settings.conversationService(speed: conversation?.preferences.speed)
+            chat.preferences.language, interface: Bundle.main.preferredLocalizations.first ?? "en")
+        // The conversation's own greeting is spoken exactly as written; without one, a standard greeting is.
+        let setup = chat.greeting.trimmingCharacters(in: .whitespacesAndNewlines)
+        let service = settings.conversationService(for: chat)
         task = Task { [self] in
             do {
                 let allowed: Bool
@@ -318,8 +338,11 @@ extension AppModel {
                 // Each asynchronous stage is guarded by its epoch; Stop invalidates either stage.
                 let generationToken = turn.begin(.generating)
                 let recent = settings.recentGreetings
-                let greeting = VoiceIdentity.namedGreeting(
-                    name: speakerName, language: spoken.language, script: spoken.script, excluding: recent)
+                let greeting =
+                    setup.isEmpty
+                    ? VoiceIdentity.namedGreeting(
+                        name: speakerName, language: spoken.language, script: spoken.script, excluding: recent)
+                    : (text: setup, pattern: nil)
                 let text = greeting.text
                 do {
                     let url = try await speech.referenceAudio(text, service, store.root, false)
@@ -337,7 +360,7 @@ extension AppModel {
                         _ = turn.finish(generationToken)
                         return
                     }
-                    settings.recentGreetings = recent + [greeting.pattern]
+                    if let pattern = greeting.pattern { settings.recentGreetings = recent + [pattern] }
                     task = nil
                     _ = turn.finish(generationToken)
                     play(
@@ -349,7 +372,21 @@ extension AppModel {
                             self.greetingActive = false
                             self.beginRecording(forMeaning: false)
                         })
-                } catch { fail(error, token: generationToken, context: "Voice greeting") }
+                } catch {
+                    guard (error as? AppFailure)?.underlying is ReferenceSpeech.Mismatch else {
+                        fail(error, token: generationToken, context: "Voice greeting")
+                        return
+                    }
+                    // The practice-example wording of this failure would mislead here.
+                    fail(
+                        AppFailure(
+                            verbatim: setup.isEmpty
+                                ? String(localized: "\(speakerName)’s greeting could not be prepared. Try again.")
+                                : String(
+                                    localized:
+                                        "\(speakerName) could not say this greeting exactly. Try again, or shorten the greeting in Conversation Instructions."
+                                ), underlying: error), token: generationToken, context: "Voice greeting")
+                }
             } catch { fail(error, token: token, context: "Microphone permission") }
         }
     }

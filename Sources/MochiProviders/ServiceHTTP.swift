@@ -71,8 +71,9 @@ public enum ServiceHTTP {
                 guard data.count <= maximumResponse else { throw AppFailure("\(provider) response was too large.") }
             }
             return data
-        } catch let error as AppFailure { throw error } catch is CancellationError { throw CancellationError() } catch {
-            // Cancelling the task surfaces from URLSession as URLError.cancelled.
+        } catch let error as AppFailure { throw error } catch {
+            // Cancelling the task surfaces from URLSession as URLError.cancelled. Any cancellation the task did not
+            // ask for is a failed request, reported rather than passing silently as the user's choice.
             if Task.isCancelled { throw CancellationError() }
             throw transportFailure(error, provider: provider)
         }

@@ -37,8 +37,8 @@ public struct RealtimeService {
         // A reply cut off at the output limit may end mid-sentence even when its transcript looks complete.
         guard !result.audio.isEmpty, !result.truncated, ReferenceSpeech.matches(text, result.text) else {
             throw AppFailure(
-                "The example did not match the sentence exactly. Generate it again; your sentence has not been changed."
-            )
+                "The example did not match the sentence exactly. Generate it again; your sentence has not been changed.",
+                underlying: ReferenceSpeech.Mismatch())
         }
         try Task.checkCancellation()
         try PCM.wav(result.audio).write(to: url, options: .atomic)
@@ -161,7 +161,7 @@ public struct RealtimeService {
                                 ])
                             }
                             try await send(["type": "input_audio_buffer.commit"])
-                        } else {
+                        } else if !input.reference {
                             try await send(RealtimeEvents.message(role: "user", text: input.text))
                         }
                         try await send([

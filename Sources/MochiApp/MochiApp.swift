@@ -7,14 +7,23 @@ import SwiftUI
     @State private var model: AppModel
     init() {
         DevelopmentLaunch.pinSmokeLanguage()
+        Self.ignoreRestoredWindows()
         SingleInstanceController.shared.enforce()
         _model = State(
             initialValue: AppModel(
                 demo: DevelopmentLaunch.demo, libraryRoot: DevelopmentLaunch.libraryRoot,
                 preferences: DevelopmentLaunch.preferences))
     }
+    /// Every launch opens the workspace rather than restoring the last session's windows. A session that ended with the
+    /// window hidden in the menu bar restores no window, and SwiftUI then opens none, leaving nothing to show. This is
+    /// the default behind Xcode's launch option to skip state restoration; it must be set before AppKit restores.
+    static func ignoreRestoredWindows() {
+        var arguments = UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)
+        arguments["ApplePersistenceIgnoreState"] = true
+        UserDefaults.standard.setVolatileDomain(arguments, forName: UserDefaults.argumentDomain)
+    }
     var body: some Scene {
-        Window("Mochi", id: "main") {
+        Window("Mochi", id: TrayController.workspaceWindowID) {
             WorkspaceView(app: model)
                 .background(MainWindowReader { delegate.attachWindow($0, model: model) })
                 .onAppear {
@@ -24,6 +33,7 @@ import SwiftUI
         }.defaultSize(width: 1040, height: 760)
             .windowToolbarStyle(.unified)
             .commands {
+                WorkspaceWindowCommands(tray: delegate.tray)
                 CommandGroup(replacing: .appTermination) {
                     Button("Close Window to Tray", action: delegate.tray.closeToTray).keyboardShortcut("q")
                     Button("Quit Mochi Completely", action: delegate.tray.quitApp)
@@ -35,6 +45,8 @@ import SwiftUI
                         "n", modifiers: [.command, .shift]
                     ).disabled(!model.canOpenConversationInstructions)
                     Button("Manage Templates…", action: model.openTemplateManager).disabled(
+                        !model.canOpenConversationInstructions)
+                    Button("Manage Characters…", action: model.openCharacterManager).disabled(
                         !model.canOpenConversationInstructions)
                 }
                 CommandMenu("Conversation") {
@@ -121,6 +133,8 @@ import SwiftUI
         NSApp.setActivationPolicy(.regular)
         NSApp.activate()
         tray.install()
+        // Should a launch still open no window, open it once the launch has settled and an opened window has attached.
+        DispatchQueue.main.async { [tray] in tray.openWorkspaceIfUnopened() }
     }
     func applicationDidBecomeActive(_ notification: Notification) { model?.configureAutomation() }
     /// Quitting saves first; when the save fails the user chooses between keeping the window and losing the edits.
@@ -144,6 +158,17 @@ import SwiftUI
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
         tray.showWindow()
         return false
+    }
+}
+
+/// Hands the tray SwiftUI's action for opening the workspace window, the only way to create it once a launch has left
+/// it unopened. The app's commands are built while it launches, before anything can ask for the window.
+private struct WorkspaceWindowCommands: Commands {
+    @Environment(\.openWindow) private var openWindow
+    let tray: TrayController
+    var body: some Commands {
+        let _ = tray.adopt(openWindow)
+        EmptyCommands()
     }
 }
 

@@ -6,10 +6,15 @@ public struct ConversationPreferences: Codable, Equatable {
     public var coaching: CoachingStyle = .natural
     /// Conversations saved before languages existed were English, so a missing language reads as English.
     public var language: ConversationLanguage = .english
+    /// The voice replies and greetings use; nil means the conversation voice chosen in Settings. A stored voice this
+    /// version does not know is kept, and the Settings voice speaks instead.
+    public var voice: String?
     public init() {}
+    /// The stored voice when this version supports it.
+    public var supportedVoice: RealtimeVoice? { voice.flatMap(RealtimeVoice.init(rawValue:)) }
     public static let speedRange = 0.25...1.5
     public static func isValidSpeed(_ speed: Double) -> Bool { speed.isFinite && speedRange.contains(speed) }
-    private enum CodingKeys: String, CodingKey { case speed, coaching, language }
+    private enum CodingKeys: String, CodingKey { case speed, coaching, language, voice }
     public init(from decoder: Decoder) throws {
         // Out-of-range or unknown stored values fall back to defaults so an old library still opens; the log says so.
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -32,6 +37,11 @@ public struct ConversationPreferences: Codable, Equatable {
             code.flatMap(ConversationLanguage.init(rawValue:)) == nil
         {
             MochiLog.app.notice("A conversation's stored language was unknown; using English")
+        }
+        let storedVoice = try? c.decodeIfPresent(String.self, forKey: .voice)
+        voice = storedVoice.flatMap { RealtimeVoice.isPlausibleID($0) ? $0 : nil }
+        if c.contains(.voice), (try? c.decodeNil(forKey: .voice)) != true, voice == nil {
+            MochiLog.app.notice("A conversation's stored voice was not a voice name; using the Settings voice")
         }
     }
     public func validate() throws {

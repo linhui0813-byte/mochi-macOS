@@ -79,3 +79,35 @@ extension VoiceIdentityTests {
             ).contains(#""Ana""#))
     }
 }
+
+extension VoiceIdentityTests {
+    /// Personality says how the companion comes across. It sits after the language rule and before the activity,
+    /// which decides what happens when they conflict; the configured name still frames both.
+    func testPersonalityHasItsOwnSectionBelowTheActivity() throws {
+        let preferences = ConversationPreferences()
+        let none = VoiceIdentity.conversationInstructions(
+            custom: "Tell a story", preferences: preferences, characterName: "Pip")
+        XCTAssertEqual(
+            VoiceIdentity.conversationInstructions(
+                custom: "Tell a story", preferences: preferences, characterName: "Pip", personality: "  \n "),
+            none, "Blank personality leaves the prompt byte-identical")
+        let prompt = VoiceIdentity.conversationInstructions(
+            custom: "Tell a story", preferences: preferences, characterName: "Pip", personality: "Playful and quick.")
+        let language = try XCTUnwrap(prompt.range(of: "Speak only English."))
+        let personality = try XCTUnwrap(prompt.range(of: "Personality and manner"))
+        let manner = try XCTUnwrap(prompt.range(of: "Playful and quick."))
+        let activity = try XCTUnwrap(prompt.range(of: "Tell a story"))
+        XCTAssertLessThan(language.lowerBound, personality.lowerBound)
+        XCTAssertLessThan(personality.lowerBound, manner.lowerBound)
+        XCTAssertLessThan(manner.lowerBound, activity.lowerBound)
+        XCTAssertTrue(prompt.contains("they decide what you do whenever the two conflict"))
+        XCTAssertTrue(prompt.contains("their limits on what you may add or invent hold"))
+        XCTAssertTrue(prompt.hasPrefix("CHARACTER IDENTITY"), "The configured name still frames everything")
+        // Imported text over the limit is shortened for the reply, never refused.
+        let long = VoiceIdentity.conversationInstructions(
+            custom: "", preferences: preferences,
+            personality: String(repeating: "w", count: ConversationPersonality.maxCharacters + 100))
+        XCTAssertTrue(long.contains(String(repeating: "w", count: ConversationPersonality.maxCharacters)))
+        XCTAssertFalse(long.contains(String(repeating: "w", count: ConversationPersonality.maxCharacters + 1)))
+    }
+}

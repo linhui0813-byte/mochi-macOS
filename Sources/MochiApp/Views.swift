@@ -90,6 +90,7 @@ struct WorkspaceView: View {
                     Menu {
                         Button("New Conversation from Template…", action: app.openTemplatePicker)
                         Button("Manage Templates…", action: app.openTemplateManager)
+                        Button("Manage Characters…", action: app.openCharacterManager)
                     } label: {
                         Image(systemName: "chevron.down")
                     }
@@ -153,7 +154,9 @@ struct WorkspaceView: View {
                 get: { app.customization.isPresented },
                 set: { if !$0 { app.customization.dismiss() } })
         ) {
-            if app.customization.templatePresentation != nil {
+            if app.customization.characterPresentation != nil {
+                CharactersView(app: app)
+            } else if app.customization.templatePresentation != nil {
                 ConversationTemplatesView(app: app)
             } else if let id = app.customization.instructionsID {
                 ConversationInstructionsView(app: app, id: id)
@@ -245,8 +248,18 @@ struct WorkspaceView: View {
                 } else {
                     ContentUnavailableView {
                         MochiView().frame(width: 72, height: 78)
-                        Text("A little conversation. A little practice.")
+                        if let starter = app.starterTemplate {
+                            Text(starter.displayTitle)
+                        } else {
+                            Text("A little conversation. A little practice.")
+                        }
                     } description: {
+                        if let starter = app.starterTemplate, !starter.displayDescription.isEmpty {
+                            Text(starter.displayDescription)
+                        }
+                        if let chat = app.conversation, chat.greetsBeforeRecording, !chat.greeting.isEmpty {
+                            Text("\(app.displayCharacterName) opens with: “\(chat.greeting)”")
+                        }
                         if app.canHelp {
                             Text(
                                 "Talk with \(app.displayCharacterName) in \(app.languageName). When you get stuck,\nwe’ll find the words and practise them in your own voice."
@@ -355,8 +368,34 @@ struct WorkspaceView: View {
         }
     }
 
+    /// The conversation's phrases, each sent as the user's message with one click; the composer keeps its draft.
+    @ViewBuilder private var phraseChips: some View {
+        if let phrases = app.conversation?.phrases, !phrases.isEmpty {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(Array(phrases.enumerated()), id: \.offset) { index, phrase in
+                        Button {
+                            app.sendPhrase(phrase)
+                        } label: {
+                            Text(verbatim: phrase).lineLimit(1)
+                        }
+                        .buttonStyle(.bordered).buttonBorderShape(.capsule).controlSize(.small)
+                        .help(Text("Send “\(phrase)”"))
+                        .accessibilityLabel(Text("Send “\(phrase)”"))
+                        #if MOCHI_DEVELOPMENT
+                            .background(ClickProbe("mochi-phrase-chip-probe-\(index)"))
+                        #endif
+                    }
+                }.padding(.horizontal, 2)
+            }
+            .disabled(!app.canSendPhrase)
+            .accessibilityIdentifier("phrase-chips")
+        }
+    }
+
     private var inputBar: some View {
         VStack(spacing: 8) {
+            phraseChips
             HStack(alignment: .bottom, spacing: 12) {
                 Button(action: app.toggleConversationVoice) {
                     Image(systemName: app.turn.activity == .recording ? "stop.circle.fill" : "mic.fill")
@@ -641,6 +680,20 @@ extension View {
         func makeNSView(context: Context) -> NSView {
             let view = NSView()
             view.identifier = NSUserInterfaceItemIdentifier("mochi-composer-geometry-probe")
+            return view
+        }
+        func updateNSView(_ view: NSView, context: Context) {}
+    }
+    /// Where a control is, so development runs can click it as a person would. Clicks pass through to the control.
+    struct ClickProbe: NSViewRepresentable {
+        let identifier: String
+        init(_ identifier: String) { self.identifier = identifier }
+        final class ProbeView: NSView {
+            override func hitTest(_ point: NSPoint) -> NSView? { nil }
+        }
+        func makeNSView(context: Context) -> NSView {
+            let view = ProbeView()
+            view.identifier = NSUserInterfaceItemIdentifier(identifier)
             return view
         }
         func updateNSView(_ view: NSView, context: Context) {}

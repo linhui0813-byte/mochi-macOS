@@ -80,7 +80,7 @@ final class DataFolderTests: XCTestCase {
             try store.prepare()
             if future {
                 var library = Library()
-                library.version = 4
+                library.version = Library.currentVersion + 1
                 try JSONEncoder().encode(library).write(to: store.file)
             } else {
                 try Data("broken".utf8).write(to: store.file)

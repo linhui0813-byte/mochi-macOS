@@ -78,7 +78,7 @@
                 _ = try request(
                     "initialize", id: 1,
                     params: [
-                        "protocolVersion": "2025-06-18", "clientInfo": ["name": "mochi-native-smoke", "version": "1"],
+                        "protocolVersion": "2025-11-25", "clientInfo": ["name": "mochi-native-smoke", "version": "1"],
                         "capabilities": [:],
                     ])
                 try write(["jsonrpc": "2.0", "method": "notifications/initialized"])
@@ -92,6 +92,10 @@
                     let content = result["content"] as? [[String: Any]], let text = content.first?["text"] as? String,
                     let object = try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any]
                 else { throw AppFailure("MCP helper returned an unreadable \(name) result.") }
+                // Clients that validate against the output schema read the structured copy, not the text.
+                guard isError || (result["structuredContent"] as? NSDictionary)?.isEqual(to: object) == true else {
+                    throw AppFailure("MCP helper returned \(name) without matching structured content.")
+                }
                 return (isError, object)
             }
             func call(_ name: String, id: Int, arguments: [String: Any] = [:]) throws -> [String: Any] {
@@ -127,10 +131,15 @@
             return try JSONSerialization.data(
                 withJSONObject: client.transcript, options: [.prettyPrinted, .sortedKeys])
         }
+        /// The companion settings the helper gives its template, which a conversation started from it must keep.
+        private static let companion = (
+            personality: "Bookish and warm.", greeting: "Which book shall we discuss?", phrases: ["Tell me more."],
+            voice: "cedar"
+        )
         /// A request repeated with the same JSON-RPC ID gets the first reply and changes nothing.
         private static func checkExpressionReplay(_ client: Client, conversation id: String, revision: String) throws {
             let arguments: [String: Any] = [
-                "conversation_id": id, "expected_revision": revision, "english": "Could you give me a moment?",
+                "conversation_id": id, "expected_revision": revision, "text": "Could you give me a moment?",
                 "meaning": "Ask politely for time to think.",
             ]
             let first = try client.call("save_expression", id: 4, arguments: arguments)
@@ -148,10 +157,22 @@
             guard (catalog["templates"] as? [[String: Any]])?.count ?? 0 >= 6 else {
                 throw AppFailure("Built-in templates missing.")
             }
+            let characters = try client.call("list_characters", id: 14)
+            guard
+                (characters["characters"] as? [[String: Any]])?.filter({ $0["origin"] as? String == "built_in" })
+                    .count ?? 0 >= 3
+            else { throw AppFailure("Built-in characters missing.") }
             let created = try client.call(
-                "create_conversation_template", id: 6, arguments: ["title": "MCP Loki", "character_name": "Loki"])
+                "create_conversation_template", id: 6,
+                arguments: [
+                    "title": "MCP Loki", "character_name": "Loki", "personality": companion.personality,
+                    "greeting": companion.greeting, "phrases": companion.phrases, "voice": companion.voice,
+                ])
             guard let template = created["template"] as? [String: Any], let templateID = template["id"] as? String,
-                let templateRevision = template["template_revision"] as? String
+                let templateRevision = template["template_revision"] as? String,
+                template["personality"] as? String == companion.personality,
+                template["greeting"] as? String == companion.greeting,
+                template["phrases"] as? [String] == companion.phrases, template["voice"] as? String == companion.voice
             else { throw AppFailure("Template create failed.") }
             _ = try client.call("get_conversation_template", id: 7, arguments: ["template_id": templateID])
             let updated = try client.call(
@@ -169,7 +190,8 @@
                     "template_id": templateID, "expected_template_revision": templateRevision,
                     "instructions": "Stale overwrite",
                 ])
-            guard stale.isError, (stale.object["error"] as? String)?.hasPrefix("This template changed.") == true else {
+            let conflict = String(localized: "This template changed. Your draft is kept; reload it or save as new.")
+            guard stale.isError, (stale.object["error"] as? String)?.hasPrefix(conflict) == true else {
                 throw AppFailure("Stale helper update was not refused as a revision conflict.")
             }
             let unchanged = try client.call("get_conversation_template", id: 81, arguments: ["template_id": templateID])
@@ -195,6 +217,10 @@
             let snapshot = try client.call("get_session", id: 12)
             guard snapshot["character_name"] as? String == "Loki",
                 snapshot["instructions"] as? String == "Discuss books",
+                snapshot["personality"] as? String == companion.personality,
+                snapshot["greeting"] as? String == companion.greeting,
+                snapshot["phrases"] as? [String] == companion.phrases, snapshot["voice"] as? String == companion.voice,
+                snapshot["effective_voice"] as? String == companion.voice,
                 let revision = snapshot["revision"] as? String
             else { throw AppFailure("Conversation lost deleted template snapshot.") }
             _ = try client.call(

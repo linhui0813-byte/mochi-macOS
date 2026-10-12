@@ -22,7 +22,7 @@ public enum LibraryBackup {
             let e = JSONEncoder()
             e.outputFormatting = [.prettyPrinted, .sortedKeys]
             var normalized = library
-            normalized.version = 3
+            normalized.version = Library.currentVersion
             try e.encode(normalized).write(to: package.appendingPathComponent("library.json"), options: .atomic)
             for name in library.referencedAudio {
                 try FileManager.default.copyItem(
@@ -39,10 +39,12 @@ public enum LibraryBackup {
         }
         var library = try JSONDecoder().decode(
             Library.self, from: Data(contentsOf: package.appendingPathComponent("library.json")))
-        guard (1...3).contains(library.version) else { throw AppFailure("This backup requires a newer app.") }
+        guard (1...Library.currentVersion).contains(library.version) else {
+            throw AppFailure("This backup requires a newer app.")
+        }
         try library.validate()
         for name in library.referencedAudio { try requireRecording(name, in: package) }
-        library.version = 3
+        library.version = Library.currentVersion
         return library
     }
     /// Items to import with their audio already copied under fresh names, ready to merge into the library as it is by then.
@@ -62,6 +64,7 @@ public enum LibraryBackup {
         let chatIDs = Set(local.conversations.map(\.id))
         let expressionIDs = Set(local.expressions.map(\.id))
         let templateIDs = Set(local.conversationTemplates.map(\.id))
+        let characterIDs = Set(local.characters.map(\.id))
         let conversations = prepared.additions.conversations.filter { !chatIDs.contains($0.id) }
         let localMessageIDs = Set(local.conversations.flatMap(\.messages).map(\.id))
         guard !conversations.flatMap(\.messages).contains(where: { localMessageIDs.contains($0.id) }) else {
@@ -71,7 +74,8 @@ public enum LibraryBackup {
         next.conversations += conversations
         next.expressions += prepared.additions.expressions.filter { !expressionIDs.contains($0.id) }
         next.conversationTemplates += prepared.additions.conversationTemplates.filter { !templateIDs.contains($0.id) }
-        next.version = 3
+        next.characters += prepared.additions.characters.filter { !characterIDs.contains($0.id) }
+        next.version = Library.currentVersion
         try next.validate()
         local = next
         return conversations.count
@@ -97,6 +101,8 @@ public enum LibraryBackup {
         additions.expressions = imported.expressions.filter { !expressionIDs.contains($0.id) }
         let templateIDs = Set(local.conversationTemplates.map(\.id))
         additions.conversationTemplates = imported.conversationTemplates.filter { !templateIDs.contains($0.id) }
+        let characterIDs = Set(local.characters.map(\.id))
+        additions.characters = imported.characters.filter { !characterIDs.contains($0.id) }
         let localMessageIDs = Set(local.conversations.flatMap(\.messages).map(\.id))
         guard !additions.conversations.flatMap(\.messages).contains(where: { localMessageIDs.contains($0.id) }) else {
             throw AppFailure("Imported message IDs conflict with local history.")

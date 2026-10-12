@@ -104,7 +104,7 @@ extension ConversationTemplateModelTests {
                 break
             }
         } while true
-        XCTAssertEqual(ids.count, 126)
+        XCTAssertEqual(ids.count, 120 + ConversationTemplate.builtins.count)
         _ = try app.tools.execute(
             "create_conversation_template", arguments: ["title": "New", "character_name": "Loki"], origin: .external)
         XCTAssertEqual(app.customization.templatePresentation, .picker)
@@ -448,13 +448,85 @@ extension ConversationTemplateModelTests {
         let list = try app.tools.executeTemplateTool(.listConversationTemplates, arguments: [:])
         XCTAssertEqual(
             list["untrusted_fields"] as? [String],
-            ["templates.title", "templates.description", "templates.character_name"])
+            [
+                "templates.title", "templates.description", "templates.character_name", "templates.greeting",
+                "templates.phrases",
+            ])
         XCTAssertFalse((list["templates"] as? [[String: Any]] ?? []).isEmpty)
         let single = try app.tools.executeTemplateTool(
             .getConversationTemplate, arguments: ["template_id": ConversationTemplate.builtins[0].id.uuidString])
         XCTAssertEqual(
             Set(single["untrusted_fields"] as? [String] ?? []),
-            ["template.title", "template.description", "template.character_name", "template.instructions"])
+            [
+                "template.title", "template.description", "template.character_name", "template.instructions",
+                "template.personality", "template.greeting", "template.phrases",
+            ])
+    }
+
+    /// The editor saves every setting it shows. It once dropped the language, so new templates came out English.
+    @MainActor func testEditorSavesTheChosenLanguage() throws {
+        let app = makeApp(demo: true)
+        app.resume()
+        app.openTemplateManager()
+        app.customization.editTemplate(nil)
+        app.customization.templateDraft?.value.title = "Japanese only"
+        app.customization.templateDraft?.value.preferences.language = .japanese
+        try app.saveTemplateDraft(asNew: false)
+        let created = try XCTUnwrap(app.library.conversationTemplates.first { $0.title == "Japanese only" })
+        XCTAssertEqual(created.preferences.language, .japanese, "A language-only template must be accepted")
+        XCTAssertEqual(app.customization.templatePresentation, .manager)
+
+        app.customization.editTemplate(created)
+        app.customization.templateDraft?.value.preferences.language = .match
+        try app.saveTemplateDraft(asNew: false)
+        XCTAssertEqual(try app.templates.template(id: created.id).preferences.language, .match)
+
+        app.customization.closeTemplates()
+        let id = try XCTUnwrap(app.selectedID)
+        var korean = ConversationPreferences()
+        korean.language = .korean
+        XCTAssertTrue(app.setConversationInstructions(id, instructions: "Chat about films", preferences: korean))
+        app.saveConversationAsTemplate(id)
+        app.customization.templateDraft?.value.title = "Films in Korean"
+        try app.saveTemplateDraft(asNew: true)
+        XCTAssertEqual(
+            app.library.conversationTemplates.first { $0.title == "Films in Korean" }?.preferences.language, .korean)
+    }
+
+    /// General built-ins lead, then language practice, then the user's own; search narrows every section.
+    @MainActor func testPickerGroupsBuiltinsByCollectionThenTheUsersTemplates() throws {
+        let app = makeApp(demo: true)
+        app.resume()
+        _ = try app.templates.create(.init(title: "Book club", settings: .init(instructions: "Discuss books")))
+        let sections = app.templates.sections(matching: "")
+        XCTAssertEqual(sections.map(\.section), [.general, .languagePractice, .mine])
+        XCTAssertEqual(sections[0].templates.map(\.id), ConversationTemplate.builtins.suffix(7).map(\.id))
+        XCTAssertEqual(sections[1].templates.map(\.id), ConversationTemplate.builtins.prefix(6).map(\.id))
+        XCTAssertEqual(sections[2].templates.map(\.title), ["Book club"])
+        let found = app.templates.sections(matching: "story")
+        XCTAssertEqual(found.map(\.section), [.general])
+        XCTAssertEqual(found[0].templates.map(\.title), ["Make a story with me"])
+        XCTAssertEqual(app.templates.sections(matching: "book").flatMap(\.templates).map(\.title), ["Book club"])
+    }
+
+    /// An empty conversation from a template shows that template, and only while nothing has been said.
+    @MainActor func testStarterShowsTheSourceTemplateUntilTheFirstMessage() throws {
+        let app = makeApp(demo: true)
+        app.resume()
+        let brainstorm = try XCTUnwrap(ConversationTemplate.builtins.first { $0.title == "Brainstorm with me" })
+        let id = try app.startTemplateSnapshot(brainstorm)
+        XCTAssertEqual(app.starterTemplate?.id, brainstorm.id)
+        app.append(Message(role: "user", text: "Names for a bakery"), to: id)
+        XCTAssertNil(app.starterTemplate)
+
+        let mine = try app.templates.create(.init(title: "Mine", settings: .init(instructions: "Chat")))
+        _ = try app.startTemplateSnapshot(mine)
+        XCTAssertEqual(app.starterTemplate?.id, mine.id)
+        try app.templates.delete(id: mine.id, revision: mine.revision)
+        XCTAssertNil(app.starterTemplate, "A deleted template leaves the ordinary empty state")
+
+        app.newChat()
+        XCTAssertNil(app.starterTemplate)
     }
 
     @MainActor private func controlledApp() -> AppModel {

@@ -24,7 +24,7 @@ final class LibraryStoreTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: root) }
         let store = LibraryStore(root: root)
         var library = Library()
-        library.version = 4
+        library.version = Library.currentVersion + 1
         try store.prepare()
         try JSONEncoder().encode(library).write(to: store.file)
         let before = try Data(contentsOf: store.file)

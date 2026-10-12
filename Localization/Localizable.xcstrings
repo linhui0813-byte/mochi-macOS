@@ -4,6 +4,34 @@
     "" : {
       "shouldTranslate" : false
     },
+    "%@ (not available)" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@（利用不可）"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ (사용할 수 없음)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@（不可用）"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@（無法使用）"
+          }
+        }
+      }
+    },
     "%@ / %@" : {
       "shouldTranslate" : false
     },
@@ -31,6 +59,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ 你的錄音已儲存。"
+          }
+        }
+      }
+    },
+    "%@ could not say this greeting exactly. Try again, or shorten the greeting in Conversation Instructions." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@はこのあいさつを書かれたとおりに言えませんでした。もう一度お試しいただくか、「会話の指示」であいさつを短くしてください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@이(가) 이 인사를 정확히 말하지 못했습니다. 다시 시도하거나 ‘대화 지침’에서 인사를 줄이십시오."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@没能一字不差地说出这句问候语。请重试，或在“对话指令”中缩短问候语。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 沒能一字不差地說出這句問候語。請再試一次，或在「對話指示」中縮短問候語。"
           }
         }
       }
@@ -199,6 +255,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ 不能超過 %lld 個字元和 %lld KB。"
+          }
+        }
+      }
+    },
+    "%@ opens with: “%@”" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@の第一声：「%@」"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@의 첫인사: “%@”"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@的开场白：“%@”"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 的開場白：「%@」"
           }
         }
       }
@@ -399,6 +483,34 @@
         }
       }
     },
+    "%@’s greeting could not be prepared. Try again." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@のあいさつを準備できませんでした。もう一度お試しください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@의 인사를 준비할 수 없습니다. 다시 시도하십시오."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法准备%@的问候。请重试。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法準備 %@ 的問候。請再試一次。"
+          }
+        }
+      }
+    },
     "%@’s reply could not be saved because its audio file could not be written. Retry the reply." : {
       "localizations" : {
         "ja" : {
@@ -591,6 +703,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld 次嘗試"
+          }
+        }
+      }
+    },
+    "%lld duplicate templates skipped. %lld imported templates need review." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重複するテンプレート%lld個をスキップしました。読み込んだテンプレートのうち%lld個は確認が必要です。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "중복 템플릿 %lld개를 건너뛰었습니다. 가져온 템플릿 중 %lld개는 검토가 필요합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已跳过 %lld 个重复模板。%lld 个导入的模板需要检查。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已略過 %lld 個重複範本。%lld 個輸入的範本需要檢查。"
           }
         }
       }
@@ -937,6 +1077,34 @@
         }
       }
     },
+    "A character is who the companion is: a name, a personality and a voice. Choosing one copies it into a conversation or template, so changing it later changes neither." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "キャラクターは、話し相手が誰なのかを決めるもので、名前、性格、声からなります。選ぶと会話やテンプレートにコピーされるので、あとでキャラクターを変更しても、それらは変わりません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "캐릭터는 대화 상대가 누구인지를 정하며 이름, 성격, 음성으로 이루어집니다. 캐릭터를 선택하면 대화나 템플릿에 복사되므로, 나중에 캐릭터를 바꿔도 그 대화나 템플릿은 바뀌지 않습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "角色决定对话伙伴是谁：名字、性格和语音。选择角色时会把它复制到对话或模板中，因此之后修改角色不会影响它们。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "角色決定對話夥伴是誰：名稱、性格和語音。選擇角色時會把它複製到對話或範本中，因此之後修改角色不會影響它們。"
+          }
+        }
+      }
+    },
     "A connected assistant can read active conversations, configure a conversation, save expressions, open practice, and control playback. Recording always starts with you. The connection stays on this Mac and is available only to your macOS user." : {
       "localizations" : {
         "ja" : {
@@ -961,6 +1129,62 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "連接的助理可以讀取進行中的對話、設定對話、儲存表達、打開練習，以及控制播放。錄音一律由你開始。連線僅保留在這台 Mac 上，且只供你的 macOS 使用者使用。"
+          }
+        }
+      }
+    },
+    "A conversation title is required." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "会話のタイトルが必要です。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "대화 제목이 필요합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "需要对话标题。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "需要對話標題。"
+          }
+        }
+      }
+    },
+    "A greeting must be one line of at most 160 characters." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "あいさつは1行、160文字以内にしてください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "인사는 한 줄, 160자 이내여야 합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "问候语必须为一行，且不超过 160 个字符。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "問候語必須為一行，且不超過 160 個字元。"
           }
         }
       }
@@ -1017,6 +1241,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "新對話"
+          }
+        }
+      }
+    },
+    "A personality cannot exceed 2,000 characters or 12 KB." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "性格は2,000文字または12 KBを超えることはできません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "성격은 2,000자 또는 12 KB를 초과할 수 없습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "性格不能超过 2,000 个字符或 12 KB。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "性格不能超過 2,000 個字元或 12 KB。"
           }
         }
       }
@@ -1105,30 +1357,30 @@
         }
       }
     },
-    "A template_id is required for template revision or clearing an inherited name." : {
+    "A template_id is required for expected_template_revision, clear_character_name or clear_voice." : {
       "localizations" : {
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "テンプレートのリビジョン指定、または継承した名前の消去には template_id が必要です。"
+            "value" : "expected_template_revision、clear_character_name、clear_voice には template_id が必要です。"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "템플릿 리비전 또는 상속된 이름 지우기에는 template_id가 필요합니다."
+            "value" : "expected_template_revision, clear_character_name 또는 clear_voice에는 template_id가 필요합니다."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "修订模板或清除继承的名称时需要 template_id。"
+            "value" : "使用 expected_template_revision、clear_character_name 或 clear_voice 时需要 template_id。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "修訂範本或清除繼承的名稱時需要 template_id。"
+            "value" : "使用 expected_template_revision、clear_character_name 或 clear_voice 時需要 template_id。"
           }
         }
       }
@@ -1245,6 +1497,34 @@
         }
       }
     },
+    "Add Phrase" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "フレーズを追加"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "문구 추가"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加短语"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "加入短語"
+          }
+        }
+      }
+    },
     "Add a reference and record an attempt to compare pitch." : {
       "localizations" : {
         "ja" : {
@@ -1273,30 +1553,58 @@
         }
       }
     },
-    "Add instructions, a character name, a language, coaching, or speech speed to this template." : {
+    "Add a twist." : {
       "localizations" : {
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "このテンプレートに、指示、キャラクター名、言語、コーチング、または話す速度を追加してください。"
+            "value" : "意外な展開を入れてください。"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "이 템플릿에 지침, 캐릭터 이름, 언어, 코칭 또는 말하기 속도를 추가하십시오."
+            "value" : "반전을 넣어 주세요."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "请为此模板添加指令、角色名称、语言、纠错方式或语速。"
+            "value" : "加个转折。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "請為此範本加入指示、角色名稱、語言、指導或語速。"
+            "value" : "加個轉折。"
+          }
+        }
+      }
+    },
+    "Add instructions, a character, a greeting, phrases, a language, coaching, a voice or speech speed to this template." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このテンプレートに、指示、キャラクター、あいさつ、フレーズ、言語、コーチング、声、または話す速度を追加してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 템플릿에 지침, 캐릭터, 인사, 문구, 언어, 코칭, 음성 또는 말하기 속도를 추가하십시오."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请为此模板添加指令、角色、问候语、短语、语言、纠错方式、语音或语速。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "請為此範本加入指示、角色、問候語、短語、語言、指導、語音或語速。"
           }
         }
       }
@@ -1693,6 +2001,118 @@
         }
       }
     },
+    "Ask about my past." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "私の過去について聞いてください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "제 과거에 대해 물어봐 주세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "问问我的过去。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "問問我的過去。"
+          }
+        }
+      }
+    },
+    "Ask me a harder question." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "もっと難しい質問をしてください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "더 어려운 질문을 해 주세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "问我一个更难的问题。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "問我一個更難的問題。"
+          }
+        }
+      }
+    },
+    "Ask me about the people." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "そこにいた人たちのことを聞いてください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "그때 함께한 사람들에 대해 물어봐 주세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "问问我当时身边的人。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "問問我當時身邊的人。"
+          }
+        }
+      }
+    },
+    "Ask me something harder." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "もっと難しいことを聞いてください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "더 어려운 걸 물어봐 주세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "问我点更难的。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "問我點更難的。"
+          }
+        }
+      }
+    },
     "Audio is unavailable for that item." : {
       "localizations" : {
         "ja" : {
@@ -1861,6 +2281,34 @@
         }
       }
     },
+    "Brainstorm with me" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一緒にブレインストーミング"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "함께 브레인스토밍"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "和我一起头脑风暴"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "和我一起腦力激盪"
+          }
+        }
+      }
+    },
     "Build Mochi’s bundled helper, or move Mochi to Applications and reopen it before copying the configuration." : {
       "localizations" : {
         "ja" : {
@@ -1889,30 +2337,114 @@
         }
       }
     },
-    "Built-in" : {
+    "Build a story together, one turn at a time." : {
       "localizations" : {
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "内蔵"
+            "value" : "交代で少しずつ、一緒に物語を作ります。"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "내장"
+            "value" : "번갈아 가며 함께 이야기를 만들어 갑니다."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "内置"
+            "value" : "轮流接续，一起编一个故事。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "內建"
+            "value" : "輪流接續，一起編一個故事。"
+          }
+        }
+      }
+    },
+    "Built-in Characters" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "内蔵キャラクター"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "내장 캐릭터"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "内置角色"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "內建角色"
+          }
+        }
+      }
+    },
+    "Built-in characters are read-only. Duplicate one to customize it." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "内蔵キャラクターは読み出し専用です。カスタマイズするには複製してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "내장 캐릭터는 읽기 전용입니다. 사용자화하려면 복제하십시오."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "内置角色为只读。请复制一个后再自定。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "內建角色為唯讀。請複製一份來自訂。"
+          }
+        }
+      }
+    },
+    "Built-in characters cannot be deleted." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "内蔵キャラクターは削除できません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "내장 캐릭터는 삭제할 수 없습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "内置角色无法删除。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法刪除內建角色。"
           }
         }
       }
@@ -2253,6 +2785,34 @@
         }
       }
     },
+    "Character not found. Keep your draft and save it as a new character." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "キャラクターが見つかりません。下書きを残して、新しいキャラクターとして保存してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "캐릭터를 찾을 수 없습니다. 초안을 유지하고 새 캐릭터로 저장하십시오."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "找不到角色。请保留你的草稿，并将其保存为新角色。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "找不到角色。請保留草稿並將其儲存為新角色。"
+          }
+        }
+      }
+    },
     "Character: %@" : {
       "localizations" : {
         "ja" : {
@@ -2473,6 +3033,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在檢查…"
+          }
+        }
+      }
+    },
+    "Choose Character" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "キャラクターを選択"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "캐릭터 선택"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择角色"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選擇角色"
           }
         }
       }
@@ -2725,6 +3313,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "請使用長度在片刻到 65 秒之間的語音訊息，然後重新傳送。"
+          }
+        }
+      }
+    },
+    "Choosing a character copies its name, personality and voice into these settings." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "キャラクターを選ぶと、その名前、性格、声がこの設定にコピーされます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "캐릭터를 선택하면 이름, 성격, 음성이 이 설정에 복사됩니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择角色会把它的名字、性格和语音复制到这些设置中。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選擇角色會把它的名稱、性格和語音複製到這些設定中。"
           }
         }
       }
@@ -4073,6 +4689,34 @@
         }
       }
     },
+    "Could not delete character." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "キャラクターを削除できませんでした。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "캐릭터를 삭제할 수 없습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法删除角色。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法刪除角色。"
+          }
+        }
+      }
+    },
     "Could not delete template." : {
       "localizations" : {
         "ja" : {
@@ -4321,6 +4965,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "無法移除已丟棄的錄音。請在「設定」中顯示資料檔案夾以檢查。"
+          }
+        }
+      }
+    },
+    "Could not save character. Your draft is kept." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "キャラクターを保存できませんでした。下書きは保持されています。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "캐릭터를 저장할 수 없습니다. 초안은 유지됩니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法保存角色。你的草稿已保留。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法儲存角色。你的草稿已保留。"
           }
         }
       }
@@ -4577,6 +5249,34 @@
         }
       }
     },
+    "Curious and direct. Asks sharp follow-up questions." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "好奇心旺盛で率直。鋭い質問を重ねてきます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "호기심이 많고 직설적입니다. 날카로운 후속 질문을 던집니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "好奇又直接。会追问尖锐的问题。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "好奇又直接。會追問尖銳的問題。"
+          }
+        }
+      }
+    },
     "Data & Privacy" : {
       "localizations" : {
         "ja" : {
@@ -4657,6 +5357,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "預設身分：Mochi。指示可以覆寫其對話中的名稱。"
+          }
+        }
+      }
+    },
+    "Delete Character" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "キャラクターを削除"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "캐릭터 삭제"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除角色"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "刪除角色"
           }
         }
       }
@@ -4769,6 +5497,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "刪除範本"
+          }
+        }
+      }
+    },
+    "Delete this character? Conversations and templates that use it keep their own copy." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このキャラクターを削除しますか？このキャラクターを使っている会話やテンプレートは、それぞれのコピーを保持します。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 캐릭터를 삭제하겠습니까? 이 캐릭터를 사용하는 대화와 템플릿은 각자의 사본을 유지합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除此角色？使用它的对话和模板会保留各自的副本。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要刪除此角色嗎？使用它的對話和範本會保留各自的副本。"
           }
         }
       }
@@ -4913,6 +5669,34 @@
         }
       }
     },
+    "Develop a fictional character by answering as them." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "キャラクターになりきって答え、人物像を深めます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "캐릭터가 되어 답하며 가상 인물을 만들어 갑니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "以角色的身份回答问题，塑造一个虚构角色。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "以角色的身分回答問題，塑造一個虛構角色。"
+          }
+        }
+      }
+    },
     "Development build" : {
       "localizations" : {
         "ja" : {
@@ -4937,6 +5721,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "開發版本"
+          }
+        }
+      }
+    },
+    "Did that make sense?" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "今の説明でわかりましたか？"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "제 설명 이해되셨어요?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "我讲明白了吗？"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "我講明白了嗎？"
           }
         }
       }
@@ -5221,6 +6033,34 @@
         }
       }
     },
+    "Each phrase must be one line of 1 to 100 characters." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "各フレーズは1行、1〜100文字にしてください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "각 문구는 한 줄, 1~100자여야 합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每个短语必须为一行，长度为 1 到 100 个字符。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每個短語必須為一行，長度為 1 到 100 個字元。"
+          }
+        }
+      }
+    },
     "Earlier" : {
       "localizations" : {
         "ja" : {
@@ -5245,6 +6085,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "更早"
+          }
+        }
+      }
+    },
+    "Edit Character" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "キャラクターを編集"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "캐릭터 편집"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "编辑角色"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "編輯角色"
           }
         }
       }
@@ -5553,6 +6421,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "現有的對話和範本會保留各自的語言。"
+          }
+        }
+      }
+    },
+    "Explain a topic to a curious beginner to find the gaps." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "好奇心旺盛な初心者に説明して、自分の理解の穴を見つけます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "호기심 많은 초보자에게 설명하며 빈틈을 찾습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "向一位好奇的初学者讲解一个主题，找出自己没讲清的地方。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "向一位好奇的初學者講解一個主題，找出自己沒講清楚的地方。"
           }
         }
       }
@@ -6201,6 +7097,146 @@
         }
       }
     },
+    "Generate lots of ideas together, then choose the best." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一緒にたくさんのアイデアを出し、いちばん良いものを選びます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "함께 아이디어를 많이 낸 다음 가장 좋은 것을 고릅니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一起想出大量点子，再挑出最好的。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一起想出大量點子，再挑出最好的。"
+          }
+        }
+      }
+    },
+    "Give it an ending." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "結末をつけてください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "결말을 지어 주세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "给它一个结局。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "給它一個結局。"
+          }
+        }
+      }
+    },
+    "Give me wilder ideas." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "もっと大胆なアイデアをください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "더 기발한 아이디어를 주세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "来点更大胆的点子。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "來點更大膽的點子。"
+          }
+        }
+      }
+    },
+    "Greeting" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "あいさつ"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "인사"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "问候语"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "問候語"
+          }
+        }
+      }
+    },
+    "Greeting: %@" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "あいさつ：%@"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "인사: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "问候语：%@"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "問候語：%@"
+          }
+        }
+      }
+    },
     "Help Me Say This" : {
       "localizations" : {
         "ja" : {
@@ -6369,6 +7405,90 @@
         }
       }
     },
+    "How did I do?" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "どうでしたか？"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "저 어땠어요?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "我表现得怎么样？"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "我表現得怎麼樣？"
+          }
+        }
+      }
+    },
+    "How the companion comes across. The instructions decide what you do together." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "話し相手がどんな印象かを決めます。何を一緒にするかは指示で決まります。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "대화 상대가 어떤 인상을 주는지 정합니다. 함께 무엇을 할지는 지침이 정합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "决定对话伙伴给人的感觉。一起做什么由指令决定。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "決定對話夥伴給人的感覺。一起做什麼由指示決定。"
+          }
+        }
+      }
+    },
+    "How this character comes across: temperament, manner, what they enjoy. What you do together belongs in a template’s instructions." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このキャラクターの印象：気質、話しぶり、好きなこと。何を一緒にするかは、テンプレートの指示に書きます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 캐릭터가 주는 인상: 기질, 말투, 좋아하는 것. 함께 무엇을 할지는 템플릿의 지침에 적습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这个角色给人的感觉：性情、举止、喜欢什么。一起做什么，请写在模板的指令里。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "這個角色給人的感覺：性情、舉止、喜歡什麼。一起做什麼，請寫在範本的指示裡。"
+          }
+        }
+      }
+    },
     "I already have a sentence in %@" : {
       "localizations" : {
         "ja" : {
@@ -6505,6 +7625,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "輸入參考音…"
+          }
+        }
+      }
+    },
+    "Imported %lld conversations, %lld templates and %lld characters. Existing local items were kept." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld件の会話、%lld個のテンプレート、%lld個のキャラクターを読み込みました。既存のローカル項目は保持されました。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "대화 %lld개, 템플릿 %lld개, 캐릭터 %lld개를 가져왔습니다. 기존 로컬 항목은 유지되었습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已导入 %lld 个对话、%lld 个模板和 %lld 个角色。已保留现有的本地项目。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已輸入 %lld 個對話、%lld 個範本和 %lld 個角色。已保留現有的本機項目。"
           }
         }
       }
@@ -6705,6 +7853,34 @@
         }
       }
     },
+    "Interview my character" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "キャラクターにインタビュー"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "내 캐릭터 인터뷰"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "采访我的角色"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "採訪我的角色"
+          }
+        }
+      }
+    },
     "Invalid ID: %@." : {
       "localizations" : {
         "ja" : {
@@ -6841,6 +8017,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "無效的控制要求。"
+          }
+        }
+      }
+    },
+    "Invalid list argument: %@." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無効なリスト引数：%@。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "유효하지 않은 목록 인수: %@."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无效的列表参数：%@。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無效的列表引數：%@。"
           }
         }
       }
@@ -7237,6 +8441,202 @@
         }
       }
     },
+    "Learn by teaching" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "教えて学ぶ"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "가르치며 배우기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "以教促学"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "以教促學"
+          }
+        }
+      }
+    },
+    "Let me decide what happens." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "次に何が起きるか、私に決めさせてください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "무슨 일이 일어날지 제가 정할게요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "接下来发生什么，让我来决定。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "接下來發生什麼，讓我來決定。"
+          }
+        }
+      }
+    },
+    "Let's finish the interview." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "インタビューを終わりにしましょう。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "인터뷰를 마무리해요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "我们结束采访吧。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "我們結束採訪吧。"
+          }
+        }
+      }
+    },
+    "Let's keep it." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この思い出を残しておきましょう。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 기억을 남겨 둬요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "把这段回忆留下来吧。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "把這段回憶留下來吧。"
+          }
+        }
+      }
+    },
+    "Let's skip that." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "そこは飛ばしましょう。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "그건 넘어가요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这个先跳过吧。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "這個先跳過吧。"
+          }
+        }
+      }
+    },
+    "Let's start again." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最初からやり直しましょう。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "처음부터 다시 해요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "我们重新开始吧。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "我們重新開始吧。"
+          }
+        }
+      }
+    },
+    "Let's wrap up." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "そろそろまとめましょう。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이제 마무리해요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "我们收尾吧。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "我們收尾吧。"
+          }
+        }
+      }
+    },
     "Library backup exported." : {
       "localizations" : {
         "ja" : {
@@ -7541,6 +8941,90 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "本機控制連線逾時。"
+          }
+        }
+      }
+    },
+    "Make a story with me" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一緒に物語を作る"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "함께 이야기 만들기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "和我一起编故事"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "和我一起編故事"
+          }
+        }
+      }
+    },
+    "Manage Characters" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "キャラクターを管理"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "캐릭터 관리"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "管理角色"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "管理角色"
+          }
+        }
+      }
+    },
+    "Manage Characters…" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "キャラクターを管理…"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "캐릭터 관리…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "管理角色…"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "管理角色…"
           }
         }
       }
@@ -7853,30 +9337,30 @@
         }
       }
     },
-    "Missing or unexpected tool arguments." : {
+    "Missing required argument: %@." : {
       "localizations" : {
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "ツールの引数が不足しているか、想定外です。"
+            "value" : "必須の引数がありません：%@。"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "도구 인수가 누락되었거나 예상치 못한 인수입니다."
+            "value" : "필수 인수가 없습니다: %@."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "工具参数缺失或不符合预期。"
+            "value" : "缺少必需的参数：%@。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "工具引數缺少或不符預期。"
+            "value" : "缺少必要的引數：%@。"
           }
         }
       }
@@ -8556,6 +10040,34 @@
         }
       }
     },
+    "Mochi’s own manner" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochi本来の話しぶり"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochi 본래의 말투"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochi 本来的风格"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mochi 原本的風格"
+          }
+        }
+      }
+    },
     "Mochi’s reply timed out. Your message is saved; retry the reply." : {
       "localizations" : {
         "ja" : {
@@ -8752,6 +10264,34 @@
         }
       }
     },
+    "My Characters" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "マイキャラクター"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "나의 캐릭터"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "我的角色"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "我的角色"
+          }
+        }
+      }
+    },
     "My Expressions" : {
       "localizations" : {
         "ja" : {
@@ -8860,6 +10400,62 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "自然對話"
+          }
+        }
+      }
+    },
+    "New Character" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新規キャラクター"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새 캐릭터"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建角色"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新增角色"
+          }
+        }
+      }
+    },
+    "New Character…" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新規キャラクター…"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새 캐릭터…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建角色…"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新增角色…"
           }
         }
       }
@@ -10124,6 +11720,146 @@
         }
       }
     },
+    "Personality" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "性格"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "성격"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "性格"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "性格"
+          }
+        }
+      }
+    },
+    "Personality: %@" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "性格：%@"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "성격: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "性格：%@"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "性格：%@"
+          }
+        }
+      }
+    },
+    "Phrase %lld" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "フレーズ %lld"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "문구 %lld"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "短语 %lld"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "短語 %lld"
+          }
+        }
+      }
+    },
+    "Phrases" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "フレーズ"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "문구"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "短语"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "短語"
+          }
+        }
+      }
+    },
+    "Phrases: %@" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "フレーズ：%@"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "문구: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "短语：%@"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "短語：%@"
+          }
+        }
+      }
+    },
     "Pin" : {
       "localizations" : {
         "ja" : {
@@ -10432,6 +12168,34 @@
         }
       }
     },
+    "Playful and imaginative. Loves wild ideas and wordplay." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "遊び心があって想像力豊か。奇抜なアイデアと言葉遊びが大好きです。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "장난기 많고 상상력이 풍부합니다. 엉뚱한 아이디어와 말장난을 좋아합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "爱玩又富有想象力。喜欢天马行空的点子和文字游戏。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "愛玩又富有想像力。喜歡天馬行空的點子和文字遊戲。"
+          }
+        }
+      }
+    },
     "Playing your recording" : {
       "localizations" : {
         "ja" : {
@@ -10540,6 +12304,62 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "練習你的表達"
+          }
+        }
+      }
+    },
+    "Practise a difficult talk, pitch or request before the real one." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本番の前に、難しい話し合いや提案、お願いを練習します。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "실제로 하기 전에 어려운 대화, 제안이나 부탁을 연습합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在真正开口之前，先练习一次艰难的谈话、提案或请求。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在真正開口之前，先練習一次艱難的談話、提案或請求。"
+          }
+        }
+      }
+    },
+    "Practise a language" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "言語を練習する"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "언어 연습하기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "练习一门语言"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "練習一種語言"
           }
         }
       }
@@ -10876,6 +12696,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "發音與跟讀"
+          }
+        }
+      }
+    },
+    "Push back harder." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "もっと強く反論してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "더 세게 반박해 주세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "再强硬点反驳我。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "再強硬點反駁我。"
           }
         }
       }
@@ -11580,6 +13428,34 @@
         }
       }
     },
+    "Rehearse a conversation" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "会話のリハーサル"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "대화 리허설"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "预演一场对话"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "預演一場對話"
+          }
+        }
+      }
+    },
     "Reinstates the library saved just before the unreadable one. The unreadable file is kept in the data folder." : {
       "localizations" : {
         "ja" : {
@@ -11632,6 +13508,90 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "版本附註"
+          }
+        }
+      }
+    },
+    "Remember a moment" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "思い出をたどる"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "한 순간 떠올리기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "回忆一个瞬间"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "回憶一個瞬間"
+          }
+        }
+      }
+    },
+    "Remove Phrase" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "フレーズを削除"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "문구 삭제"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除短语"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除短語"
+          }
+        }
+      }
+    },
+    "Remove Phrase %lld" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "フレーズ %lld を削除"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "문구 %lld 삭제"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除短语 %lld"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除短語 %lld"
           }
         }
       }
@@ -12308,6 +14268,34 @@
         }
       }
     },
+    "Review the character name in Conversation Instructions before sending." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "送信する前に「会話の指示」でキャラクター名を確認してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "보내기 전에 ‘대화 지침’에서 캐릭터 이름을 확인하십시오."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "发送前，请在“对话指令”中检查角色名称。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "傳送前請先在「對話指示」中檢查角色名稱。"
+          }
+        }
+      }
+    },
     "Review the character name in Conversation Instructions before sending. Your draft is kept." : {
       "localizations" : {
         "ja" : {
@@ -12332,6 +14320,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "傳送前請先在「對話指示」中檢查角色名稱。你的草稿已保留。"
+          }
+        }
+      }
+    },
+    "Review the character." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "キャラクターを確認してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "캐릭터를 검토하십시오."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请检查角色。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "請檢查角色。"
           }
         }
       }
@@ -12388,6 +14404,62 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "請檢查這些設定。"
+          }
+        }
+      }
+    },
+    "Review this character before using it." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使う前にこのキャラクターを確認してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "사용하기 전에 이 캐릭터를 검토하십시오."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用前请检查此角色。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用前請檢查此角色。"
+          }
+        }
+      }
+    },
+    "Revisit a memory and keep it as a short vignette." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "思い出をたどり、短い文章として残します。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "기억을 되짚어 짧은 글로 남깁니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重温一段记忆，把它留成一篇小短文。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重溫一段記憶，把它留成一篇小短文。"
           }
         }
       }
@@ -12476,6 +14548,34 @@
         }
       }
     },
+    "Save as Character…" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "キャラクターとして保存…"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "캐릭터로 저장…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存为角色…"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "儲存為角色…"
+          }
+        }
+      }
+    },
     "Save as New" : {
       "localizations" : {
         "ja" : {
@@ -12500,6 +14600,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "儲存為新範本"
+          }
+        }
+      }
+    },
+    "Save as New Character" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新規キャラクターとして保存"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "새 캐릭터로 저장"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "另存为新角色"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "儲存為新角色"
           }
         }
       }
@@ -12700,6 +14828,34 @@
         }
       }
     },
+    "Search characters" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "キャラクターを検索"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "캐릭터 검색"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "搜索角色"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "搜尋角色"
+          }
+        }
+      }
+    },
     "Search templates" : {
       "localizations" : {
         "ja" : {
@@ -12724,6 +14880,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "搜尋範本"
+          }
+        }
+      }
+    },
+    "Search this conversation" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この会話を検索"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 대화 검색"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "搜索此对话"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "搜尋此對話"
           }
         }
       }
@@ -12780,6 +14964,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "搜尋標題、角色和訊息"
+          }
+        }
+      }
+    },
+    "Select a character to preview it." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "プレビューするキャラクターを選択してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "미리 보려면 캐릭터를 선택하십시오."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择一个角色以预览。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選擇角色以預覽。"
           }
         }
       }
@@ -12924,6 +15136,34 @@
         }
       }
     },
+    "Send “%@”" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「%@」を送信"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@” 보내기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "发送“%@”"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "傳送「%@」"
+          }
+        }
+      }
+    },
     "Sentence in %@" : {
       "localizations" : {
         "ja" : {
@@ -12948,6 +15188,62 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@句子"
+          }
+        }
+      }
+    },
+    "Settings Voice (%@)" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "設定の声（%@）"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "설정 음성(%@)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设置中的语音（%@）"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "設定中的語音（%@）"
+          }
+        }
+      }
+    },
+    "Settings voice" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "設定の声"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "설정 음성"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设置中的语音"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "設定中的語音"
           }
         }
       }
@@ -13540,6 +15836,34 @@
         }
       }
     },
+    "Spoken exactly as written when you first start talking. Leave it empty for a standard greeting in the conversation’s language." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最初に話し始めるとき、書かれたとおりに読み上げられます。空欄にすると、会話の言語で標準のあいさつをします。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "처음 대화를 시작할 때 적힌 그대로 말합니다. 비워 두면 대화 언어로 기본 인사를 합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "第一次开始说话时，会按原样念出。留空则用对话语言说一句标准问候。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "第一次開始說話時，會照原樣念出。留空則用對話語言說一句標準問候。"
+          }
+        }
+      }
+    },
     "Start Conversation" : {
       "localizations" : {
         "ja" : {
@@ -13732,6 +16056,118 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "儲存空間"
+          }
+        }
+      }
+    },
+    "Sum it up for me." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "まとめてもらえますか？"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "정리해 주세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "帮我总结一下。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "幫我總結一下。"
+          }
+        }
+      }
+    },
+    "Sum up what I taught you." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "私が教えたことをまとめてください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "제가 가르쳐 드린 걸 정리해 주세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "总结一下我教你的内容。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "總結一下我教你的內容。"
+          }
+        }
+      }
+    },
+    "Talk about anything" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "なんでも話す"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "무엇이든 이야기하기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无话不谈"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無話不談"
+          }
+        }
+      }
+    },
+    "Talk through a messy thought until it becomes clear." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "まとまらない考えを、はっきりするまで話してみます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "엉킨 생각을 분명해질 때까지 말로 풀어 봅니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "把乱糟糟的想法说出来，直到它变得清晰。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "把亂糟糟的想法說出來，直到它變得清晰。"
           }
         }
       }
@@ -14632,6 +17068,34 @@
         }
       }
     },
+    "The library contains invalid or duplicate character IDs/revisions." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ライブラリに無効または重複したキャラクターID/リビジョンが含まれています。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "라이브러리에 유효하지 않거나 중복된 캐릭터 ID/리비전이 있습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "资料库包含无效或重复的角色 ID/修订版本。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "資料庫中含有無效或重複的角色 ID／修訂版本。"
+          }
+        }
+      }
+    },
     "The library contains invalid or duplicate template IDs/revisions." : {
       "localizations" : {
         "ja" : {
@@ -15304,6 +17768,34 @@
         }
       }
     },
+    "Think out loud" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "声に出して考える"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "소리 내어 생각하기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "把想法说出来"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "把想法說出來"
+          }
+        }
+      }
+    },
     "This Mochi tool is not available." : {
       "localizations" : {
         "ja" : {
@@ -15580,6 +18072,90 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "此動作無法還原。訊息和未使用的錄音會從目前的資料庫中移除。已儲存的表達及其錄音會保留。"
+          }
+        }
+      }
+    },
+    "This character changed. Read it again before deleting." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このキャラクターは変更されました。削除する前にもう一度読み込んでください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 캐릭터가 변경되었습니다. 삭제하기 전에 다시 읽으십시오."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此角色已更改。删除前请重新读取。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此角色已變更。刪除前請重新讀取。"
+          }
+        }
+      }
+    },
+    "This character changed. Your draft is kept; reload it or save as new." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このキャラクターは変更されました。下書きは保持されています。再読み込みするか、新規として保存してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 캐릭터가 변경되었습니다. 초안은 유지됩니다. 다시 불러오거나 새로 저장하십시오."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此角色已更改。你的草稿已保留；请重新载入或另存为新角色。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此角色已變更。你的草稿已保留；請重新載入，或儲存為新角色。"
+          }
+        }
+      }
+    },
+    "This character needs review before it can be used. Edit it to fix it." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このキャラクターは使う前に確認が必要です。編集して修正してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 캐릭터는 사용하기 전에 검토가 필요합니다. 편집하여 수정하십시오."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此角色需要检查后才能使用。请编辑以修正。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此角色需要檢查後才能使用。請編輯以修正。"
           }
         }
       }
@@ -16084,6 +18660,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "此範本已變更。你的草稿已保留；請重新載入，或儲存為新範本。"
+          }
+        }
+      }
+    },
+    "This voice is not available in this version of Mochi, so the Settings voice speaks instead." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この声はこのバージョンのMochiでは使用できないため、代わりに「設定」の声が話します。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 음성은 이 버전의 Mochi에서 사용할 수 없으므로 대신 설정 음성이 말합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此版本的 Mochi 无法使用这个语音，因此会改用“设置”中的语音。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此版本的 Mochi 無法使用這個語音，因此會改用「設定」中的語音。"
           }
         }
       }
@@ -16816,6 +19420,62 @@
         }
       }
     },
+    "Unexpected argument %@. Allowed arguments: %@." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "想定外の引数です：%@。使用できる引数：%@。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "예상치 못한 인수입니다: %@. 허용되는 인수: %@."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "意外的参数：%@。允许的参数：%@。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "非預期的引數：%@。允許的引數：%@。"
+          }
+        }
+      }
+    },
+    "Unexpected argument %@. This tool takes no arguments." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "想定外の引数です：%@。このツールは引数を受け付けません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "예상치 못한 인수입니다: %@. 이 도구는 인수를 받지 않습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "意外的参数：%@。此工具不接受任何参数。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "非預期的引數：%@。此工具不接受任何引數。"
+          }
+        }
+      }
+    },
     "Unknown voice." : {
       "localizations" : {
         "ja" : {
@@ -16956,6 +19616,34 @@
         }
       }
     },
+    "Up to six lines you can send with one click, exactly as written. You can also type or say them." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ワンクリックで書かれたとおりに送信できる文を6つまで登録できます。入力したり声に出したりしてもかまいません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "한 번의 클릭으로 적힌 그대로 보낼 수 있는 문장을 최대 6개까지 둘 수 있습니다. 직접 입력하거나 말해도 됩니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最多六句，点一下就会按原样发送。你也可以自己输入或说出来。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最多六句，按一下就會照原樣傳送。你也可以自己輸入或說出來。"
+          }
+        }
+      }
+    },
     "Use Command, Option or Control in the shortcut." : {
       "localizations" : {
         "zh-Hans" : {
@@ -17036,6 +19724,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "使用自訂語速"
+          }
+        }
+      }
+    },
+    "Use at most 6 phrases." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "フレーズは6つまでにしてください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "문구는 최대 6개까지 사용할 수 있습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最多使用 6 个短语。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最多使用 6 個短語。"
           }
         }
       }
@@ -17292,6 +20008,34 @@
         }
       }
     },
+    "Voice: %@" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "声：%@"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "음성: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "语音：%@"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "語音：%@"
+          }
+        }
+      }
+    },
     "Voices" : {
       "localizations" : {
         "ja" : {
@@ -17348,6 +20092,62 @@
         }
       }
     },
+    "Warm and thoughtful. Keeps replies short and leaves you room to think." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "温かく思慮深い。返事は短めで、考える余地を残してくれます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "따뜻하고 사려 깊습니다. 답을 짧게 하고 생각할 여유를 줍니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "温暖而体贴。回复简短，给你留出思考的空间。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "溫暖而體貼。回覆簡短，給你留出思考的空間。"
+          }
+        }
+      }
+    },
+    "What am I missing?" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "何か見落としはありますか？"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "제가 놓친 게 뭘까요?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "我漏掉了什么？"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "我漏掉了什麼？"
+          }
+        }
+      }
+    },
     "What did you say?" : {
       "localizations" : {
         "ja" : {
@@ -17372,6 +20172,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "你說了什麼？"
+          }
+        }
+      }
+    },
+    "What shall we brainstorm? Tell me what the ideas are for." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "何についてアイデアを出しましょうか？何に使うアイデアか教えてください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "무엇에 대해 아이디어를 내 볼까요? 어디에 쓸 아이디어인지 알려 주세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "我们来头脑风暴点什么？说说这些点子要用在哪里。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "我們來腦力激盪點什麼？說說這些點子要用在哪裡。"
           }
         }
       }
@@ -17404,6 +20232,34 @@
         }
       }
     },
+    "What would you like to teach me today?" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "今日は何を教えてくれますか？"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "오늘은 무엇을 가르쳐 주실 건가요?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "今天你想教我什么？"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "今天你想教我什麼？"
+          }
+        }
+      }
+    },
     "What you meant" : {
       "localizations" : {
         "ja" : {
@@ -17428,6 +20284,174 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "你想表達的意思"
+          }
+        }
+      }
+    },
+    "What's on your mind? Start with the rough version, however messy." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "何を考えていますか？まとまっていなくても大丈夫なので、ざっくり話してみてください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "무슨 생각을 하고 계세요? 정리가 안 됐어도 괜찮으니 대충이라도 말해 주세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你在想什么？先说个粗略的版本，再乱也没关系。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你在想什麼？先說個粗略的版本，再亂也沒關係。"
+          }
+        }
+      }
+    },
+    "Where does our story begin?" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "私たちの物語は、どこから始まりますか？"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "우리 이야기는 어디에서 시작될까요?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "我们的故事从哪里开始？"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "我們的故事從哪裡開始？"
+          }
+        }
+      }
+    },
+    "Which idea is strongest?" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "どのアイデアがいちばん有力ですか？"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "어떤 아이디어가 가장 좋을까요?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "哪个点子最好？"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "哪個點子最好？"
+          }
+        }
+      }
+    },
+    "Which moment would you like to remember?" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "どの瞬間を思い出したいですか？"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "어떤 순간을 떠올려 보고 싶으세요?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你想回忆哪个时刻？"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你想回憶哪個時刻？"
+          }
+        }
+      }
+    },
+    "Who is your character? Tell me their name and one thing they want." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "あなたのキャラクターは誰ですか？名前と、望んでいることを一つ教えてください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "어떤 캐릭터인가요? 이름과 그 캐릭터가 원하는 것 하나를 알려 주세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的角色是谁？说说名字，还有这个角色想要的一件事。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的角色是誰？說說名字，還有這個角色想要的一件事。"
+          }
+        }
+      }
+    },
+    "Who will you be talking to, and what do you need to say?" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "誰と話す予定ですか？そして、何を伝える必要がありますか？"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "누구와 이야기하게 되나요? 무엇을 말해야 하나요?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你要和谁谈？需要说些什么？"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你要和誰談？需要說些什麼？"
           }
         }
       }
@@ -17484,6 +20508,90 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "你"
+          }
+        }
+      }
+    },
+    "You have %lld characters, above the %lld limit; all remain usable, but remove some before creating more." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "キャラクターが%lldあり、上限の%lldを超えています。すべて引き続き使えますが、新しく作成する前にいくつか削除してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "캐릭터가 %lld개로 한도인 %lld개를 넘었습니다. 모두 계속 사용할 수 있지만, 더 만들기 전에 일부를 제거하십시오."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你有 %lld 个角色，超过了 %lld 个的上限；它们都仍可使用，但请先移除一些再新建。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你有 %lld 個角色，超過 %lld 個的上限；它們都仍可使用，但請先移除一些再建立新的。"
+          }
+        }
+      }
+    },
+    "You have %lld user templates, above the %lld limit; all remain usable, but remove some before creating more." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ユーザテンプレートが%lld個あり、上限の%lld個を超えています。すべて引き続き使えますが、新しく作成する前にいくつか削除してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "사용자 템플릿이 %lld개로 한도인 %lld개를 넘었습니다. 모두 계속 사용할 수 있지만, 더 만들기 전에 일부를 제거하십시오."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你有 %lld 个自定模板，超过了 %lld 个的上限；它们都仍可使用，但请先移除一些再新建。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你有 %lld 個使用者範本，超過 %lld 個的上限；它們都仍可使用，但請先移除一些再建立新的。"
+          }
+        }
+      }
+    },
+    "You have 200 or more characters. Edit or remove an existing character before adding another." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "キャラクターが200以上あります。追加する前に、既存のキャラクターを編集または削除してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "캐릭터가 200개 이상입니다. 다른 캐릭터를 추가하기 전에 기존 캐릭터를 편집하거나 제거하십시오."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你已有 200 个或更多角色。请先编辑或移除现有角色，再添加新的。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你已有 200 個以上的角色。請先編輯或移除現有角色，再加入新的角色。"
           }
         }
       }

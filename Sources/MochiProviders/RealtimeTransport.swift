@@ -53,6 +53,8 @@ final class RealtimeDeadline: @unchecked Sendable {
             }, onCancel: close)
     }
 }
+/// The connection reported itself cancelled while the reply was not: it closed underneath.
+struct RealtimeConnectionCancelled: Error {}
 struct RealtimeChannel {
     let send: ([String: Any]) async throws -> Void
     let receive: () async throws -> [String: Any]
@@ -67,10 +69,10 @@ struct RealtimeChannel {
         return RealtimeChannel(
             send: { event in
                 let bytes = try JSONSerialization.data(withJSONObject: event)
-                try await socket.send(.string(String(decoding: bytes, as: UTF8.self)))
+                try await surfacing { try await socket.send(.string(String(decoding: bytes, as: UTF8.self))) }
             },
             receive: {
-                let message = try await socket.receive()
+                let message = try await surfacing { try await socket.receive() }
                 let bytes: Data
                 switch message {
                 case .data(let data): bytes = data
@@ -86,5 +88,14 @@ struct RealtimeChannel {
                 socket.cancel(with: .goingAway, reason: nil)
                 session.invalidateAndCancel()
             })
+    }
+}
+extension RealtimeChannel {
+    /// A `CancellationError` from the connection is the reply's cancellation only when the reply was cancelled.
+    /// Otherwise it is a failed connection, which must be reported instead of passing silently as the user's choice.
+    static func surfacing<T>(_ operation: () async throws -> T) async throws -> T {
+        do { return try await operation() } catch is CancellationError where !Task.isCancelled {
+            throw RealtimeConnectionCancelled()
+        }
     }
 }

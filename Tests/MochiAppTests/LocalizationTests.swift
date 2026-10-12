@@ -44,6 +44,19 @@ final class LocalizationTests: XCTestCase {
         }
     }
 
+    func testEveryBuiltinTemplateIsTranslated() throws {
+        for language in Self.languages {
+            let bundle = try translations(language)
+            for t in ConversationTemplate.builtins {
+                for key in [t.title, t.description] {
+                    XCTAssertNotEqual(
+                        bundle.localizedString(forKey: key, value: nil, table: nil), key,
+                        "\(language) has no translation for \(key)")
+                }
+            }
+        }
+    }
+
     func testTranslatedPlaceholdersStillFormat() throws {
         for language in Self.languages {
             let format = try translations(language).localizedString(forKey: "%lld selected", value: nil, table: nil)
@@ -60,8 +73,11 @@ final class LocalizationTests: XCTestCase {
         named.customTitle = true
         named.title = "A new conversation"
         XCTAssertEqual(named.displayTitle, "A new conversation")
-        let restaurant = ConversationTemplate.builtins[0]
-        XCTAssertEqual(restaurant.displayTitle, restaurant.title)
+        // Display text is chosen per built-in; with no translation loaded it is the stored English, so a typo shows.
+        for t in ConversationTemplate.builtins {
+            XCTAssertEqual(t.displayTitle, t.title)
+            XCTAssertEqual(t.displayDescription, t.description)
+        }
         XCTAssertEqual(PracticePane.referenceKindLabel("Alloy · Codex voice"), "Alloy · Codex voice")
         XCTAssertEqual(PracticePane.referenceKindLabel(nil), "Reference")
     }

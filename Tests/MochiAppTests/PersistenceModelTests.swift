@@ -17,7 +17,7 @@ final class PersistenceModelTests: XCTestCase {
     @MainActor func testNewerLibraryNamesTheRealReasonAndIsNotOverwritten() throws {
         let root = makeTemporaryFolder()
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        let bytes = Data(#"{"version":4,"conversations":[],"expressions":[]}"#.utf8)
+        let bytes = Data(#"{"version":\#(Library.currentVersion + 1),"conversations":[],"expressions":[]}"#.utf8)
         try bytes.write(to: root.appendingPathComponent("library.json"))
         let app = makeApp(root: root)
         XCTAssertTrue(app.error?.contains("newer version of Mochi") == true, app.error ?? "no error")
@@ -105,7 +105,7 @@ final class PersistenceModelTests: XCTestCase {
         // An automation client holding the old revision is not rejected because the user typed.
         let result = try app.tools.execute(
             "save_expression",
-            arguments: ["conversation_id": id.uuidString, "expected_revision": revision, "english": "Let me think."],
+            arguments: ["conversation_id": id.uuidString, "expected_revision": revision, "text": "Let me think."],
             origin: .external)
         XCTAssertEqual(result["ok"] as? Bool, true)
     }

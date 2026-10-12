@@ -222,20 +222,28 @@ extension AppModel {
         }
     }
 
-    func previewBuiltIn(_ voice: String, options: OpenAIVoiceOptions? = nil) {
+    /// - Parameter settingsTab: the Settings tab that shows a failure; nil for a preview in a sheet, which shows
+    ///   `voicePreviewFailed` itself.
+    func previewBuiltIn(_ voice: String, options: OpenAIVoiceOptions? = nil, settingsTab: SettingsTab? = .voices) {
         // Previews are cached beside the library; an unreadable library folder must stay untouched.
         guard !busy, libraryReadable else { return }
+        voicePreviewFailed = false
         let service = settings.practiceService(voice: voice, options: options)
         let root = store.root
         let referenceAudio = speech.referenceAudio
-        previewEpoch = runExclusive("Preview voice", settingsTab: .voices) { [weak self] job in
-            guard let self else { return }
-            let url = try await referenceAudio(ReferenceSpeech.preview, service, root, false)
-            guard job.isCurrent() else { return }
-            job.finish()
-            play(url.lastPathComponent, settingsTab: .voices)
-            if playbackFile == url.lastPathComponent { previewEpoch = turn.epoch }
-        }
+        previewEpoch = runExclusive(
+            "Preview voice", settingsTab: settingsTab,
+            onFailure: { [weak self] in self?.voicePreviewFailed = true },
+            { [weak self] job in
+                guard let self else { return }
+                let url = try await referenceAudio(ReferenceSpeech.preview, service, root, false)
+                guard job.isCurrent() else { return }
+                job.finish()
+                play(
+                    url.lastPathComponent, afterPlaybackFailure: { [weak self] in self?.voicePreviewFailed = true },
+                    settingsTab: settingsTab)
+                if playbackFile == url.lastPathComponent { previewEpoch = turn.epoch }
+            })
     }
     var canImportReference: Bool { !busy && !help.english.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     func importReference() {

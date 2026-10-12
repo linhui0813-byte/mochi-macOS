@@ -173,7 +173,7 @@ import MochiKernel
     func commit(_ candidate: Library) throws {
         guard readable else { throw AppFailure("Your library is unavailable. No changes were saved.") }
         var normalized = candidate
-        normalized.version = 3
+        normalized.version = Library.currentVersion
         if !demo {
             try store.save(normalized)
             pendingSave?.cancel()
@@ -257,6 +257,7 @@ import MochiKernel
                 throw CancellationError()
             }
             let templateIDsBeforeImport = Set(library.conversationTemplates.map(\.id))
+            let charactersBeforeImport = library.characters.count
             var candidate = library
             do {
                 let count = try LibraryBackup.apply(prepared, to: &candidate)
@@ -266,7 +267,9 @@ import MochiKernel
                 LibraryBackup.discard(prepared, keeping: library)
                 return ConversationTemplate.importSummary(
                     conversations: count, imported: imported.conversationTemplates,
-                    merged: candidate.conversationTemplates, localIDs: templateIDsBeforeImport)
+                    merged: candidate.conversationTemplates, localIDs: templateIDsBeforeImport,
+                    addedCharacters: candidate.characters.count - charactersBeforeImport,
+                    characterCount: candidate.characters.count)
             } catch {
                 LibraryBackup.discard(prepared, keeping: library)
                 throw error

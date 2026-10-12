@@ -15,7 +15,7 @@ final class HistoryTests: XCTestCase {
                 .utf8)
         try legacy.write(to: store.file)
         var library = try store.load()
-        XCTAssertEqual(library.version, 3)
+        XCTAssertEqual(library.version, Library.currentVersion)
         XCTAssertFalse(library.conversations[0].pinned)
         XCTAssertEqual(library.conversations[0].draft, "")
         library.conversations[0].draft = "Unsaved thought"

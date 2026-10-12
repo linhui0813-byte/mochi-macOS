@@ -34,20 +34,28 @@ extension AppModel {
             id, instructions: instructions, preferences: preferences,
             characterName: library.conversations.first(where: { $0.id == id })?.characterName)
     }
-    /// The settings sheet's save. Oversized legacy instructions are kept unless the user edits them.
+    /// Saves these settings and keeps the conversation's others as they are.
     @discardableResult func setConversationInstructions(
         _ id: UUID, instructions: String, preferences: ConversationPreferences, characterName: String?
     ) -> Bool {
+        guard let chat = library.conversations.first(where: { $0.id == id }) else {
+            error = String(localized: "This conversation cannot be edited right now.")
+            return false
+        }
+        var draft = ConversationSettingsDraft(chat)
+        draft.instructions = instructions
+        draft.preferences = preferences
+        draft.characterName = characterName
+        return saveConversationSettings(id, draft)
+    }
+    /// The settings sheet's save: only what the draft changed is written, so stored text over a limit, or a voice
+    /// this version does not know, is kept unless the user edits it.
+    @discardableResult func saveConversationSettings(_ id: UUID, _ draft: some ConversationSettingsHolder) -> Bool {
         do {
             guard !busy, !practice, !history.isEditing,
                 let current = library.conversations.first(where: { $0.id == id && !$0.archived && !$0.isDeleted })
             else { throw AppFailure("This conversation cannot be edited right now.") }
-            let patch = ConversationSettingsPatch(
-                instructions: instructions == current.instructions ? nil : instructions,
-                characterName: characterName.map { .set($0) } ?? .clear,
-                speed: preferences.speed.map { .set($0) } ?? .clear,
-                coaching: preferences.coaching, language: preferences.language)
-            try updateConversationSettings(id, patch)
+            try updateConversationSettings(id, ConversationSettingsPatch(changing: current, to: draft))
             error = nil
             return true
         } catch {

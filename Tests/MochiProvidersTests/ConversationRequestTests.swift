@@ -5,6 +5,18 @@ import XCTest
 @testable import MochiProviders
 
 final class ConversationRequestTests: XCTestCase {
+    func testPersonalityReachesTheConversationPromptOnly() {
+        let request = ConversationRequest(
+            history: [], text: "Hi", instructions: "Tell a story", characterName: "Pip", personality: "Playful.")
+        XCTAssertTrue(request.resolvedInstructions.contains("Personality and manner"))
+        XCTAssertTrue(request.resolvedInstructions.contains("Playful."))
+        var help = request
+        help.help = true
+        XCTAssertFalse(help.resolvedInstructions.contains("Playful."))
+        var reference = request
+        reference.reference = true
+        XCTAssertFalse(reference.resolvedInstructions.contains("Playful."))
+    }
     func testPromptIsolationAndPrecedence() {
         let chat = ConversationRequest(history: [], text: "hello", instructions: "Give longer answers")
         XCTAssertTrue(chat.resolvedInstructions.contains("Give longer answers"))
@@ -105,5 +117,28 @@ extension ConversationRequestTests {
         let reply = ConversationRequest(history: [], text: "hi", userName: "Ana", preferences: preferences)
         XCTAssertTrue(reply.resolvedInstructions.contains("Speak only Japanese."))
         XCTAssertTrue(reply.resolvedInstructions.contains(#""Ana""#))
+    }
+
+    /// A greeting is usually a question to the listener. Sent as the user's message, the model answers it instead of
+    /// saying it, so reading aloud sends no message: the line is in the instructions, marked as the model's own.
+    @MainActor func testReadingAloudGivesTheModelALineToSayNotAMessageToAnswer() async throws {
+        let line = "What shall we brainstorm? Tell me what the ideas are for."
+        for reference in [true, false] {
+            var sent: [[String: Any]] = []
+            var events: [[String: Any]] = [
+                ["type": "session.created"], ["type": "session.updated"],
+                ["type": "response.output_text.delta", "delta": line],
+                ["type": "response.done", "response": ["status": "completed"]],
+            ]
+            let channel = RealtimeChannel(send: { sent.append($0) }, receive: { events.removeFirst() }, close: {})
+            _ = try await RealtimeService(model: "test-model").reply(
+                ConversationRequest(history: [], text: line, reference: reference), credential: { "session" },
+                connect: { _ in channel })
+            let instructions = (sent.first?["session"] as? [String: Any])?["instructions"] as? String ?? ""
+            let messages = sent.filter { $0["type"] as? String == "conversation.item.create" }
+            XCTAssertEqual(messages.count, reference ? 0 : 1)
+            XCTAssertEqual(instructions.contains("«\(line)»"), reference)
+            XCTAssertEqual(sent.last?["type"] as? String, "response.create")
+        }
     }
 }

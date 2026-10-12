@@ -1,10 +1,23 @@
 import AppKit
+import MochiKernel
 import SwiftUI
 
 /// Close and ⌘Q retain the workspace; Quit Mochi Completely terminates.
 @MainActor final class TrayController: NSObject, NSWindowDelegate, NSMenuDelegate {
+    /// The workspace window's scene.
+    static let workspaceWindowID = "main"
     private(set) var statusItem: NSStatusItem?
     private(set) var window: NSWindow?
+    /// SwiftUI's action that creates the workspace window, which the app's commands provide once SwiftUI builds them.
+    var openWorkspace: (() -> Void)? {
+        didSet { if openPending { openWorkspaceIfUnopened() } }
+    }
+    /// A request to open the workspace that arrived before SwiftUI provided the action.
+    private var openPending = false
+    /// Takes SwiftUI's action for opening windows, the only way to create the workspace window.
+    func adopt(_ openWindow: OpenWindowAction) {
+        openWorkspace = { openWindow(id: Self.workspaceWindowID) }
+    }
     private(set) var menu: NSMenu?
     /// Set by install(), which creates the status item the menu is shown from.
     var presentMenu: (NSMenu, NSEvent, NSView) -> Void = { _, _, _ in }
@@ -95,8 +108,26 @@ import SwiftUI
         NSApp.setActivationPolicy(.accessory)
     }
 
+    /// Has SwiftUI create the workspace window when there is none, as after a launch that restored a session which
+    /// ended with the window hidden here: AppKit restores no window, and SwiftUI then opens none of its own. The new
+    /// window attaches itself. Returns whether one was asked for; without SwiftUI's action yet, the request waits.
+    @discardableResult func openWorkspaceIfUnopened() -> Bool {
+        openPending = false
+        guard window == nil else { return false }
+        guard let openWorkspace else {
+            openPending = true
+            MochiLog.app.error("The workspace window is not open; it opens once SwiftUI provides the action")
+            return false
+        }
+        openWorkspace()
+        return true
+    }
+
     @objc func showWindow() {
-        guard let window else { return }
+        guard let window else {
+            if openWorkspaceIfUnopened() { NSApp.activate() }
+            return
+        }
         NSApp.setActivationPolicy(.regular)
         NSApp.unhide(nil)
         if window.isMiniaturized { window.deminiaturize(nil) }

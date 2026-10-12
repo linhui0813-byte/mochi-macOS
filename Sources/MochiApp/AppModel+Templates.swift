@@ -30,17 +30,40 @@ extension AppModel {
         guard canOpenConversationInstructions else { return }
         customization.showTemplates(.manager)
     }
+    /// Saves the editor's draft over the template it edits, or as a new one, then closes the editor. Every setting
+    /// the editor shows is saved: replacing changes what differs from the stored template, including a cleared one.
+    func saveTemplateDraft(asNew: Bool) throws {
+        guard let draft = customization.templateDraft else { return }
+        let value = draft.value
+        if draft.editingID != nil && !asNew, let id = draft.editingID, let revision = draft.expectedRevision {
+            let patch = ConversationTemplate.Patch(
+                title: value.title, description: value.description,
+                settings: ConversationSettingsPatch(changing: try templates.template(id: id), to: value))
+            _ = try templates.update(id: id, revision: revision, patch)
+        } else {
+            let patch = ConversationTemplate.Patch(
+                title: value.title, description: value.description,
+                settings: ConversationSettingsPatch(changing: ConversationTemplate(title: ""), to: value))
+            _ = try templates.create(patch)
+        }
+        customization.closeTemplateEditor()
+    }
+    /// The template the open conversation started from, while the conversation is still empty and the template
+    /// exists, so the empty conversation can say what it is for.
+    var starterTemplate: ConversationTemplate? {
+        guard writableConversation, let chat = conversation, chat.messages.isEmpty, let id = chat.sourceTemplateID
+        else { return nil }
+        return templates.all.first { $0.id == id }
+    }
     func saveConversationAsTemplate(_ id: UUID, draft: ConversationSettingsDraft? = nil) {
         guard !busy, !practice, !history.isEditing, customization.templatePresentation == nil,
+            customization.characterPresentation == nil,
             customization.instructionsID == nil || draft?.id == customization.instructionsID,
             let chat = library.conversations.first(where: { $0.id == id && !$0.archived && !$0.isDeleted })
         else { return }
-        let t = ConversationTemplate(
-            title: chat.title, characterName: draft?.characterName ?? chat.characterName,
-            instructions: draft?.instructions ?? chat.instructions, preferences: draft?.preferences ?? chat.preferences)
-        // A nil draft name is an intentional reset, not a request to inherit the saved name.
-        var copy = t
-        if let draft { copy.characterName = draft.characterName }
-        customization.editNewTemplate(copy, retaining: draft)
+        // An unsaved draft wins whole, including what it cleared: a nil name there is a reset, not "inherit".
+        var t = ConversationTemplate(title: chat.title)
+        if let draft { t.adoptSettings(from: draft) } else { t.adoptSettings(from: chat) }
+        customization.editNewTemplate(t, retaining: draft)
     }
 }

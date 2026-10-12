@@ -2,7 +2,9 @@ import CoreFoundation
 import Foundation
 import MochiKernel
 
-/// A deliberately pinned MCP 2025-06-18 stdio server, independent of app/UI lifetimes.
+/// A deliberately pinned MCP stdio server for the handshake revisions up to 2025-11-25, independent of app/UI
+/// lifetimes. A client of the stateless 2026 revisions probes with `server/discover`, is told the method is not
+/// found, and falls back to `initialize`.
 public final class MochiMCPProtocol {
     private var initialized = false, ready = false
     private let clientID = UUID().uuidString
@@ -59,13 +61,15 @@ public final class MochiMCPProtocol {
                 client["version"] is String, params["capabilities"] is [String: Any]
             else { return error(-32602, "Invalid initialization.") }
             initialized = true
-            let supported = ["2025-06-18", "2025-03-26", "2024-11-05"]
             result = [
-                "protocolVersion": supported.contains(requested) ? requested : "2025-06-18",
+                "protocolVersion": Self.supportedVersions.contains(requested) ? requested : Self.supportedVersions[0],
                 "capabilities": ["tools": ["listChanged": false]],
-                "serverInfo": ["name": "mochi", "version": Self.version],
+                "serverInfo": [
+                    "name": "mochi", "title": "Mochi", "version": Self.version,
+                    "description": "Conversation practice in the running Mochi app on this Mac.",
+                ],
                 "instructions":
-                    "Control the running Mochi app. External control must be enabled in Settings. Read get_session before conversation mutations and pass its revision as expected_revision. Scope conversation operations to the open conversation. Template tools (*_conversation_template) work without an open conversation, use template_id and expected_template_revision, and do not accept expected_revision. Recording is always user initiated. "
+                    "Control the running Mochi app. External control must be enabled in Settings. Read get_session before conversation mutations and pass its revision as expected_revision; every result returns the new revision. Conversation tools act on the open conversation; open_conversation, rename_conversation and archive_conversation take any active conversation ID from list_conversations. Template tools (*_conversation_template) work without an open conversation, use template_id and expected_template_revision, and do not accept expected_revision. list_characters reads the user's characters; copy a character's name, personality and voice into a conversation or template to use it. A failed call explains what to change before retrying. Recording is always user initiated. "
                     + MochiTools.untrustedTextNotice,
             ]
         case "ping": result = [:]
@@ -82,14 +86,22 @@ public final class MochiMCPProtocol {
             guard MochiTools.catalog(origin: .external).contains(where: { $0.name.rawValue == name }) else {
                 return error(-32602, "Unknown tool name.")
             }
-            do { _ = try MochiTools.validate(name: name, arguments: arguments, origin: .external) } catch let failure {
-                return error(-32602, AppFailure.message(for: failure, fallback: "Invalid tool arguments."))
+            // Invalid arguments are a tool error, not a protocol error, so the model sees why and can correct them.
+            do {
+                _ = try MochiTools.validate(name: name, arguments: arguments, origin: .external)
+                result = callTool(name, arguments: arguments, id: requestID)
+            } catch let failure {
+                result = Self.toolError(AppFailure.message(for: failure, fallback: "Invalid tool arguments."))
             }
-            result = callTool(name, arguments: arguments, id: requestID)
         default: return error(-32601, "Method not found.")
         }
         return try? JSONSerialization.data(
             withJSONObject: ["jsonrpc": "2.0", "id": id, "result": result], options: [.sortedKeys])
+    }
+    /// Newest first; a client asking for any other revision is offered the newest.
+    static let supportedVersions = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"]
+    private static func toolError(_ message: String) -> [String: Any] {
+        ["content": [["type": "text", "text": message]], "isError": true]
     }
     /// Notifications are never answered; a malformed one is discarded without changing state.
     private func notify(_ method: String, params: Any?) {
@@ -115,6 +127,8 @@ public final class MochiMCPProtocol {
         id is String ? "Request ID is too long." : "Invalid request ID."
     }
     /// Forwards a validated call to the app; bridge failures become tool errors, diagnosed on stderr.
+    /// A successful result is returned twice: as `structuredContent` matching the tool's output schema, and as its
+    /// serialized text for clients that read only text.
     private func callTool(_ name: String, arguments: [String: Any], id: Any) -> [String: Any] {
         do {
             let payload: [String: Any] = [
@@ -125,20 +139,15 @@ public final class MochiMCPProtocol {
             guard let object = try JSONSerialization.jsonObject(with: response) as? [String: Any] else {
                 throw AppFailure("Invalid app control response.")
             }
-            return [
-                "content": [["type": "text", "text": try MochiTools.encode(object)]],
-                "isError": object["ok"] as? Bool != true,
+            let succeeded = object["ok"] as? Bool == true
+            var result: [String: Any] = [
+                "content": [["type": "text", "text": try MochiTools.encode(object)]], "isError": !succeeded,
             ]
+            if succeeded { result["structuredContent"] = object }
+            return result
         } catch {
             diagnostics("mochi-mcp: \(name) failed: \(String(describing:error))")
-            return [
-                "content": [
-                    [
-                        "type": "text",
-                        "text": AppFailure.message(for: error, fallback: "Mochi could not execute this action."),
-                    ]
-                ], "isError": true,
-            ]
+            return Self.toolError(AppFailure.message(for: error, fallback: "Mochi could not execute this action."))
         }
     }
 }

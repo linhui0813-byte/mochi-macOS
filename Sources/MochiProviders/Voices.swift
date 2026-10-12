@@ -1,13 +1,9 @@
 import CryptoKit
 import Foundation
 
-public enum RealtimeVoice: String, CaseIterable, Codable, Identifiable {
-    case marin, cedar, alloy, ash, ballad, coral, echo, sage, shimmer, verse
-    public var id: String { rawValue }
-    public var name: String { rawValue.capitalized }
-}
-
 public enum ReferenceSpeech {
+    /// Generated speech did not read the requested text exactly, or was cut off; retrying may succeed.
+    public struct Mismatch: Error { public init() {} }
     public static let preview = "I would like a little more time to think. Then I can explain what I mean."
     public static func matches(_ expected: String, _ actual: String) -> Bool {
         func words(_ text: String) -> String {

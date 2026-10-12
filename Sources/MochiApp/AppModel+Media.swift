@@ -7,7 +7,7 @@ extension AppModel {
     var microphoneLabel: String {
         if turn.activity == .recording { return String(localized: "Finish Recording") }
         if greetingActive { return String(localized: "Skip Greeting and Start Recording") }
-        return conversation?.voiceIntroduced == true
+        return conversation?.greetsBeforeRecording == false
             ? String(localized: "Record Voice Message") : String(localized: "Start Voice Conversation")
     }
     func cancelRecording() {
@@ -21,6 +21,17 @@ extension AppModel {
             return
         }
         play(file, mochi: mochi)
+    }
+    /// Ends playback the way Stop does, with the view change scheduled after it, but leaves transcriptions,
+    /// recordings and the Help draft alone.
+    func stopPlayback() {
+        guard turn.activity == .playing else { return }
+        deferredToolAction = nil
+        greetingActive = false
+        audio.stop()
+        playbackFile = nil
+        speaking = false
+        turn.stop()
     }
     func seekPlayback(_ file: String, to seconds: Double, mochi: Bool = false) {
         guard seconds.isFinite else { return }

@@ -24,6 +24,30 @@ final class TrayControllerTests: XCTestCase {
         XCTAssertTrue(tray.windowShouldClose(first))
     }
 
+    /// A launch that restores a session which ended with the window hidden in the menu bar creates no window at all.
+    /// The tray then has SwiftUI open it, as soon as SwiftUI provides the action, and leaves an existing window alone.
+    @MainActor func testAWindowNeverOpenedIsOpenedThroughSwiftUI() {
+        let tray = TrayController()
+        var opened = 0
+        XCTAssertFalse(tray.openWorkspaceIfUnopened(), "Without SwiftUI's action there is nothing to open it with yet")
+        tray.openWorkspace = { opened += 1 }
+        XCTAssertEqual(opened, 1, "The waiting request opens the window once the action arrives")
+        tray.openWorkspace = { opened += 1 }
+        XCTAssertEqual(opened, 1, "SwiftUI provides the action again with every menu update; one request opens once")
+        XCTAssertTrue(tray.openWorkspaceIfUnopened())
+        XCTAssertEqual(opened, 2)
+        tray.attach(window(), model: makeApp(demo: true))
+        XCTAssertFalse(tray.openWorkspaceIfUnopened())
+        XCTAssertEqual(opened, 2)
+    }
+
+    /// Launches never restore the last session's windows, so one that ended hidden in the menu bar cannot leave the
+    /// next launch without a window.
+    @MainActor func testLaunchesIgnoreRestoredWindows() {
+        MochiApp.ignoreRestoredWindows()
+        XCTAssertTrue(UserDefaults.standard.bool(forKey: "ApplePersistenceIgnoreState"))
+    }
+
     @MainActor func testFinishingWorkReportsAFailedSave() {
         let root = makeTemporaryFolder()
         let app = makeApp(root: root)

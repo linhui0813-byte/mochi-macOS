@@ -43,7 +43,7 @@ import XCTest
         XCTAssertFalse(app.practice, "Nothing to find words in")
         XCTAssertThrowsError(
             try app.tools.executeVoice(
-                "save_expression", arguments: ["conversation_id": app.selectedID!.uuidString, "english": "Hi"],
+                "save_expression", arguments: ["conversation_id": app.selectedID!.uuidString, "text": "Hi"],
                 operationID: UUID()))
         XCTAssertTrue(app.library.expressions.isEmpty)
     }

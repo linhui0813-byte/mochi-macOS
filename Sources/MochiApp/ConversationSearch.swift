@@ -44,8 +44,8 @@ private struct ConversationSearchField: NSViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(app: app) }
     func makeNSView(context: Context) -> FocusableSearchField {
         let field = FocusableSearchField()
-        field.placeholderString = "Search this conversation"
-        field.setAccessibilityLabel("Search this conversation")
+        field.placeholderString = String(localized: "Search this conversation")
+        field.setAccessibilityLabel(String(localized: "Search this conversation"))
         field.sendsSearchStringImmediately = true
         field.delegate = context.coordinator
         field.target = context.coordinator

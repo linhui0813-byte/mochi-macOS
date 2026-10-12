@@ -13,6 +13,8 @@ public final class LibraryStore {
         "library.json", "library.previous.json", "library-v1-backup.json", "library-before-help-transcription.json",
         "library-before-conversation-instructions.json",
     ]
+    /// Names the copies of a version-3 library kept before its first version-4 save.
+    public static let characterLibraryBackupPrefix = "library-before-character-library-v4"
     private struct FileIdentity: Equatable {
         let device: Int32
         let inode: UInt64
@@ -64,7 +66,7 @@ public final class LibraryStore {
         let before = identity(file)
         let data = try Data(contentsOf: file)
         var library = try JSONDecoder().decode(Library.self, from: data)
-        guard (1...3).contains(library.version) else {
+        guard (1...Library.currentVersion).contains(library.version) else {
             throw AppFailure(
                 "This library was created by a newer version of Mochi. Update Mochi to open it; your data has not been changed."
             )
@@ -72,20 +74,24 @@ public final class LibraryStore {
         try library.validate()
         remember(before == identity(file) ? before : nil, version: library.version)
         library.interruptPendingTranscriptions()
-        library.version = 3
+        library.version = Library.currentVersion
         return library
     }
     /// Loads the copy kept before the most recent save, for recovery when `library.json` is unreadable.
-    public func loadPrevious() throws -> Library {
+    public func loadPrevious() throws -> Library { try readPrevious().library }
+    /// The earlier copy as it is stored, and as Mochi opens it.
+    private func readPrevious() throws -> (original: Data, storedVersion: Int, library: Library) {
         guard identity(previousFile) != nil else { throw AppFailure("No earlier copy of the library is available.") }
-        var library = try JSONDecoder().decode(Library.self, from: Data(contentsOf: previousFile))
-        guard (1...3).contains(library.version) else {
+        let original = try Data(contentsOf: previousFile)
+        var library = try JSONDecoder().decode(Library.self, from: original)
+        guard (1...Library.currentVersion).contains(library.version) else {
             throw AppFailure("The earlier copy was created by a newer version of Mochi.")
         }
         try library.validate()
+        let storedVersion = library.version
         library.interruptPendingTranscriptions()
-        library.version = 3
-        return library
+        library.version = Library.currentVersion
+        return (original, storedVersion, library)
     }
     /// Recordings the earlier copy names. Restore Earlier Copy can reinstate them, so none may be removed while named here.
     /// An unreadable earlier copy cannot be restored and protects nothing.
@@ -102,7 +108,11 @@ public final class LibraryStore {
     /// Keeps an unreadable library under a second name (never deleting it) and atomically reinstates the earlier copy,
     /// so `library.json` always names one of the two.
     public func restorePrevious() throws -> Library {
-        let library = try loadPrevious()
+        let (original, storedVersion, library) = try readPrevious()
+        // The earlier copy is about to become the library, so its own bytes get the backups any upgrade keeps.
+        // Without them, the next save would replace `library.previous.json` and lose an older format's bytes.
+        try keepMigrationBackups(
+            of: original, version: storedVersion, usesHelpOrTranscription: library.usesHelpOrTranscription)
         var aside: URL?
         if FileManager.default.fileExists(atPath: file.path) {
             let url = root.appendingPathComponent(
@@ -176,7 +186,9 @@ public final class LibraryStore {
     /// `replacingUnreadable` installs over a file already kept elsewhere: it is neither read nor kept as the earlier copy.
     private func write(_ library: Library, replacingUnreadable: Bool) throws {
         try prepare()
-        guard (1...3).contains(library.version) else { throw AppFailure("Unsupported library version.") }
+        guard (1...Library.currentVersion).contains(library.version) else {
+            throw AppFailure("Unsupported library version.")
+        }
         do { try library.validate() } catch {
             throw AppFailure(
                 "Mochi found an inconsistency in your library and did not save it. Your saved library is unchanged.",
@@ -184,14 +196,12 @@ public final class LibraryStore {
                     reason: (error as? AppFailure)?.message ?? String(describing: error)))
         }
         var library = library
-        library.version = 3
-        let usesHelpOrTranscription = library.conversations.contains(where: {
-            $0.helpDraft != nil || $0.messages.contains(where: { $0.transcriptionState != nil })
-        })
+        library.version = Library.currentVersion
+        let usesHelpOrTranscription = library.usesHelpOrTranscription
         let current = replacingUnreadable ? nil : identity(file)
         let settled =
             known.map {
-                $0.identity == current && $0.version == 3 && $0.instructionsBackup
+                $0.identity == current && $0.version == Library.currentVersion && $0.instructionsBackup
                     && ($0.featureBackup || !usesHelpOrTranscription)
             } ?? false
         if current != nil && !settled { try settleMigrationBackups(usesHelpOrTranscription: usesHelpOrTranscription) }
@@ -205,7 +215,7 @@ public final class LibraryStore {
         guard Darwin.rename(staging.path, file.path) == 0 else {
             throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
         }
-        remember(identity(file), version: 3)
+        remember(identity(file), version: Library.currentVersion)
     }
     /// Re-reads a library that Mochi has not written itself and preserves pre-upgrade copies before replacing it.
     private func settleMigrationBackups(usesHelpOrTranscription: Bool) throws {
@@ -216,23 +226,18 @@ public final class LibraryStore {
                 "The library file was changed outside Mochi and cannot be read, so Mochi did not overwrite it.",
                 underlying: error)
         }
-        guard (1...3).contains(existing.version) else {
+        guard (1...Library.currentVersion).contains(existing.version) else {
             throw AppFailure(
                 "The library file on disk was written by a newer version of Mochi, so Mochi did not overwrite it.")
         }
-        if existing.version < 3 {
-            let base = root.appendingPathComponent("library-before-character-templates-v3.json")
-            let backupExists = FileManager.default.fileExists(atPath: base.path)
-            let backupMatches = backupExists ? try Data(contentsOf: base) == original : false
-            if !backupMatches {
-                let destination =
-                    FileManager.default.fileExists(atPath: base.path)
-                    ? root.appendingPathComponent(
-                        "library-before-character-templates-v3-\(Int(Date().timeIntervalSince1970))-\(UUID().uuidString).json"
-                    ) : base
-                try writeNewPrivateFile(original, to: destination)
-            }
-        }
+        try keepMigrationBackups(
+            of: original, version: existing.version, usesHelpOrTranscription: usesHelpOrTranscription)
+    }
+    /// Keeps the bytes of a library written in `version` before Mochi replaces it. Each format upgrade keeps the
+    /// bytes from just before it under its own name, so its thresholds are historical and never move.
+    private func keepMigrationBackups(of original: Data, version: Int, usesHelpOrTranscription: Bool) throws {
+        if version < 3 { try keepUpgradeBackup(original, named: "library-before-character-templates-v3") }
+        if version == 3 { try keepUpgradeBackup(original, named: Self.characterLibraryBackupPrefix) }
         let instructionsBackup = root.appendingPathComponent("library-before-conversation-instructions.json")
         if !FileManager.default.fileExists(atPath: instructionsBackup.path) {
             try writeNewPrivateFile(original, to: instructionsBackup)
@@ -242,9 +247,20 @@ public final class LibraryStore {
             try writeNewPrivateFile(original, to: featureBackup)
         }
         let backup = root.appendingPathComponent("library-v1-backup.json")
-        if existing.version == 1 && !FileManager.default.fileExists(atPath: backup.path) {
+        if version == 1 && !FileManager.default.fileExists(atPath: backup.path) {
             try writeNewPrivateFile(original, to: backup)
         }
+    }
+    /// `name.json` holds the first such copy; a later, different one gets a unique sibling, so none is replaced.
+    private func keepUpgradeBackup(_ original: Data, named name: String) throws {
+        let base = root.appendingPathComponent("\(name).json")
+        let backupExists = FileManager.default.fileExists(atPath: base.path)
+        if backupExists, try Data(contentsOf: base) == original { return }
+        let destination =
+            backupExists
+            ? root.appendingPathComponent("\(name)-\(Int(Date().timeIntervalSince1970))-\(UUID().uuidString).json")
+            : base
+        try writeNewPrivateFile(original, to: destination)
     }
     /// Keeps the file about to be replaced as `library.previous.json`. Losing this copy never blocks a save.
     private func keepPrevious() {

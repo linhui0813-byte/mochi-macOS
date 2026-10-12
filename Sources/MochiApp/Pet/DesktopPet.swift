@@ -124,7 +124,7 @@ import MochiCore
         // Closing the workspace to the tray hides the app; she stays.
         panel.canHide = false
         panel.isReleasedWhenClosed = false
-        panel.title = "Desktop Mochi"
+        panel.title = String(localized: "Desktop Mochi")
         let view = PetView(frame: NSRect(origin: .zero, size: Self.size))
         view.pet = self
         panel.contentView = view

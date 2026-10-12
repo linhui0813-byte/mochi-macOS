@@ -133,6 +133,8 @@ struct MessageDeletionUndo {
     var playbackFile: String?
     /// The turn a voice preview owns, first while it is generated, then while it plays.
     var previewEpoch: UUID?
+    /// True when the last voice preview failed; its message is in `error`. A sheet shows it beside its Preview button.
+    var voicePreviewFailed = false
     var speaking = false
     var slow = false
     var settingsOpen = false

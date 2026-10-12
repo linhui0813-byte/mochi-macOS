@@ -21,6 +21,13 @@ SOURCES = ROOT / "Sources"
 # The MCP helper ships no translations; tests and generated files are outside Sources and never ship.
 UNTRANSLATED_MODULES = {"MochiMCP"}
 SPECIFIER = re.compile(r"%(?:(\d+)\$)?(@|lld|lf)")
+# AppKit takes plain strings, so the compiler extracts no literal handed to it and the text would show in English.
+APPKIT_TEXT = re.compile(
+    r"(?:\.(?:placeholderString|toolTip|title|messageText|informativeText|prompt|message|nameFieldLabel|label"
+    r"|paletteLabel)\s*=|setAccessibility(?:Label|Title|Help|Value|RoleDescription)\(|(?:addButton|addItem|insertItem)"
+    r"\(withTitle:|NSMenu(?:Item)?\(title:)\s*\"((?:[^\"\\]|\\.)*)\"")
+# The product name reads the same in every language.
+UNTRANSLATED_TEXT = {"Mochi"}
 
 
 def specifiers(text):
@@ -71,6 +78,37 @@ def source_keys(folder, sources=SOURCES):
     return keys
 
 
+def released(text):
+    """The source as a release build compiles it: lines under `#if MOCHI_DEVELOPMENT` are blanked, so line numbers
+    still match the file."""
+    lines, development = [], []
+    for line in text.split("\n"):
+        directive = line.split("//")[0].strip()
+        if directive.startswith("#if"):
+            development.append(directive == "#if MOCHI_DEVELOPMENT")
+        elif directive.startswith("#else") and development:
+            development[-1] = False
+        elif directive == "#endif" and development:
+            development.pop()
+        lines.append("" if any(development) else line)
+    return "\n".join(lines)
+
+
+def literal_problems(sources=SOURCES):
+    """AppKit text set from a string literal, which no translation reaches."""
+    problems = []
+    for path in sorted(sources.rglob("*.swift")):
+        relative = path.relative_to(sources)
+        if relative.parts[0] in UNTRANSLATED_MODULES:
+            continue
+        text = released(path.read_text())
+        for match in APPKIT_TEXT.finditer(text):
+            if re.search(r"[A-Za-z]", match.group(1)) and match.group(1) not in UNTRANSLATED_TEXT:
+                line = text.count("\n", 0, match.start()) + 1
+                problems.append(f"{relative}:{line}: AppKit shows {match.group(1)!r} untranslated; use String(localized:)")
+    return problems
+
+
 def translation_problems(key, entry):
     if entry.get("shouldTranslate") is False:
         return []
@@ -118,6 +156,7 @@ def check(folder, catalog_path=CATALOG, info_plist_path=INFO_PLIST_CATALOG, buil
         raise ValueError("\n".join(clashes))
     keys = source_keys(folder)
     problems = catalog_problems(keys, json.loads(Path(catalog_path).read_text()))
+    problems += literal_problems()
     problems += info_plist_problems(json.loads(Path(info_plist_path).read_text()), Path(build_script).read_text())
     if any(problem.startswith("stale") for problem in problems):
         problems.append(

@@ -154,11 +154,24 @@ import MochiProviders
         }
         self.shortcuts = shortcuts
     }
-    /// Mochi's conversation voice, optionally at one conversation's own speed.
-    func conversationService(speed: Double? = nil) -> RealtimeService {
+    /// Mochi's conversation voice, optionally with one conversation's own speed and voice. A voice this version does
+    /// not support is replaced by the Settings voice, so an imported choice never fails a reply.
+    func conversationService(speed: Double? = nil, voice: String? = nil) -> RealtimeService {
         var options = conversationVoiceOptions
         if let speed { options.speed = speed }
-        return RealtimeService(model: effectiveModelName, voice: conversationVoice, options: options)
+        let supported = voice.flatMap(RealtimeVoice.init(rawValue:))?.rawValue
+        if voice != nil, supported == nil {
+            MochiLog.app.notice("A conversation's voice is not available in this version; using the Settings voice")
+        }
+        return RealtimeService(model: effectiveModelName, voice: supported ?? conversationVoice, options: options)
+    }
+    /// The service that speaks for `chat`: its own speed and voice over the Settings ones.
+    func conversationService(for chat: Conversation?) -> RealtimeService {
+        conversationService(speed: chat?.preferences.speed, voice: chat?.preferences.voice)
+    }
+    /// The name of the voice a conversation without its own voice uses.
+    var conversationVoiceName: String {
+        RealtimeVoice(rawValue: conversationVoice)?.name ?? RealtimeService.defaultVoice.capitalized
     }
     /// The voice for practice examples, or another voice being previewed.
     func practiceService(voice: String? = nil, options: OpenAIVoiceOptions? = nil) -> RealtimeService {

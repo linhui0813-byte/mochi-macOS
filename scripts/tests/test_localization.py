@@ -81,5 +81,36 @@ class LocalizationTests(unittest.TestCase):
                     {"source": str(source), "tables": {"Localizable": [{"key": key}]}}))
             self.assertEqual(localization.source_keys(extracted, sources), {"Shipped", "Core"})
 
+    def test_appkit_text_from_a_literal_is_refused_where_it_ships(self):
+        with tempfile.TemporaryDirectory() as d:
+            sources = Path(d)
+            for path, text in (
+                ("MochiApp/Search.swift", "\n".join((
+                    'field.placeholderString = "Search this conversation"',
+                    'field.setAccessibilityLabel(String(localized: "Search this conversation"))',
+                    "alert.messageText =",
+                    '    "Could not save"',
+                    'item.button?.toolTip = "Mochi"',
+                    'if item.title == "Stop" { field.stringValue = "" }',
+                    "#if MOCHI_DEVELOPMENT",
+                    '    window.title = "Smoke only"',
+                    "    #if DEBUG",
+                    '        window.title = "Nested smoke only"',
+                    "    #endif",
+                    "#else",
+                    '    menu.addItem(withTitle: "Shipped", action: nil, keyEquivalent: "")',
+                    "#endif",
+                    'panel.title = "After the block"',
+                ))),
+                ("MochiMCP/main.swift", 'panel.title = "Helper only"'),
+            ):
+                (sources / path).parent.mkdir(parents=True, exist_ok=True)
+                (sources / path).write_text(text)
+            problems = localization.literal_problems(sources)
+            self.assertEqual([problem.split(": ")[0] for problem in problems], [
+                "MochiApp/Search.swift:1", "MochiApp/Search.swift:3", "MochiApp/Search.swift:13",
+                "MochiApp/Search.swift:15"])
+            self.assertIn("'Search this conversation'", problems[0])
+
 if __name__ == "__main__":
     unittest.main()

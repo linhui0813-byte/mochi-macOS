@@ -36,10 +36,17 @@ final class MCPTests: XCTestCase {
         let tools = (list["result"] as! [String: Any])["tools"] as! [[String: Any]]
         XCTAssertEqual(tools.count, MochiTools.catalog(origin: .external).count)
         XCTAssertFalse(tools.contains { ($0["name"] as? String ?? "").contains("record") })
+        XCTAssertTrue(tools.allSatisfy { $0["title"] is String && $0["outputSchema"] is [String: Any] })
         let call = try response(
             server,
             ["jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": ["name": "get_session", "arguments": [:]]])
-        XCTAssertEqual((call["result"] as? [String: Any])?["isError"] as? Bool, false)
+        let result = try XCTUnwrap(call["result"] as? [String: Any])
+        XCTAssertEqual(result["isError"] as? Bool, false)
+        XCTAssertEqual(result["structuredContent"] as? NSDictionary, ["ok": true, "revision": "current"])
+        let text = try XCTUnwrap(((result["content"] as? [[String: Any]])?.first)?["text"] as? String)
+        XCTAssertEqual(
+            try JSONSerialization.jsonObject(with: Data(text.utf8)) as? NSDictionary,
+            ["ok": true, "revision": "current"])
         XCTAssertEqual(count, 1)
         XCTAssertNotNil(try response(server, ["jsonrpc": "2.0", "id": 4, "method": "server/discover"])["error"])
         XCTAssertNotNil(server.respond(Data("invalid".utf8)))
@@ -71,7 +78,7 @@ final class MCPTests: XCTestCase {
     }
 }
 extension MCPTests {
-    func testInvalidIDsAndToolArgumentsAreProtocolErrors() throws {
+    func testInvalidIDsAndUnknownToolsAreProtocolErrorsButInvalidArgumentsAreToolErrors() throws {
         let server = MochiMCPProtocol { _ in
             XCTFail("Invalid request reached app")
             return Data()
@@ -92,11 +99,27 @@ extension MCPTests {
             ])
         _ = server.respond(
             try JSONSerialization.data(withJSONObject: ["jsonrpc": "2.0", "method": "notifications/initialized"]))
-        for params: [String: Any] in [
-            ["name": "unknown"], ["name": "get_messages", "arguments": ["conversation_id": "invalid"]],
-        ] {
+        for params: [String: Any] in [["name": "unknown"], ["name": "get_session", "arguments": [1]]] {
             let reply = try response(server, ["jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": params])
             XCTAssertEqual((reply["error"] as? [String: Any])?["code"] as? Int, -32602)
+        }
+        // The model sees why a call was refused, so it can correct the arguments and retry.
+        for (arguments, reason) in [
+            (["conversation_id": "invalid"], "Invalid ID: conversation_id."),
+            (["conversation_id": UUID().uuidString, "limt": 5], "Unexpected argument limt."),
+        ] as [([String: Any], String)] {
+            let reply = try response(
+                server,
+                [
+                    "jsonrpc": "2.0", "id": 3, "method": "tools/call",
+                    "params": ["name": "get_messages", "arguments": arguments],
+                ])
+            XCTAssertNil(reply["error"])
+            let result = try XCTUnwrap(reply["result"] as? [String: Any])
+            XCTAssertEqual(result["isError"] as? Bool, true)
+            XCTAssertNil(result["structuredContent"])
+            let text = ((result["content"] as? [[String: Any]])?.first)?["text"] as? String ?? ""
+            XCTAssertTrue(text.hasPrefix(reason), text)
         }
         let tools = MochiTools.catalog(origin: .external).map(\.mcp)
         for name in ["set_conversation_instructions", "set_conversation_preferences"] {
@@ -119,6 +142,46 @@ extension MCPTests {
         let valid: [String: Any] = ["jsonrpc": "2.0", "method": "notifications/initialized", "params": [String: Any]()]
         XCTAssertNil(try respond(server, valid))
         XCTAssertNil(errorCode(try respond(server, ["jsonrpc": "2.0", "id": 3, "method": "tools/list"])))
+    }
+
+    func testNegotiatesTheRequestedRevisionOrOffersTheNewest() throws {
+        for (requested, offered) in [
+            ("2025-11-25", "2025-11-25"), ("2025-06-18", "2025-06-18"), ("2025-03-26", "2025-03-26"),
+            ("2024-11-05", "2024-11-05"), ("2026-07-28", "2025-11-25"), ("1900-01-01", "2025-11-25"),
+        ] {
+            let reply = try respond(
+                MochiMCPProtocol(),
+                [
+                    "jsonrpc": "2.0", "id": 1, "method": "initialize",
+                    "params": [
+                        "protocolVersion": requested, "capabilities": [:],
+                        "clientInfo": ["name": "test", "version": "1"],
+                    ],
+                ])
+            let result = try XCTUnwrap(reply?["result"] as? [String: Any], requested)
+            XCTAssertEqual(result["protocolVersion"] as? String, offered, requested)
+            XCTAssertEqual((result["serverInfo"] as? [String: Any])?["title"] as? String, "Mochi")
+        }
+    }
+
+    func testFailedAppActionHasNoStructuredResult() throws {
+        let server = MochiMCPProtocol { _ in try JSONSerialization.data(withJSONObject: MochiTools.error("Busy.")) }
+        _ = try respond(
+            server,
+            [
+                "jsonrpc": "2.0", "id": 1, "method": "initialize",
+                "params": [
+                    "protocolVersion": "2025-11-25", "capabilities": [:],
+                    "clientInfo": ["name": "test", "version": "1"],
+                ],
+            ])
+        _ = try respond(server, ["jsonrpc": "2.0", "method": "notifications/initialized"])
+        let reply = try respond(
+            server,
+            ["jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": ["name": "get_session", "arguments": [:]]])
+        let result = try XCTUnwrap(reply?["result"] as? [String: Any])
+        XCTAssertEqual(result["isError"] as? Bool, true)
+        XCTAssertNil(result["structuredContent"])
     }
 
     func testInitializeRequiresClientNameAndVersion() throws {

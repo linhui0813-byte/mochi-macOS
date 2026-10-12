@@ -104,8 +104,12 @@
                     let commandQ = commands.first {
                         $0.keyEquivalent == "q" && $0.keyEquivalentModifierMask == .command
                     }
-                    checks.append(("Command-Q is Close Window to Tray", commandQ?.title == "Close Window to Tray"))
-                    let quit = tray.menu?.items.first { $0.title == "Quit Mochi Completely" }
+                    checks.append(
+                        (
+                            "Command-Q is Close Window to Tray",
+                            commandQ?.title == String(localized: "Close Window to Tray")
+                        ))
+                    let quit = tray.menu?.items.first { $0.title == String(localized: "Quit Mochi Completely") }
                     checks.append(("Tray quit has no Command-Q shortcut", quit != nil && quit?.keyEquivalent == ""))
                     let playbackEpoch = model.turn.begin(.playing)
                     if let commandQ, let menu = commandQ.menu {
@@ -167,11 +171,11 @@
                         timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: 0, context: nil, eventNumber: 1,
                         clickCount: 1, pressure: 0)!
                     tray.handleClick(rightClick)
+                    // Three conditions, reported apart so a failure names its cause.
+                    checks.append(("Right click on the tray: menu presented", presented))
+                    checks.append(("Right click on the tray: window stays hidden", !window.isVisible))
                     checks.append(
-                        (
-                            "Right click presents tray menu without reopening",
-                            presented && !window.isVisible && NSApp.activationPolicy() == .accessory
-                        ))
+                        ("Right click on the tray: Dock stays hidden", NSApp.activationPolicy() == .accessory))
                     presented = false
                     tray.presentMenu = { menu, event, button in
                         presented =
@@ -183,11 +187,11 @@
                         timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: 0, context: nil, eventNumber: 3,
                         clickCount: 1, pressure: 0)!
                     tray.handleClick(controlClick)
+                    // Three conditions, reported apart so a failure names its cause.
+                    checks.append(("Control-click on the tray: menu presented", presented))
+                    checks.append(("Control-click on the tray: window stays hidden", !window.isVisible))
                     checks.append(
-                        (
-                            "Control-click presents menu without reopening",
-                            presented && !window.isVisible && NSApp.activationPolicy() == .accessory
-                        ))
+                        ("Control-click on the tray: Dock stays hidden", NSApp.activationPolicy() == .accessory))
                     presented = false
                     let leftClick = NSEvent.mouseEvent(
                         with: .leftMouseUp, location: .zero, modifierFlags: [],
@@ -278,6 +282,7 @@
                 var captureFailures: [String] = []
                 for stale in [
                     "smoke.txt", "smoke-report.json", "template-minimum-geometry.json", "template-keyboard.json",
+                    "phrase-chip.json",
                 ] where !removeStaleEvidence(directory.appendingPathComponent(stale)) {
                     captureFailures.append("Stale \(stale) could not be removed")
                 }
@@ -355,6 +360,44 @@
                     }
                     await capture(name, window: sheet)
                 }
+                /// Scrolls the attached sheet's form to its end or back to its start, so a capture shows those fields.
+                @MainActor func scrollSheet(toEnd: Bool) -> Bool {
+                    @MainActor func scrollViews(_ view: NSView) -> [NSScrollView] {
+                        ((view as? NSScrollView).map { [$0] } ?? []) + view.subviews.flatMap { scrollViews($0) }
+                    }
+                    // Lists and text editors scroll too; the form is the tallest of the rest.
+                    guard let content = mainWindow?.attachedSheet?.contentView,
+                        let scroll = scrollViews(content).filter({
+                            !($0.documentView is NSTableView) && !($0.documentView is NSTextView)
+                        }).max(by: { $0.frame.height < $1.frame.height }),
+                        let document = scroll.documentView
+                    else { return false }
+                    let end = max(0, document.frame.height - scroll.contentView.bounds.height)
+                    scroll.contentView.scroll(to: NSPoint(x: 0, y: document.isFlipped == toEnd ? end : 0))
+                    scroll.reflectScrolledClipView(scroll.contentView)
+                    return end > 0
+                }
+                /// Clicks the middle of the view marked `identifier` with a mouse down and up, as a person would; SwiftUI
+                /// draws its controls without AppKit views or, in this process, accessibility elements. Returns the
+                /// point clicked, in window coordinates, or nil when nothing carries the mark.
+                @MainActor func click(_ identifier: String, in window: NSWindow) -> NSPoint? {
+                    @MainActor func find(_ view: NSView) -> NSView? {
+                        view.identifier?.rawValue == identifier ? view : view.subviews.lazy.compactMap(find).first
+                    }
+                    guard let probe = window.contentView.flatMap(find) else { return nil }
+                    let point = probe.convert(NSPoint(x: probe.bounds.midX, y: probe.bounds.midY), to: nil)
+                    window.makeKeyAndOrderFront(nil)
+                    for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+                        guard
+                            let event = NSEvent.mouseEvent(
+                                with: type, location: point, modifierFlags: [],
+                                timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+                                context: nil, eventNumber: 0, clickCount: 1, pressure: type == .leftMouseDown ? 1 : 0)
+                        else { return nil }
+                        window.sendEvent(event)
+                    }
+                    return point
+                }
                 if mainWindow?.titleVisibility != .hidden || mainWindow?.toolbar?.displayMode != .iconOnly {
                     captureFailures.append("Workspace title or toolbar display mode is incorrect")
                 }
@@ -363,6 +406,10 @@
                 }
                 if mainWindow?.titlebarSeparatorStyle != NSTitlebarSeparatorStyle.none {
                     captureFailures.append("Title-bar separator remains enabled")
+                }
+                // A launch that restored a session ended in the menu bar would have opened no window to test.
+                if !UserDefaults.standard.bool(forKey: "ApplePersistenceIgnoreState") {
+                    captureFailures.append("Launches restore the last session's windows")
                 }
                 mainWindow?.attachedSheet?.makeFirstResponder(nil)
                 // The practice captures use the default voice; the preview's own choice is put back after them.
@@ -392,7 +439,7 @@
                     _ = model.turn.begin(activity)
                     try? await Task.sleep(nanoseconds: 250_000_000)
                     let stopShown = await waitFor(2) {
-                        (mainWindow?.toolbar?.items.contains(where: { $0.label == "Stop" }) == true)
+                        (mainWindow?.toolbar?.items.contains(where: { $0.label == String(localized: "Stop") }) == true)
                             == (activity == .generating)
                     }
                     if !stopShown {
@@ -448,8 +495,8 @@
                 // A reply disables the composer; focus must come back to it when the turn ends.
                 @MainActor func composerField(_ view: NSView) -> NSTextField? {
                     if let field = view as? NSTextField, !(field is NSSearchField),
-                        (field.placeholderString ?? field.placeholderAttributedString?.string)?.hasPrefix("Message ")
-                            == true
+                        (field.placeholderString ?? field.placeholderAttributedString?.string)
+                            == String(localized: "Message \(model.displayCharacterName)")
                     {
                         return field
                     }
@@ -530,6 +577,22 @@
                         expectedRevision: ConversationTemplate.builtins[0].revision)
                     try? await Task.sleep(nanoseconds: 350_000_000)
                     await captureSheet("template-picker.png")
+                    // A general built-in previews its greeting and phrases, in the interface language.
+                    if let general = ConversationTemplate.builtins.first(where: { $0.title == "Brainstorm with me" }) {
+                        model.customization.previewTemplate(general)
+                        try? await Task.sleep(nanoseconds: 350_000_000)
+                        await captureSheet("template-picker-general.png")
+                        if !scrollSheet(toEnd: true) { captureFailures.append("Template preview could not scroll") }
+                        try? await Task.sleep(nanoseconds: 300_000_000)
+                        await captureSheet("template-picker-general-end.png")
+                        _ = scrollSheet(toEnd: false)
+                    } else {
+                        captureFailures.append("No general built-in template to preview")
+                    }
+                    model.customization.templateDraft = TemplateEditorDraft(
+                        value: ConversationTemplate.builtins[0], editingID: nil,
+                        expectedRevision: ConversationTemplate.builtins[0].revision)
+                    try? await Task.sleep(nanoseconds: 250_000_000)
                     let previousFrame = mainWindow?.frame
                     mainWindow?.setContentSize(NSSize(width: 760, height: 580))
                     try? await Task.sleep(nanoseconds: 250_000_000)
@@ -618,6 +681,63 @@
                     model.customization.instructionsID = nil
                     model.customization.retainedInstructionsDraft = nil
                     try? await Task.sleep(nanoseconds: 350_000_000)
+                    // Characters: the manager, opened with the File menu's command, on the built-ins; then the editor on
+                    // a duplicate of one. (The toolbar's menu runs the same action; SwiftUI draws it without views a
+                    // run could click.)
+                    let pip = ConversationCharacter.builtins.first { $0.name == "Pip" }
+                    @MainActor func item(_ title: String, in menu: NSMenu?) -> NSMenuItem? {
+                        menu?.items.lazy.compactMap { $0.title == title ? $0 : item(title, in: $0.submenu) }.first
+                    }
+                    var openedFromMenu = false
+                    if let command = item(String(localized: "Manage Characters…"), in: NSApp.mainMenu),
+                        let owner = command.menu
+                    {
+                        // A menu brings its items up to date as it opens; do the same before choosing one.
+                        owner.delegate?.menuNeedsUpdate?(owner)
+                        owner.update()
+                        owner.performActionForItem(at: owner.index(of: command))
+                        openedFromMenu = await waitFor(2) { model.customization.characterPresentation == .manager }
+                    }
+                    if !openedFromMenu {
+                        captureFailures.append("File > Manage Characters… did not open the character manager")
+                    }
+                    if model.customization.characterPresentation != .manager { model.openCharacterManager() }
+                    try? await Task.sleep(nanoseconds: 450_000_000)
+                    await captureSheet("character-manager.png")
+                    NSApp.appearance = NSAppearance(named: .darkAqua)
+                    try? await Task.sleep(nanoseconds: 250_000_000)
+                    await captureSheet("character-manager-dark.png")
+                    NSApp.appearance = NSAppearance(named: .aqua)
+                    if let pip {
+                        model.customization.editCharacter(pip, duplicate: true)
+                        try? await Task.sleep(nanoseconds: 350_000_000)
+                        await captureSheet("character-library-editor.png")
+                    } else {
+                        captureFailures.append("No built-in character Pip")
+                    }
+                    model.customization = CustomizationSheet()
+                    try? await Task.sleep(nanoseconds: 350_000_000)
+                    if let pip,
+                        var companion = model.library.conversations.first(where: { $0.id == chatID }).map(
+                            ConversationSettingsDraft.init)
+                    {
+                        companion.adoptCharacter(pip)
+                        companion.greeting = "Shall we make up a story?"
+                        companion.phrases = ["Add a twist.", "Give it an ending."]
+                        if !model.saveConversationSettings(chatID, companion) {
+                            captureFailures.append("Character, greeting and phrases could not be saved")
+                        }
+                    }
+                    model.customization.instructionsID = chatID
+                    try? await Task.sleep(nanoseconds: 450_000_000)
+                    await captureSheet("conversation-instructions-companion.png")
+                    if !scrollSheet(toEnd: true) {
+                        captureFailures.append("Conversation Instructions could not scroll")
+                    }
+                    try? await Task.sleep(nanoseconds: 300_000_000)
+                    await captureSheet("conversation-instructions-companion-end.png")
+                    model.customization.instructionsID = nil
+                    try? await Task.sleep(nanoseconds: 350_000_000)
                     // Real bundled MCP subprocess -> private socket -> shared app command layer.
                     model.allowDemoAutomation = true
                     model.externalControlEnabled = true
@@ -653,6 +773,65 @@
                 } else {
                     captureFailures.append("No selected conversation for instructions, template and MCP checks")
                 }
+                // A conversation started from a general built-in shows its greeting and phrase chips. Pressing a chip
+                // sends exactly its text in the character's voice and manner, and leaves the typed draft alone.
+                let liveReply = model.speech.conversationReply
+                var phraseRequests: [(text: String, voice: String, personality: String)] = []
+                model.speech.conversationReply = { service, request, callbacks in
+                    phraseRequests.append((request.text, service.voice, request.personality))
+                    var reply = RealtimeAccumulator()
+                    reply.text = "Here are three more ideas."
+                    try callbacks.response(reply)
+                }
+                if let general = ConversationTemplate.builtins.first(where: { $0.title == "Brainstorm with me" }),
+                    let pip = ConversationCharacter.builtins.first(where: { $0.name == "Pip" }),
+                    let id = try? model.startTemplateSnapshot(general),
+                    var companion = model.conversation.map(ConversationSettingsDraft.init)
+                {
+                    companion.adoptCharacter(pip)
+                    if !model.saveConversationSettings(id, companion) {
+                        captureFailures.append("The character could not be chosen for the new conversation")
+                    }
+                    try? await Task.sleep(nanoseconds: 450_000_000)
+                    await capture("conversation-phrases.png")
+                    NSApp.appearance = NSAppearance(named: .darkAqua)
+                    try? await Task.sleep(nanoseconds: 250_000_000)
+                    await capture("conversation-phrases-dark.png")
+                    NSApp.appearance = NSAppearance(named: .aqua)
+                    let draft = "A thought I am still typing"
+                    model.draft = draft
+                    let phrase = model.conversation?.phrases.first ?? ""
+                    let clicked = mainWindow.flatMap { click("mochi-phrase-chip-probe-0", in: $0) }
+                    let replied = await waitFor(3) { phraseRequests.count == 1 && !model.busy }
+                    let sent = phraseRequests.first
+                    let checks: [String: Bool] = [
+                        "greeting_kept": model.conversation?.greeting == general.withBuiltinTextTranslated().greeting,
+                        "chip_clicked": clicked != nil, "reply_received": replied,
+                        "sent_exact_text": sent?.text == phrase,
+                        "saved_as_user_message": model.conversation?.messages.first?.text == phrase,
+                        "character_voice": sent?.voice == pip.voice,
+                        "character_personality": sent?.personality == pip.personality,
+                        "draft_kept": model.draft == draft,
+                    ]
+                    let evidence = try? JSONSerialization.data(
+                        withJSONObject: [
+                            "phrase": phrase, "checks": checks,
+                            "click_point": clicked.map { [$0.x, $0.y] } as Any? ?? NSNull(),
+                        ], options: [.prettyPrinted, .sortedKeys])
+                    if !(evidence.map { writeEvidence($0, to: directory.appendingPathComponent("phrase-chip.json")) }
+                        ?? false)
+                    {
+                        captureFailures.append("Phrase chip evidence was not written")
+                    }
+                    for (check, passed) in checks.sorted(by: { $0.key < $1.key }) where !passed {
+                        captureFailures.append("Phrase chip check failed: \(check)")
+                    }
+                    await capture("conversation-phrase-sent.png")
+                    model.draft = ""
+                } else {
+                    captureFailures.append("No conversation could be started from a general built-in template")
+                }
+                model.speech.conversationReply = liveReply
                 model.newChat()
                 model.startHelp()
                 try? await Task.sleep(nanoseconds: 300_000_000)
@@ -758,7 +937,9 @@
                         (view as? NSSearchField).map { [$0] } ?? view.subviews.flatMap(searchFields)
                     }
                     let fields = mainWindow?.toolbar?.items.flatMap { item in item.view.map(searchFields) ?? [] } ?? []
-                    if let field = fields.first(where: { $0.placeholderString == "Search this conversation" }) {
+                    if let field = fields.first(where: {
+                        $0.placeholderString == String(localized: "Search this conversation")
+                    }) {
                         if field.currentEditor() == nil {
                             captureFailures.append("Conversation search did not acquire keyboard focus")
                         }
@@ -776,7 +957,7 @@
                     try? await Task.sleep(nanoseconds: 250_000_000)
                     await capture("conversation-search-compact.png")
                     let escapeCommand = NSApp.mainMenu?.items.compactMap(\.submenu).flatMap(\.items).first {
-                        $0.title == "Stop" && $0.keyEquivalent == "\u{1b}"
+                        $0.title == String(localized: "Stop") && $0.keyEquivalent == "\u{1b}"
                     }
                     let searchEpoch = model.turn.begin(.generating)
                     if let command = escapeCommand, let menu = command.menu {
@@ -979,6 +1160,40 @@
                 }
                 await capture("voice-greeting-listening.png")
                 model.stop()
+                // A conversation's own greeting is spoken as written, in the conversation's voice.
+                model.newChat()
+                var greetings: [(text: String, voice: String)] = []
+                model.speech.referenceAudio = { text, service, root, _ in
+                    greetings.append((text, service.voice))
+                    let url = root.appendingPathComponent("greeting-own-fixture.wav")
+                    try PCM.wav(Data(repeating: 0, count: 144000)).write(to: url)
+                    return url
+                }
+                if let id = model.selectedID, var own = model.conversation.map(ConversationSettingsDraft.init) {
+                    own.greeting = "Shall we begin with your week?"
+                    own.preferences.voice = "cedar"
+                    if !model.saveConversationSettings(id, own) {
+                        captureFailures.append("The conversation's own greeting could not be saved")
+                    }
+                    model.toggleConversationVoice()
+                    let spoken = await waitFor(3) {
+                        model.turn.activity == .playing && model.greetingActive
+                            && model.conversation?.messages.first?.text == own.greeting
+                    }
+                    if !spoken || greetings.last?.text != own.greeting || greetings.last?.voice != "cedar" {
+                        captureFailures.append(
+                            "The conversation's own greeting was not spoken as written in its voice "
+                                + "(\(greetings.last.map { "\($0.text) · \($0.voice)" } ?? "nothing spoken"))")
+                    }
+                    await capture("voice-greeting-own.png")
+                    model.audio.finishPlayback(greetingPlayer, successfully: true)
+                    if await !waitFor(3, { model.turn.activity == .recording && !model.greetingActive }) {
+                        captureFailures.append("The conversation's own greeting did not lead to recording")
+                    }
+                    model.stop()
+                } else {
+                    captureFailures.append("No conversation for its own greeting")
+                }
                 var passed =
                     captureFailures.isEmpty && model.library.expressions.count >= 1 && model.turn.mode == .conversation
                     && model.turn.owner == .none
