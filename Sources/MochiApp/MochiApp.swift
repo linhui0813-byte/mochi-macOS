@@ -116,7 +116,7 @@ import SwiftUI
     }
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         tray.install()
     }
     func applicationDidBecomeActive(_ notification: Notification) { model?.configureAutomation() }

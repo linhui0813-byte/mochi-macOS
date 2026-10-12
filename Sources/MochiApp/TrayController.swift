@@ -95,7 +95,9 @@ import SwiftUI
         NSApp.unhide(nil)
         if window.isMiniaturized { window.deminiaturize(nil) }
         window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        // Since macOS 14, activation is cooperative: the request is honoured when it follows the user's own input,
+        // such as a click on the menu bar icon.
+        NSApp.activate()
     }
 
     @objc func quitApp() { NSApp.terminate(nil) }
