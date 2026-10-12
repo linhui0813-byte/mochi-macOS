@@ -45,7 +45,7 @@ struct VoiceSettingsView: View {
                 PracticeVoiceControls(app: app).disabled(app.busy)
                 Text("Saved recordings keep their original voice.").font(.caption).foregroundStyle(.secondary)
             }
-            if let error = app.error { Text(error).font(.callout).foregroundStyle(.red) }
+            if let error = app.error, app.errorTab == .voices { Text(error).font(.callout).foregroundStyle(.red) }
             // Stop Preview ends only the preview's own turn; other activity keeps the main Stop.
             if app.previewActive { Button("Stop Preview") { app.stopPreview() } }
         }.formStyle(.grouped)

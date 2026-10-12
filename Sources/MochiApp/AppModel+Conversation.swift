@@ -354,7 +354,8 @@ extension AppModel {
         let service = settings.conversationService()
         let textReply = speech.textReply
         runExclusive(
-            "Check connection", onFailure: { [weak self] in self?.serviceStatus = String(localized: "Not connected") },
+            "Check connection", settingsTab: .general,
+            onFailure: { [weak self] in self?.serviceStatus = String(localized: "Not connected") },
             { [weak self] job in
                 guard let self else { return }
                 _ = try await textReply(

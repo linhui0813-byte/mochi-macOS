@@ -238,14 +238,14 @@ extension AppModel {
                 self?.history.feedback = String(localized: "Library backup exported.")
             } catch {
                 MochiLog.failure(MochiLog.library, "Export library backup", error)
-                self?.error =
+                self?.report(
                     ErrorChain.isOutOfSpace(error)
-                    ? String(localized: "Could not export the backup because the disk is full.")
-                    : AppFailure.message(
-                        for: error,
-                        fallback:
-                            "Could not export the backup. Use a new filename and check that referenced recordings are present."
-                    )
+                        ? String(localized: "Could not export the backup because the disk is full.")
+                        : AppFailure.message(
+                            for: error,
+                            fallback:
+                                "Could not export the backup. Use a new filename and check that referenced recordings are present."
+                        ), in: .privacy)
             }
         }
     }
@@ -269,12 +269,14 @@ extension AppModel {
                 return
             } catch {
                 guard let self else { return }
-                self.error = persistenceMessage(
-                    error, action: "Import library backup",
-                    fallback:
-                        "This backup could not be imported. It may contain missing recordings, invalid IDs, or an unsupported schema. Your history was not changed.",
-                    diskFull:
-                        "This backup could not be imported because the disk is full. Your history was not changed.")
+                self.report(
+                    persistenceMessage(
+                        error, action: "Import library backup",
+                        fallback:
+                            "This backup could not be imported. It may contain missing recordings, invalid IDs, or an unsupported schema. Your history was not changed.",
+                        diskFull:
+                            "This backup could not be imported because the disk is full. Your history was not changed."),
+                    in: .privacy)
             }
         }
     }

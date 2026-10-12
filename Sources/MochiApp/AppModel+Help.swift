@@ -222,12 +222,12 @@ extension AppModel {
         let service = settings.practiceService(voice: voice, options: options)
         let root = store.root
         let referenceAudio = speech.referenceAudio
-        previewEpoch = runExclusive("Preview voice") { [weak self] job in
+        previewEpoch = runExclusive("Preview voice", settingsTab: .voices) { [weak self] job in
             guard let self else { return }
             let url = try await referenceAudio(ReferenceSpeech.preview, service, root, false)
             guard job.isCurrent() else { return }
             job.finish()
-            play(url.lastPathComponent)
+            play(url.lastPathComponent, settingsTab: .voices)
             if playbackFile == url.lastPathComponent { previewEpoch = turn.epoch }
         }
     }

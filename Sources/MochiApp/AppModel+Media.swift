@@ -30,7 +30,7 @@ extension AppModel {
     }
     func play(
         _ file: String, mochi: Bool = false, afterPlayback: (() -> Void)? = nil,
-        afterPlaybackFailure: (() -> Void)? = nil
+        afterPlaybackFailure: (() -> Void)? = nil, settingsTab: SettingsTab? = nil
     ) {
         guard !busy || turn.activity == .playing else { return }
         if afterPlayback == nil { greetingActive = false }
@@ -51,7 +51,9 @@ extension AppModel {
                     guard let self, self.turn.epoch == token else { return }
                     finished()
                     self.greetingActive = false
-                    self.error = String(localized: "This recording could not be played. Try another recording.")
+                    self.report(
+                        String(localized: "This recording could not be played. Try another recording."), in: settingsTab
+                    )
                     afterPlaybackFailure?()
                 },
                 completed: { [weak self] in
@@ -62,7 +64,7 @@ extension AppModel {
             playbackFile = file
         } catch {
             playbackFile = nil
-            fail(error, token: token, context: "Play audio")
+            fail(error, token: token, context: "Play audio", settingsTab: settingsTab)
             afterPlaybackFailure?()
         }
     }

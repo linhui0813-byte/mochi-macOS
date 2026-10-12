@@ -93,7 +93,10 @@ struct MessageDeletionUndo {
     @ObservationIgnored var recordingNow: () -> Date = Date.init
     @ObservationIgnored var recordingSleep: (UInt64) async throws -> Void = { try await Task.sleep(nanoseconds: $0) }
     var turn = TurnMachine()
-    var error: String?
+    /// Any new error starts without a settings tab; `report(_:in:)` names the tab whose action caused it.
+    var error: String? { didSet { errorTab = nil } }
+    /// The Settings tab whose action set `error`, which is the only tab that shows it.
+    private(set) var errorTab: SettingsTab?
     var notice: String? {
         didSet {
             if !noticeKeepsDeletionUndo { finishMessageDeletion() }
@@ -269,18 +272,21 @@ struct MessageDeletionUndo {
                 localized: "Restored the earlier copy of your library. The unreadable file was kept in the data folder."
             )
         } catch {
-            self.error = persistenceMessage(
-                error, action: "Restore earlier library",
-                fallback: "The earlier copy could not be restored. Nothing was changed.",
-                diskFull: "The earlier copy could not be restored because the disk is full. Nothing was changed.")
+            report(
+                persistenceMessage(
+                    error, action: "Restore earlier library",
+                    fallback: "The earlier copy could not be restored. Nothing was changed.",
+                    diskFull: "The earlier copy could not be restored because the disk is full. Nothing was changed."),
+                in: .privacy)
         }
     }
     func revealDataFolder() {
         guard libraryController.revealDataFolder() else {
-            error = String(
-                localized:
-                    "The data folder could not be opened. In Finder, choose Go → Go to Folder and enter ~/Library/Application Support."
-            )
+            report(
+                String(
+                    localized:
+                        "The data folder could not be opened. In Finder, choose Go → Go to Folder and enter ~/Library/Application Support."
+                ), in: .privacy)
             return
         }
     }
@@ -355,8 +361,8 @@ struct MessageDeletionUndo {
     /// Runs `body` as the only active job. Finishing, cancellation and error reporting live here, so every job
     /// checks the same invariant: no state changes after the job is superseded.
     @discardableResult func runExclusive(
-        _ context: String, progress: String.LocalizationValue? = nil, onFailure: (@MainActor () -> Void)? = nil,
-        _ body: @escaping @MainActor (ExclusiveJob) async throws -> Void
+        _ context: String, progress: String.LocalizationValue? = nil, settingsTab: SettingsTab? = nil,
+        onFailure: (@MainActor () -> Void)? = nil, _ body: @escaping @MainActor (ExclusiveJob) async throws -> Void
     ) -> UUID {
         let progress = progress.map { String(localized: $0) }
         let token = turn.begin(.generating)
@@ -377,7 +383,7 @@ struct MessageDeletionUndo {
             } catch {
                 guard let self, self.turn.epoch == token else { return }
                 onFailure?()
-                self.fail(error, token: token, context: context)
+                self.fail(error, token: token, context: context, settingsTab: settingsTab)
             }
         }
         task = handle
@@ -399,7 +405,7 @@ struct MessageDeletionUndo {
                 localized: "Could not remove the discarded recording. Reveal the data folder in Settings to review it.")
         }
     }
-    func fail(_ failure: Error, token: UUID, context: String = "Operation") {
+    func fail(_ failure: Error, token: UUID, context: String = "Operation", settingsTab: SettingsTab? = nil) {
         guard turn.epoch == token else { return }
         _ = turn.finish(token)
         greetingActive = false
@@ -409,9 +415,17 @@ struct MessageDeletionUndo {
         recordingLevel = -80
         guard !(failure is CancellationError) else { return }
         MochiLog.failure(MochiLog.app, context, failure)
-        error = AppFailure.message(
-            for: failure,
-            fallback: "This operation could not finish. Check the selected audio file or your connection, then retry.")
+        report(
+            AppFailure.message(
+                for: failure,
+                fallback:
+                    "This operation could not finish. Check the selected audio file or your connection, then retry."),
+            in: settingsTab)
+    }
+    /// Sets the error, and the Settings tab it belongs to when a Settings action caused it.
+    func report(_ message: String, in tab: SettingsTab?) {
+        error = message
+        errorTab = tab
     }
     private func seedPreview() {
         var chat = Conversation(title: "A thought I've been putting off")

@@ -21,7 +21,7 @@ struct SettingsView: View {
                     Button("Check Connection", action: app.checkConnection).disabled(app.busy)
                 }
                 KeyboardShortcutsSection(app: app)
-                feedback
+                feedback(.general)
             }.formStyle(.grouped)
                 .tabItem { Label("General", systemImage: "gearshape") }.tag(SettingsTab.general)
 
@@ -58,7 +58,7 @@ struct SettingsView: View {
                         "Library backups include conversations and practice audio, not sign-in credentials. Provider processing and retention follow your account settings."
                     ).foregroundStyle(.secondary)
                 }
-                feedback
+                feedback(.privacy)
                 if let feedback = app.history.feedback { Text(feedback).font(.callout).foregroundStyle(.secondary) }
             }.formStyle(.grouped)
                 .tabItem { Label("Data & Privacy", systemImage: "hand.raised") }.tag(SettingsTab.privacy)
@@ -72,8 +72,9 @@ struct SettingsView: View {
 
     private var canTransferLibrary: Bool { app.libraryReadable && app.libraryTransfer == nil }
 
-    @ViewBuilder private var feedback: some View {
-        if let error = app.error { Text(error).font(.callout).foregroundStyle(.red) }
+    /// The error of an action started from this tab; errors from elsewhere belong to the window that caused them.
+    @ViewBuilder private func feedback(_ tab: SettingsTab) -> some View {
+        if let error = app.error, app.errorTab == tab { Text(error).font(.callout).foregroundStyle(.red) }
     }
 
 }
