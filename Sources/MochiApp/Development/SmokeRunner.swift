@@ -365,6 +365,8 @@
                     captureFailures.append("Title-bar separator remains enabled")
                 }
                 mainWindow?.attachedSheet?.makeFirstResponder(nil)
+                // The practice captures use the default voice; the preview's own choice is put back after them.
+                let practiceVoice = model.settings.builtInPracticeVoice
                 model.settings.builtInPracticeVoice = RealtimeService.defaultVoice
                 await capture("practice.png")
                 NSApp.appearance = NSAppearance(named: .darkAqua)
@@ -374,6 +376,7 @@
                 if let window = mainWindow { window.setContentSize(NSSize(width: 820, height: 700)) }
                 try? await Task.sleep(nanoseconds: 300_000_000)
                 await capture("practice-compact.png")
+                model.settings.builtInPracticeVoice = practiceVoice
                 if let window = mainWindow { window.setContentSize(NSSize(width: 1120, height: 840)) }
                 model.resume()
                 try? await Task.sleep(nanoseconds: 350_000_000)
@@ -857,6 +860,8 @@
                 if !removeStaleEvidence(directory.appendingPathComponent("desktop-pet.png")) {
                     captureFailures.append("desktop-pet.png: stale capture could not be removed")
                 }
+                // The preference is the preview's own; the check must leave it as it found it.
+                let petWasVisible = model.petVisible
                 model.petVisible = true
                 if await waitFor(2, { self.pet.panel?.isVisible == true }), let petPanel = pet.panel {
                     if petPanel.canHide || petPanel.canBecomeKey || petPanel.frame.size != DesktopPet.size {
@@ -876,6 +881,7 @@
                     captureCount += 1
                     captureFailures.append("desktop-pet.png: Desktop Mochi did not appear")
                 }
+                model.petVisible = petWasVisible
                 let pitchFixture = (0..<150).map { i -> PitchPoint in
                     let t = Double(i) * 0.015
                     let value = 7 + 3 * sin(t * 5) + (i.isMultiple(of: 2) ? 0.45 : -0.45) + (i == 88 ? 12 : 0)
