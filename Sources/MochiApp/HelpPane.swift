@@ -119,7 +119,7 @@ struct PracticePane: View {
     }
     private func englishEditor(_ placeholder: LocalizedStringKey, lines: ClosedRange<Int>) -> some View {
         TextField(placeholder, text: Binding(get: { app.help.english }, set: app.editEnglish), axis: .vertical)
-            .font(.system(size: 22, weight: .medium)).textFieldStyle(.roundedBorder).lineLimit(lines).disabled(app.busy)
+            .font(.system(size: 18, weight: .medium)).textFieldStyle(.roundedBorder).lineLimit(lines).disabled(app.busy)
     }
     /// Reference kinds are stored in English; the ones Mochi writes are translated for display.
     static func referenceKindLabel(_ kind: String?) -> String {
