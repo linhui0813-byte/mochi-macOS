@@ -3765,6 +3765,34 @@
         }
       }
     },
+    "Continuous conversation" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连续对话"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "連續對話"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "連続会話"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "연속 대화"
+          }
+        }
+      }
+    },
     "Contours are not word-aligned. Gaps represent unvoiced sound." : {
       "localizations" : {
         "ja" : {
@@ -8833,6 +8861,34 @@
         }
       }
     },
+    "Live playback stopped. The reply is saved; press Play to hear it again." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "实时播放已停止。回复已保存；点击播放即可重新收听。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "即時播放已停止。回覆已儲存；按下播放即可重新收聽。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "リアルタイム再生が停止しました。返信は保存されています。再生を押すともう一度聞けます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "실시간 재생이 중지되었습니다. 답변이 저장되었으니 재생을 눌러 다시 들으세요."
+          }
+        }
+      }
+    },
     "Local control belongs to another user." : {
       "localizations" : {
         "ja" : {
@@ -11328,6 +11384,34 @@
         }
       }
     },
+    "On: keep the connection open between messages. Off: reconnect for each message." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "开启：在消息之间保持连接。关闭：每条消息重新连接。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "開啟：在訊息之間保持連線。關閉：每則訊息重新連線。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "オン：メッセージ間も接続を維持します。オフ：メッセージごとに再接続します。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "켜짐: 메시지 사이에도 연결을 유지합니다. 꺼짐: 메시지마다 다시 연결합니다."
+          }
+        }
+      }
+    },
     "Open Help Me Say This from the conversation to record a new thought." : {
       "localizations" : {
         "ja" : {
@@ -13116,6 +13200,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "錄音位置"
+          }
+        }
+      }
+    },
+    "Recording still starts with the microphone button or your shortcut." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仍需点击麦克风按钮或使用快捷键开始录音。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仍需按下麥克風按鈕或使用快速鍵開始錄音。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "録音は引き続きマイクボタンまたはショートカットで開始します。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "녹음은 마이크 버튼이나 단축키로 시작합니다."
           }
         }
       }
@@ -16056,6 +16168,118 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "儲存空間"
+          }
+        }
+      }
+    },
+    "Streaming audio could not be prepared." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法准备流式音频。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法準備串流音訊。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ストリーミング音声を準備できませんでした。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스트리밍 오디오를 준비할 수 없습니다."
+          }
+        }
+      }
+    },
+    "Streaming audio could not start." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法开始播放流式音频。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法開始播放串流音訊。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ストリーミング音声の再生を開始できませんでした。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스트리밍 오디오 재생을 시작할 수 없습니다."
+          }
+        }
+      }
+    },
+    "Streaming audio has already finished." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "流式音频已经结束。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "串流音訊已經結束。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ストリーミング音声はすでに終了しています。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스트리밍 오디오가 이미 종료되었습니다."
+          }
+        }
+      }
+    },
+    "Streaming audio is no longer active." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "流式音频已停止。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "串流音訊已停止。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ストリーミング音声は停止しています。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스트리밍 오디오가 중지되었습니다."
           }
         }
       }

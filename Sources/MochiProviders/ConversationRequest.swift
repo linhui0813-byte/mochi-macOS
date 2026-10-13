@@ -3,6 +3,8 @@ import MochiCore
 import MochiKernel
 
 public struct ConversationRequest {
+    /// The local conversation whose connection may be reused; helpers have no conversation connection.
+    public var conversationID: UUID?
     public var history: [Message]
     public var text: String
     public var pcm: Data?
@@ -19,8 +21,10 @@ public struct ConversationRequest {
     public init(
         history: [Message], text: String, pcm: Data? = nil, spoken: Bool = false, help: Bool = false,
         reference: Bool = false, instructions: String = "", characterName: String? = nil, userName: String? = nil,
-        preferences: ConversationPreferences = ConversationPreferences(), personality: String = ""
+        preferences: ConversationPreferences = ConversationPreferences(), personality: String = "",
+        conversationID: UUID? = nil
     ) {
+        self.conversationID = conversationID
         self.personality = personality
         self.characterName = characterName
         self.userName = userName

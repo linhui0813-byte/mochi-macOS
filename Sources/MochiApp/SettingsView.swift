@@ -34,7 +34,17 @@ struct SettingsView: View {
                     TextField("Model", text: Bindable(app.settings).modelName).textFieldStyle(.roundedBorder).disabled(
                         app.busy
                     )
-                    .onChange(of: app.settings.modelName) { app.serviceStatus = String(localized: "Not checked") }
+                    .onChange(of: app.settings.modelName) {
+                        app.serviceStatus = String(localized: "Not checked")
+                        app.speech.resetConversation()
+                    }
+                    Toggle("Continuous conversation", isOn: Bindable(app).continuousConversation)
+                        .toggleStyle(.switch).disabled(app.busy)
+                        .accessibilityIdentifier("continuous-conversation")
+                    Text("On: keep the connection open between messages. Off: reconnect for each message.")
+                        .font(.callout).foregroundStyle(.secondary)
+                    Text("Recording still starts with the microphone button or your shortcut.")
+                        .font(.caption).foregroundStyle(.secondary)
                     LabeledContent("Status") { Text(app.serviceStatus).foregroundStyle(.secondary) }
                     Button("Check Connection", action: app.checkConnection).disabled(app.busy)
                 }

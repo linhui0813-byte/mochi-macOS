@@ -3,7 +3,7 @@ import Foundation
 import MochiCore
 import MochiKernel
 
-protocol PlaybackPlayer: AnyObject {
+@MainActor protocol PlaybackPlayer: AnyObject {
     var duration: TimeInterval { get }
     var currentTime: TimeInterval { get set }
     var enableRate: Bool { get set }
@@ -22,6 +22,11 @@ extension AVAudioPlayer: PlaybackPlayer {}
     @ObservationIgnored private var recorder: AVAudioRecorder?
     @ObservationIgnored private var player: (any PlaybackPlayer)?
     @ObservationIgnored var makePlayer: (URL) throws -> any PlaybackPlayer = { try AVAudioPlayer(contentsOf: $0) }
+    @ObservationIgnored var makeStream: (@escaping @MainActor (Bool) -> Void) throws -> any StreamingPlaybackPlayer = {
+        try StreamingAudioPlayer(finished: $0)
+    }
+    @ObservationIgnored private var streamEpoch = UUID()
+    var isStreaming: Bool { player is any StreamingPlaybackPlayer }
     @ObservationIgnored private var completion: (() -> Void)?
     @ObservationIgnored private var failure: (() -> Void)?
     /// Set when the recorder reports an error or the microphone it started on disconnects.
@@ -113,6 +118,36 @@ extension AVAudioPlayer: PlaybackPlayer {}
         }
         duration = p.duration
         paused = false
+        startPlaybackClock()
+    }
+    func startStreaming(failed: (() -> Void)? = nil, completed: @escaping () -> Void) throws {
+        stop()
+        let token = streamEpoch
+        let stream = try makeStream { [weak self] successful in
+            guard let self, self.streamEpoch == token, let player = self.player else { return }
+            self.finishPlayback(player, successfully: successful)
+        }
+        completion = completed
+        failure = failed
+        player = stream
+        guard stream.play() else {
+            stop()
+            throw AppFailure("Streaming audio could not start.")
+        }
+        startPlaybackClock()
+    }
+    func appendStreaming(_ data: Data) throws {
+        guard let stream = player as? any StreamingPlaybackPlayer else {
+            throw AppFailure("Streaming audio is no longer active.")
+        }
+        try stream.appendPCM(data)
+        duration = stream.duration
+    }
+    func finishStreaming() throws {
+        guard let stream = player as? any StreamingPlaybackPlayer else { return }
+        try stream.finishInput()
+    }
+    private func startPlaybackClock() {
         playbackClock = Task { [weak self] in
             while !Task.isCancelled {
                 guard let self, let player = self.player else { return }
@@ -138,7 +173,7 @@ extension AVAudioPlayer: PlaybackPlayer {}
         }
     }
     func seek(to seconds: Double) {
-        guard let player, seconds.isFinite else { return }
+        guard let player, !isStreaming, seconds.isFinite else { return }
         player.currentTime = min(max(0, seconds), player.duration)
         position = player.currentTime
     }
@@ -150,6 +185,7 @@ extension AVAudioPlayer: PlaybackPlayer {}
         paused = false
     }
     func stop() {
+        streamEpoch = UUID()
         resetPlayback()
         _ = stopRecording()
         player?.stop()

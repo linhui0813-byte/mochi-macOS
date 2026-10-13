@@ -41,6 +41,7 @@ extension AppModel {
     /// What quick talk would do now. The click, the menu and the accessibility label all follow this one rule.
     var quickTalkPlan: QuickTalk {
         guard canQuickTalk else { return .workspace }
+        if speaking && audio.isStreaming { return .pause }
         if turn.activity == .recording || greetingActive || !busy { return .microphone }
         return turn.activity == .playing ? .pause : .busy
     }

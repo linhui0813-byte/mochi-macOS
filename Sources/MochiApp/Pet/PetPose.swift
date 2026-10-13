@@ -60,7 +60,7 @@ struct PetSituation: Equatable {
         switch activity {
         case .recording: return .review
         case .requestingPermission: return .waiting
-        case .generating: return greeting ? .waving : .running
+        case .generating: return speaking ? (paused ? .idle : .jumping) : greeting ? .waving : .running
         case .playing: return paused ? .idle : speaking ? .jumping : .review
         case .idle: return failing ? .failed : arriving ? .waving : .idle
         }

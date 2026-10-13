@@ -51,7 +51,21 @@ struct MessageDeletionUndo {
     /// The local control server and the caches that make tool calls safe to retry.
     let automation = AutomationController()
     @ObservationIgnored var allowDemoAutomation = false
-    var selectedID: UUID? { didSet { if oldValue != selectedID { find.close() } } }
+    var selectedID: UUID? {
+        didSet {
+            if oldValue != selectedID {
+                find.close()
+                speech.resetConversation()
+            }
+        }
+    }
+    var continuousConversation: Bool {
+        get { settings.continuousConversation }
+        set {
+            settings.continuousConversation = newValue
+            speech.resetConversation()
+        }
+    }
     /// Find in the open conversation.
     let find = ConversationFind()
     var canFindInConversation: Bool {
@@ -176,6 +190,10 @@ struct MessageDeletionUndo {
                 : String(localized: "Recording · finish to send to \(displayCharacterName)")
         case .requestingPermission: return String(localized: "Waiting for microphone permission")
         case .generating:
+            if speaking {
+                return audio.paused
+                    ? String(localized: "Playback paused") : String(localized: "\(displayCharacterName) is speaking")
+            }
             if greetingActive { return String(localized: "Preparing \(displayCharacterName)’s greeting…") }
             return practice
                 ? String(localized: "Preparing your expression…")
@@ -297,6 +315,7 @@ struct MessageDeletionUndo {
     }
     /// False when the library could not be saved; the failure is already reported.
     @discardableResult func stop() -> Bool {
+        speech.resetConversation()
         let unfinishedRecording = cancelTurn()
         transcripts.cancelAll()
         for ci in library.conversations.indices {
@@ -412,6 +431,10 @@ struct MessageDeletionUndo {
     }
     func fail(_ failure: Error, token: UUID, context: String = "Operation", settingsTab: SettingsTab? = nil) {
         guard turn.epoch == token else { return }
+        if audio.isStreaming {
+            audio.stop()
+            playbackFile = nil
+        }
         _ = turn.finish(token)
         greetingActive = false
         speaking = false

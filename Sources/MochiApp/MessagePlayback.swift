@@ -56,7 +56,7 @@ struct MessagePlayback: View {
             }
             .accessibilityLabel("Recording position")
             .help("Click or drag to jump within this recording")
-            .disabled(length <= 0)
+            .disabled(length <= 0 || (active && app.audio.isStreaming))
             Text("\(timestamp(position)) / \(timestamp(length))")
                 .font(.caption.monospacedDigit()).fixedSize()
                 .opacity(0.8)

@@ -131,6 +131,15 @@ struct WorkspaceView: View {
             .navigationTitle("")
             .toolbar {
                 if app.turn.activity == .generating {
+                    if app.audio.isStreaming {
+                        ToolbarItem(placement: .primaryAction) {
+                            Button(action: app.audio.togglePause) {
+                                Label(
+                                    app.audio.paused ? "Resume" : "Pause",
+                                    systemImage: app.audio.paused ? "play.fill" : "pause.fill")
+                            }.labelStyle(.iconOnly)
+                        }
+                    }
                     ToolbarItem(placement: .primaryAction) {
                         Button {
                             app.stop()
@@ -434,7 +443,9 @@ struct WorkspaceView: View {
             .fieldFrame(cornerRadius: 24, focused: composerFocused)
             if app.turn.activity == .recording { RecordingFeedback(app: app) }
             HStack(spacing: 5) {
-                if app.turn.activity == .generating || app.turn.activity == .requestingPermission {
+                if app.speaking && app.audio.isStreaming {
+                    Image(systemName: app.audio.paused ? "pause.fill" : "speaker.wave.2.fill")
+                } else if app.turn.activity == .generating || app.turn.activity == .requestingPermission {
                     ProgressView().controlSize(.mini)
                 } else {
                     Image(systemName: app.turn.activity == .recording ? "record.circle" : "mic.slash").foregroundStyle(

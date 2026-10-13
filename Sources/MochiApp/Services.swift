@@ -21,20 +21,23 @@ struct SpeechServices {
     var referenceAudio: (String, RealtimeService, URL, Bool) async throws -> URL
     /// Transcribes a saved recording: (file, model).
     var transcribe: (URL, String) async throws -> String
+    var resetConversation: @MainActor () -> Void = {}
 
-    static var live: SpeechServices {
+    @MainActor static var live: SpeechServices {
         TestEnvironment.assertNotUnderTest("SpeechServices.live")
+        let connection = RealtimeConversationConnection()
         return SpeechServices(
             conversationReply: { service, request, callbacks in
-                _ = try await service.reply(
-                    request, onResponse: callbacks.response, onTranscription: callbacks.transcription,
-                    onTool: callbacks.tool)
+                _ = try await connection.reply(
+                    service: service, input: request, onResponse: callbacks.response,
+                    onTranscription: callbacks.transcription, onTool: callbacks.tool, onAudio: callbacks.audio)
             },
             textReply: { service, request in try await service.reply(request).text },
             referenceAudio: { text, service, root, force in
                 try await service.referenceAudio(text: text, root: root, force: force)
             },
-            transcribe: { url, model in try await RealtimeService(model: model).transcribe(AudioFile.pcm(url)) })
+            transcribe: { url, model in try await RealtimeService(model: model).transcribe(AudioFile.pcm(url)) },
+            resetConversation: { connection.reset() })
     }
 }
 
@@ -68,4 +71,5 @@ struct ReplyCallbacks {
     let response: @MainActor (RealtimeAccumulator) throws -> Void
     let transcription: @MainActor (RealtimeAccumulator) -> Void
     let tool: @MainActor (String, [String: Any], String) throws -> [String: Any]
+    var audio: (@MainActor (Data) -> Void)? = nil
 }

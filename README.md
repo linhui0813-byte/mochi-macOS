@@ -37,6 +37,19 @@ brew upgrade --cask xiaolai/tap/mochi
 3. Start a blank conversation with **New Conversation** (⌘N), or choose **New Conversation from Template…** (⇧⌘N).
 4. Type a message, or click the microphone to speak and listen to the reply.
 
+Voice replies start playing as audio arrives. You can pause, resume or stop playback while the reply is still
+being generated; the complete reply is saved for later replay.
+
+In **Settings → General → Connection**, **Continuous conversation** chooses how messages connect:
+
+- **Off** (default): open a new connection for each message.
+- **On**: reuse the connection for the same conversation, model and voice. An idle connection closes after two
+  minutes; the next message reconnects automatically. Stop, changing conversations or turning the switch off
+  closes it immediately.
+
+Both modes use your saved conversation history. Recording still starts with the microphone button or your
+shortcut; this switch does not enable a continuously listening microphone.
+
 ## What you can use it for
 
 Anything you would rather say than type. Out of the box, Mochi is a warm conversation companion that keeps replies short and leaves you room to think. Built-in [templates](#templates) set her up for things like these, in whatever language you speak:

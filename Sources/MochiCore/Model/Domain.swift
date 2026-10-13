@@ -23,6 +23,12 @@ public struct TurnMachine {
         activity = .idle
         return true
     }
+    /// Keep ownership while a generated reply finishes playing its already-streamed audio.
+    @discardableResult public mutating func transition(_ token: UUID, to activity: Activity) -> Bool {
+        guard token == epoch else { return false }
+        self.activity = activity
+        return true
+    }
     public mutating func pause() {
         mode = .practice
         _ = begin(.idle)

@@ -114,6 +114,7 @@ extension AppModel {
         let userName = settings.effectiveUserName
         let speakerName = chat?.displayCharacterName ?? "Mochi"
         let service = settings.conversationService(for: chat)
+        let stream = ConversationReplyStream(app: self, token: token, enabled: audioFile != nil && playReply == nil)
         let voiceID = pcm == nil ? nil : userID
         let reply = speech.conversationReply
         let operation = Task { [weak self] in
@@ -131,12 +132,14 @@ extension AppModel {
                         guard let self, !Task.isCancelled, turn.epoch == token else { return }
                         task = nil
                         let filename = saveReply(reply, conversationID: conversationID, speakerName: speakerName)
-                        _ = turn.finish(token)
                         if reply.truncated {
                             notice =
                                 "\(speakerName)’s reply reached its length limit and was cut short. Ask a follow-up to continue."
                         }
-                        playReplyThenDeferredAction(filename)
+                        if !stream.finish(file: filename) {
+                            _ = turn.finish(token)
+                            playReplyThenDeferredAction(filename)
+                        }
                     },
                     transcription: { [weak self] reply in
                         guard let self, !Task.isCancelled, let voiceID, transcripts.isCurrent(voiceID, requestID) else {
@@ -151,11 +154,12 @@ extension AppModel {
                         guard let self, !Task.isCancelled, self.turn.epoch == token, self.selectedID == conversationID
                         else { throw CancellationError() }
                         return try self.tools.executeVoice(name, arguments: args, operationID: operationID)
-                    })
+                    },
+                    audio: { data in stream.append(data) })
                 let request = ConversationRequest(
                     history: history, text: text, pcm: pcm, spoken: audioFile != nil, instructions: instructions,
                     characterName: characterName, userName: userName, preferences: preferences,
-                    personality: personality)
+                    personality: personality, conversationID: conversationID)
                 try await reply(service, request, callbacks)
             } catch {
                 // The deferred block marks a still-pending transcript as interrupted.

@@ -59,6 +59,7 @@ struct RealtimeChannel {
     let send: ([String: Any]) async throws -> Void
     let receive: () async throws -> [String: Any]
     let close: @Sendable () -> Void
+    var ping: () async throws -> Void = {}
     static func live(_ request: URLRequest) -> RealtimeChannel {
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = 30
@@ -87,6 +88,15 @@ struct RealtimeChannel {
             close: {
                 socket.cancel(with: .goingAway, reason: nil)
                 session.invalidateAndCancel()
+            },
+            ping: {
+                try await surfacing {
+                    try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                        socket.sendPing { error in
+                            if let error { continuation.resume(throwing: error) } else { continuation.resume() }
+                        }
+                    }
+                }
             })
     }
 }
