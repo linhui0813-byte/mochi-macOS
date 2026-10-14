@@ -187,6 +187,70 @@ final class HandsFreeConversationTests: XCTestCase {
             XCTAssertEqual(requests, 1)
         }
     }
+    @MainActor func testProtectedReplyTailDoesNotSubmitSpeakerEcho() async throws {
+        let (app, device) = appAndDevice()
+        let phrase = EndPhraseTestDevice()
+        var now = Date()
+        var requests = 0
+        app.recordingNow = { now }
+        app.makeEndPhraseDevice = { _ in phrase }
+        app.speech.conversationReply = { [weak self] _, _, callbacks in
+            requests += 1
+            try self?.respond(callbacks)
+        }
+        app.toggleConversationVoice()
+        await waitUntil { app.handsFreeActive }
+        let session = try XCTUnwrap(app.handsFree)
+        session.consume(speech)
+        phrase.matched?()
+        await waitUntil { app.turn.activity == .playing }
+        now = now.addingTimeInterval(20)
+        session.consume(speech)
+        device.players.last?.drain()
+        XCTAssertFalse(session.inputPausedForReply)
+        now = now.addingTimeInterval(0.1)
+        var echo = Data()
+        for index in stride(from: 0, to: speech.count, by: 2) {
+            let sample = Int16(bitPattern: UInt16(speech[index]) | UInt16(speech[index + 1]) << 8)
+            var value = Int16(Int(sample) / 6).littleEndian
+            withUnsafeBytes(of: &value) { echo.append(contentsOf: $0) }
+        }
+        session.consume(echo + silence)
+        XCTAssertEqual(app.conversation?.messages.count, 2, "Speaker tail must not become a new user recording")
+        XCTAssertFalse(app.handsFreeSpeechDetected)
+        XCTAssertEqual(requests, 1)
+        now = now.addingTimeInterval(1)
+        session.consume(speech + silence)
+        await waitUntil { requests == 2 && app.turn.activity == .playing }
+        app.stop()
+    }
+    @MainActor func testSavedReplyPlaybackFailureEndsCaptureInsteadOfLeavingAnActivePausedSession() async throws {
+        let (app, device) = appAndDevice()
+        let phrase = EndPhraseTestDevice()
+        var requests = 0
+        app.makeEndPhraseDevice = { _ in phrase }
+        app.audio.makePlayer = { _ in throw AppFailure("Playback test failure") }
+        app.speech.conversationReply = { _, _, callbacks in
+            requests += 1
+            var result = RealtimeAccumulator()
+            result.audio = Data(repeating: 1, count: 4800)
+            result.text = "A reply without live audio chunks"
+            result.done = true
+            try callbacks.response(result)
+        }
+        app.toggleConversationVoice()
+        await waitUntil { app.handsFreeActive }
+        let session = try XCTUnwrap(app.handsFree)
+        session.consume(speech)
+        phrase.matched?()
+        await waitUntil { app.error != nil }
+        XCTAssertFalse(app.handsFreeActive)
+        XCTAssertEqual(device.stops, 1)
+        XCTAssertEqual(phrase.stops, 1)
+        XCTAssertEqual(app.turn.activity, .idle)
+        session.consume(speech + silence)
+        XCTAssertEqual(requests, 1)
+    }
     @MainActor func testSpokenEndingPhraseSendsWithoutQuietKeepsListeningAndRejectsDuplicateResults() async throws {
         let (app, audio) = appAndDevice()
         let phrase = EndPhraseTestDevice()
@@ -640,14 +704,33 @@ final class HandsFreeConversationTests: XCTestCase {
     }
     @MainActor func testProviderFailureClosesTheOpenMicrophone() async throws {
         let (app, device) = appAndDevice()
+        let phrase = EndPhraseTestDevice()
+        app.makeEndPhraseDevice = { _ in phrase }
         app.speech.conversationReply = { _, _, _ in throw URLError(.networkConnectionLost) }
         app.toggleConversationVoice()
         await waitUntil { app.handsFreeActive }
+        XCTAssertEqual(app.endingPhraseDisplayStatus, String(localized: "Ready"))
         device.continuation.yield(speech + silence)
         await waitUntil { app.error != nil }
         XCTAssertFalse(app.handsFreeActive)
         XCTAssertEqual(device.stops, 1)
+        XCTAssertEqual(phrase.stops, 1)
+        XCTAssertNil(app.preparedEndingPhrase)
+        XCTAssertEqual(app.endingPhraseDisplayStatus, String(localized: "Not prepared"))
         XCTAssertEqual(app.turn.activity, .idle)
+    }
+    @MainActor func testEndingAnInactiveSessionKeepsThePreparedPhraseReady() async throws {
+        let (app, _) = appAndDevice()
+        let phrase = EndPhraseTestDevice()
+        app.makeEndPhraseDevice = { _ in phrase }
+        app.checkEndingPhrase()
+        await app.endingPhrasePreparationTask?.value
+        XCTAssertNotNil(app.preparedEndingPhrase)
+        app.endHandsFreeConversation()
+        XCTAssertEqual(app.endingPhraseDisplayStatus, String(localized: "Ready"))
+        XCTAssertNotNil(app.preparedEndingPhrase)
+        XCTAssertEqual(phrase.stops, 0)
+        app.stop()
     }
     @MainActor func testStopBeforePermissionReturnsCannotOpenTheMicrophoneLater() async throws {
         for operation in 0..<4 {

@@ -144,6 +144,9 @@ import MochiKernel
     }
     func listening() {
         guard current, let app else { return }
+        // Protected replies discard capture callbacks, so their speaker tail has not refreshed
+        // the usual echo guard. Arm it before accepting microphone speech again.
+        if inputPausedForReply { echoGuardUntil = app.recordingNow().addingTimeInterval(0.6) }
         inputPausedForReply = false
         replyID = nil
         app.speaking = false
@@ -253,5 +256,9 @@ extension AppModel {
         let session = handsFree
         handsFree = nil
         session?.stop()
+        if session != nil {
+            endingPhraseStatus =
+                settings.effectiveEndingPhrase == nil ? String(localized: "Off") : String(localized: "Not prepared")
+        }
     }
 }
