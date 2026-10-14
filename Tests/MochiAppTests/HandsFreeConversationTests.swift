@@ -114,6 +114,7 @@ final class HandsFreeConversationTests: XCTestCase {
         app.newChat()
         app.continuousConversation = true
         app.media.permission = { true }
+        app.speech.transcribe = { _, _ in throw AppFailure("Test transcription unavailable.") }
         let device = HandsFreeTestDevice()
         app.makeHandsFreeAudio = { device }
         return (app, device)
@@ -210,6 +211,143 @@ final class HandsFreeConversationTests: XCTestCase {
         XCTAssertTrue(first.stopped)
         XCTAssertEqual(first.audio.count, 4800, "Cancelled generation must not schedule its late audio")
         XCTAssertEqual(app.conversation?.messages.filter { $0.role == "assistant" }.count, 1)
+        app.stop()
+    }
+    @MainActor func testInterruptedGenerationRecoversOnlyItsTranscriptWhileTheNextTurnPlays() async throws {
+        let (app, device) = appAndDevice()
+        let generation = TestGate()
+        let recognition = TestGate()
+        var requests = 0
+        var recoveries = 0
+        app.speech.conversationReply = { [weak self] _, _, callbacks in
+            requests += 1
+            if requests == 1 {
+                await generation.wait()
+                throw CancellationError()
+            }
+            try self?.respond(callbacks)
+        }
+        app.speech.transcribe = { url, _ in
+            recoveries += 1
+            XCTAssertEqual(url.lastPathComponent, app.conversation?.messages.first?.audio)
+            await recognition.wait()
+            return "Recovered interrupted speech"
+        }
+        app.toggleConversationVoice()
+        await waitUntil { app.handsFreeActive }
+        device.continuation.yield(speech + silence)
+        await waitUntil { requests == 1 }
+        let original = try XCTUnwrap(app.currentTask)
+        let voiceID = try XCTUnwrap(app.conversation?.messages.first?.id)
+        device.continuation.yield(speech + silence)
+        await waitUntil { requests == 2 && app.turn.activity == .playing }
+        await generation.release()
+        await original.value
+        await waitUntil { recoveries == 1 }
+        XCTAssertTrue(app.transcribingMessageIDs.contains(voiceID))
+        XCTAssertEqual(app.conversation?.messages.first?.transcriptionState, .pending)
+        await recognition.release()
+        await waitUntil { !app.transcribingMessageIDs.contains(voiceID) }
+        XCTAssertEqual(app.conversation?.messages.first?.text, "Recovered interrupted speech")
+        XCTAssertEqual(app.conversation?.messages.first?.transcriptionState, .completed)
+        XCTAssertEqual(app.conversation?.messages.count, 3, "Recovery must not add a message or another reply")
+        XCTAssertEqual(requests, 2)
+        XCTAssertEqual(recoveries, 1)
+        XCTAssertEqual(app.turn.activity, .playing)
+        XCTAssertTrue(app.handsFreeActive)
+        app.stop()
+    }
+    @MainActor func testStopOrConversationChangeBeforeCancelledReplyExitsCannotStartRecovery() async throws {
+        for changeConversation in [false, true] {
+            let (app, device) = appAndDevice()
+            let gate = TestGate()
+            var requests = 0
+            app.speech.conversationReply = { _, _, _ in
+                requests += 1
+                await gate.wait()
+                throw CancellationError()
+            }
+            app.speech.transcribe = { _, _ in
+                XCTFail("A stopped session must not start a transcription request")
+                return "Unexpected"
+            }
+            app.toggleConversationVoice()
+            await waitUntil { app.handsFreeActive }
+            device.continuation.yield(speech + silence)
+            await waitUntil { requests == 1 }
+            let original = try XCTUnwrap(app.currentTask)
+            app.handsFree?.consume(speech)
+            if changeConversation { app.newChat() } else { app.stop() }
+            await gate.release()
+            await original.value
+            XCTAssertTrue(app.transcripts.isIdle)
+            XCTAssertFalse(app.handsFreeActive)
+        }
+    }
+    @MainActor func testStopOrManualEditRejectsLateAutomaticRecovery() async throws {
+        for edit in [false, true] {
+            let (app, device) = appAndDevice()
+            let generation = TestGate()
+            let recognition = TestGate()
+            var requests = 0
+            var recoveries = 0
+            app.speech.conversationReply = { _, _, _ in
+                requests += 1
+                await generation.wait()
+                throw CancellationError()
+            }
+            app.speech.transcribe = { _, _ in
+                recoveries += 1
+                await recognition.wait()
+                return "Stale recognition"
+            }
+            app.toggleConversationVoice()
+            await waitUntil { app.handsFreeActive }
+            device.continuation.yield(speech + silence)
+            await waitUntil { requests == 1 }
+            let original = try XCTUnwrap(app.currentTask)
+            let voiceID = try XCTUnwrap(app.conversation?.messages.first?.id)
+            app.handsFree?.consume(speech)
+            await generation.release()
+            await original.value
+            await waitUntil { recoveries == 1 }
+            let job = try XCTUnwrap(app.transcripts.task(for: voiceID))
+            if edit { app.editTranscript(voiceID, text: "My correction") } else { app.stop() }
+            await recognition.release()
+            await job.value
+            XCTAssertEqual(app.conversation?.messages.first?.text, edit ? "My correction" : "")
+            XCTAssertEqual(app.conversation?.messages.first?.transcriptionState, edit ? .completed : .interrupted)
+            XCTAssertTrue(app.transcripts.isIdle)
+            app.stop()
+        }
+    }
+    @MainActor func testFaintNoiseAfterPlaybackTailDoesNotCreateAnEmptyVoiceMessage() async throws {
+        let (app, device) = appAndDevice()
+        var now = Date()
+        var requests = 0
+        app.recordingNow = { now }
+        app.speech.conversationReply = { [weak self] _, _, callbacks in
+            requests += 1
+            try self?.respond(callbacks)
+        }
+        app.toggleConversationVoice()
+        await waitUntil { app.handsFreeActive }
+        device.continuation.yield(speech + silence)
+        await waitUntil { app.turn.activity == .playing }
+        device.players.last?.drain()
+        now = now.addingTimeInterval(5)
+        var faint = Data()
+        for index in stride(from: 0, to: speech.count, by: 2) {
+            let sample = Int16(bitPattern: UInt16(speech[index]) | UInt16(speech[index + 1]) << 8)
+            var value = Int16(Int(sample) / 100).littleEndian
+            withUnsafeBytes(of: &value) { faint.append(contentsOf: $0) }
+        }
+        app.handsFree?.consume(faint + silence)
+        XCTAssertEqual(app.conversation?.messages.count, 2)
+        XCTAssertFalse(app.handsFreeSpeechDetected)
+        XCTAssertEqual(requests, 1)
+        app.handsFree?.consume(speech + silence)
+        await waitUntil { requests == 2 && app.turn.activity == .playing }
         app.stop()
     }
     @MainActor func testStopConversationChangeAndModeOffCloseCaptureAndIgnoreLateInput() async throws {

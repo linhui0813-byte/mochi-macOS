@@ -116,14 +116,22 @@ extension AppModel {
         let service = settings.conversationService(for: chat)
         let stream = ConversationReplyStream(app: self, token: token, enabled: audioFile != nil && playReply == nil)
         let voiceID = pcm == nil ? nil : userID
+        let handsFreeSession = handsFree
         let reply = speech.conversationReply
         let operation = Task { [weak self] in
             guard let self else { return }
             defer {
                 if turn.epoch == token { task = nil }
                 if let voiceID, transcripts.isCurrent(voiceID, requestID) {
-                    interruptPendingTranscript(voiceID, chatID: conversationID)
+                    // Speaking over a reply closes its socket, including any unfinished input
+                    // transcription. Recover that saved utterance once on an independent job.
+                    // Stop, edits and conversation changes invalidate the job/session instead.
+                    let recover =
+                        Task.isCancelled && handsFreeSession != nil
+                        && handsFree === handsFreeSession && selectedID == conversationID
+                    if !recover { interruptPendingTranscript(voiceID, chatID: conversationID) }
                     transcripts.finish(voiceID, requestID)
+                    if recover { startTranscriptRecovery(voiceID, chatID: conversationID, pendingOnly: true) }
                 }
             }
             do {
@@ -263,11 +271,21 @@ extension AppModel {
         guard writableConversation, !busy,
             let chat = conversation,
             let message = chat.messages.first(where: { $0.id == messageID && $0.role == "user" }),
+            message.audio != nil,
+            !transcribingMessageIDs.contains(messageID)
+        else { return }
+        startTranscriptRecovery(messageID, chatID: chat.id)
+    }
+    /// A separate, bounded transcription request; never regenerates or replays the assistant reply.
+    private func startTranscriptRecovery(_ messageID: UUID, chatID: UUID, pendingOnly: Bool = false) {
+        guard libraryReadable,
+            let chat = library.conversations.first(where: { $0.id == chatID && !$0.isDeleted && !$0.archived }),
+            let message = chat.messages.first(where: { $0.id == messageID && $0.role == "user" }),
             let file = message.audio,
+            !pendingOnly || message.transcriptionState == .pending,
             !transcribingMessageIDs.contains(messageID)
         else { return }
         let jobID = transcripts.begin(messageID)
-        let chatID = chat.id
         updateTranscript(messageID, chatID: chatID, text: nil, state: .pending, error: nil)
         let transcribe = speech.transcribe
         let model = settings.effectiveModelName

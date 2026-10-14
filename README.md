@@ -234,6 +234,8 @@ Practice examples you saved with ElevenLabs before Mochi moved to Codex voices k
 
 Continuous conversation detects speech locally with the bundled WebRTC voice activity detector (libfvad). Pause for about 1–1.5 seconds after speaking to send a turn automatically. The microphone meter shows incoming sound; “Hearing you” confirms speech detection, and “Thinking” confirms the turn was submitted. The detector adds no cloud service or API key. Its source and license are in `Vendor/libfvad`, and its notices are bundled with the app.
 
+Speaking over Mochi stops her reply. If that also interrupts an unfinished transcript, Mochi makes one transcription-only recovery request using your saved recording, without generating another reply. Stop or a conversation change cancels this work, and editing the transcript takes precedence over a late result. A learned microphone level helps reject faint background sound between turns. For an older recording labelled “Transcript unavailable,” open its message menu and choose **Retry Transcription**; recordings with no clear speech may still require adding text or recording again.
+
 ## Build from source
 
 With Xcode's command-line tools available:

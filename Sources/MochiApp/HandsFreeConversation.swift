@@ -48,10 +48,12 @@ import MochiKernel
         if app.speaking { echoGuardUntil = now.addingTimeInterval(0.6) }
         // The speaker can leave a quiet residual even after echo cancellation. Require a voice
         // onset near the user's recorded level while playback is active and for its short tail.
-        // Ordinary listening retains the sensitive speech classifier, including quiet speech.
+        // Keep a more permissive learned floor while listening too: faint residual speech or
+        // room noise must not start another turn after the playback tail expires.
         let floor: Float? =
             now < echoGuardUntil
-            ? min(-40, max(-55, (detector.lastSpeechPeakDB ?? -35) - 15)) : nil
+            ? min(-40, max(-55, (detector.lastSpeechPeakDB ?? -35) - 15))
+            : detector.lastSpeechPeakDB.map { min(-45, max(-65, $0 - 20)) }
         let events = detector.accept(pcm, minimumSpeechLevelDB: floor)
         app.recordingLevel = max(-80, detector.levelDB)
         app.handsFreeSpeechDetected = detector.speaking
