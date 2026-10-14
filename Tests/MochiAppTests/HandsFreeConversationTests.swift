@@ -59,6 +59,36 @@ final class HandsFreeConversationTests: XCTestCase {
     }
     private var speech: Data { SpeechFixture.voiced(frames: 45) }
     private var silence: Data { Data(repeating: 0, count: 960 * 75) }
+    @MainActor func testFaintSpeakerLeakDoesNotCutOffAReplyButTheUserCanStillInterrupt() async throws {
+        let (app, device) = appAndDevice()
+        var requests = 0
+        app.speech.conversationReply = { [weak self] _, _, callbacks in
+            requests += 1
+            try self?.respond(callbacks)
+        }
+        app.toggleConversationVoice()
+        await waitUntil { app.handsFreeActive }
+        device.continuation.yield(speech + silence)
+        await waitUntil { app.turn.activity == .playing }
+        let player = try XCTUnwrap(device.players.first)
+        var faint = Data()
+        for index in stride(from: 0, to: speech.count, by: 2) {
+            let sample = Int16(bitPattern: UInt16(speech[index]) | UInt16(speech[index + 1]) << 8)
+            var value = Int16(Int(sample) / 100).littleEndian
+            withUnsafeBytes(of: &value) { faint.append(contentsOf: $0) }
+        }
+        // Consume synchronously so the checks cannot pass before the input task processes the leak.
+        app.handsFree?.consume(faint + silence)
+        XCTAssertFalse(player.stopped)
+        XCTAssertFalse(app.conversation?.messages.last?.interrupted == true)
+        XCTAssertEqual(requests, 1)
+        XCTAssertEqual(app.turn.activity, .playing)
+        app.handsFree?.consume(speech)
+        XCTAssertTrue(player.stopped, "A normal spoken interruption must still stop the reply")
+        app.handsFree?.consume(silence)
+        await waitUntil { requests == 2 && app.turn.activity == .playing }
+        app.stop()
+    }
     @MainActor func testSpeechStatusDistinguishesDetectedSpeechFromWaitingAndSending() async throws {
         let (app, device) = appAndDevice()
         let gate = TestGate()

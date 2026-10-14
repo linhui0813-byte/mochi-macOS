@@ -9,14 +9,17 @@ public final class SpeechTurnDetector {
     }
     public private(set) var levelDB: Float = -80
     public private(set) var speaking = false
+    public private(set) var lastSpeechPeakDB: Float?
     private var pending = Data()
     private var prefix = Data()
     private var take = Data()
     private var candidateFrames = 0
     private var quietFrames = 0
+    private var candidatePeakDB: Float = -80
+    private var speechPeakDB: Float = -80
     private let classifier = VoiceActivityClassifier()
     public init() {}
-    public func accept(_ pcm: Data) -> [Event] {
+    public func accept(_ pcm: Data, minimumSpeechLevelDB: Float? = nil) -> [Event] {
         pending.append(pcm)
         var events: [Event] = []
         var offset = 0
@@ -33,26 +36,36 @@ public final class SpeechTurnDetector {
                 }
             }
             levelDB = Float(10 * log10(max(energy / 480, 1e-10)))
-            let voiced = classifier.isSpeech(frame)
+            // An optional onset floor rejects faint speaker leakage during playback. Once real
+            // speech starts, retain quieter syllables and endings without applying that floor.
+            let voiced =
+                classifier.isSpeech(frame)
+                && (speaking || minimumSpeechLevelDB.map { levelDB >= $0 } != false)
             if !speaking {
                 prefix.append(frame)
                 if prefix.count > 14400 { prefix = Data(prefix.suffix(14400)) }
                 candidateFrames = voiced ? candidateFrames + 1 : max(0, candidateFrames - 1)
+                if voiced { candidatePeakDB = max(candidatePeakDB, levelDB) }
+                if candidateFrames == 0 { candidatePeakDB = -80 }
                 guard candidateFrames >= 10 else { continue }
                 speaking = true
+                speechPeakDB = candidatePeakDB
                 take = prefix
                 prefix.removeAll(keepingCapacity: true)
                 quietFrames = 0
                 events.append(.started)
             } else {
                 take.append(frame)
+                if voiced { speechPeakDB = max(speechPeakDB, levelDB) }
                 quietFrames = voiced ? 0 : quietFrames + 1
                 if quietFrames >= 55 || take.count >= 2_880_000 {
                     // Keep 240 ms of tail, rather than a whole second of trailing silence.
                     let trim = max(0, quietFrames - 12) * 960
                     let audio = Data(take.prefix(max(0, take.count - trim)))
+                    lastSpeechPeakDB = speechPeakDB
                     speaking = false
                     candidateFrames = 0
+                    candidatePeakDB = -80
                     quietFrames = 0
                     take.removeAll(keepingCapacity: true)
                     events.append(.ended(audio))

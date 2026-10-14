@@ -36,6 +36,17 @@ final class SpeechTurnDetectorTests: XCTestCase {
                 return false
             })
     }
+    func testPlaybackOnsetFloorRejectsFaintSpeechButKeepsASofterSentenceEnding() {
+        let detector = SpeechTurnDetector()
+        XCTAssertEqual(detector.accept(scaled(voiced(45), gain: 0.01) + quiet(90), minimumSpeechLevelDB: -40), [])
+        XCTAssertEqual(detector.accept(voiced(30), minimumSpeechLevelDB: -40), [.started])
+        XCTAssertEqual(
+            detector.accept(scaled(voiced(45), gain: 0.025), minimumSpeechLevelDB: -40), [],
+            "A softer ending must stay in the same utterance after a valid onset")
+        let events = detector.accept(quiet(90), minimumSpeechLevelDB: -40)
+        XCTAssertEqual(events.count, 1)
+        XCTAssertNotNil(detector.lastSpeechPeakDB)
+    }
     func testBackgroundNoiseDoesNotPreventSpeechFromEnding() {
         let detector = SpeechTurnDetector()
         XCTAssertEqual(detector.accept(noise(200)), [], "Steady background noise must not create a turn")
