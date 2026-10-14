@@ -16,7 +16,7 @@ struct MessagePlayback: View {
     private var active: Bool { app.playbackFile == file }
     private var length: Double { active ? audio.duration : fileDuration }
     private var position: Double { scrubbing ? scrubPosition : active ? audio.position : 0 }
-    private var unavailable: Bool { app.busy && app.turn.activity != .playing }
+    private var unavailable: Bool { app.handsFreeActive || (app.busy && app.turn.activity != .playing) }
     var body: some View {
         HStack(spacing: 8) {
             Button {

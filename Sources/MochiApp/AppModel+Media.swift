@@ -5,6 +5,8 @@ import MochiKernel
 /// Playback and recording, arbitrated by the shared turn machine.
 extension AppModel {
     var microphoneLabel: String {
+        if handsFreeActive || handsFreeStarting { return String(localized: "End Continuous Conversation") }
+        if continuousConversation && !practice { return String(localized: "Start Continuous Conversation") }
         if turn.activity == .recording { return String(localized: "Finish Recording") }
         if greetingActive { return String(localized: "Skip Greeting and Start Recording") }
         return conversation?.greetsBeforeRecording == false
@@ -25,6 +27,10 @@ extension AppModel {
     /// Ends playback the way Stop does, with the view change scheduled after it, but leaves transcriptions,
     /// recordings and the Help draft alone.
     func stopPlayback() {
+        if handsFreeActive {
+            _ = stop()
+            return
+        }
         guard turn.activity == .playing else { return }
         deferredToolAction = nil
         greetingActive = false
@@ -43,6 +49,7 @@ extension AppModel {
         _ file: String, mochi: Bool = false, afterPlayback: (() -> Void)? = nil,
         afterPlaybackFailure: (() -> Void)? = nil, settingsTab: SettingsTab? = nil
     ) {
+        if handsFreeActive { _ = stop() }
         guard !busy || turn.activity == .playing else { return }
         if afterPlayback == nil { greetingActive = false }
         audio.stop()
@@ -183,6 +190,10 @@ extension AppModel {
         )
     }
     func finishRecording() {
+        if handsFreeActive {
+            _ = stop()
+            return
+        }
         // A recorder that already stopped (time limit, disconnect, failure) is judged by its reported outcome,
         // never by elapsed time; Finish can be pressed before that outcome or the clock's next tick arrives.
         if turn.activity == .recording, !media.recordingActive() {

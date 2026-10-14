@@ -55,6 +55,7 @@ struct MessageDeletionUndo {
         didSet {
             if oldValue != selectedID {
                 find.close()
+                if handsFreeActive || handsFreeStarting { _ = stop() }
                 speech.resetConversation()
             }
         }
@@ -63,6 +64,7 @@ struct MessageDeletionUndo {
         get { settings.continuousConversation }
         set {
             settings.continuousConversation = newValue
+            if handsFreeActive || handsFreeStarting { _ = stop() }
             speech.resetConversation()
         }
     }
@@ -100,6 +102,9 @@ struct MessageDeletionUndo {
     var transcribingMessageIDs: Set<UUID> { transcripts.messageIDs }
     @ObservationIgnored var speech: SpeechServices
     @ObservationIgnored var media: MediaServices
+    var handsFree: HandsFreeConversation?
+    var handsFreeStarting = false
+    @ObservationIgnored var makeHandsFreeAudio: () throws -> any HandsFreeAudioDevice = { HandsFreeAudio() }
     @ObservationIgnored var playReply: ((String) -> Void)?
     /// Writes a reply's audio file; replaceable so a failed audio write can be tested while the library still saves.
     @ObservationIgnored var writeReplyAudio: (Data, URL) throws -> Void = { try $0.write(to: $1, options: .atomic) }
@@ -182,6 +187,16 @@ struct MessageDeletionUndo {
     var busy: Bool { turn.activity != .idle }
     var practice: Bool { turn.mode == .practice }
     var status: String {
+        if handsFreeActive {
+            if speaking {
+                return audio.paused
+                    ? String(localized: "Playback paused · microphone stays on")
+                    : String(localized: "\(displayCharacterName) is speaking · speak to interrupt")
+            }
+            return turn.activity == .recording
+                ? String(localized: "Listening · speak naturally")
+                : String(localized: "Thinking · microphone stays on")
+        }
         switch turn.activity {
         case .recording:
             if recordingMeaning { return String(localized: "Recording your thought · finish to review") }
@@ -347,7 +362,8 @@ struct MessageDeletionUndo {
         removeUnreferencedRecording(recording?.lastPathComponent)
     }
     /// Ends whatever owns the turn and returns the unfinished recording, if any, for the caller to discard.
-    private func cancelTurn() -> URL? {
+    func cancelTurn(preservingHandsFree: Bool = false) -> URL? {
+        if !preservingHandsFree { endHandsFreeConversation() }
         deferredToolAction = nil
         greetingActive = false
         let recording = media.stopRecording()
@@ -431,6 +447,7 @@ struct MessageDeletionUndo {
     }
     func fail(_ failure: Error, token: UUID, context: String = "Operation", settingsTab: SettingsTab? = nil) {
         guard turn.epoch == token else { return }
+        endHandsFreeConversation()
         if audio.isStreaming {
             audio.stop()
             playbackFile = nil

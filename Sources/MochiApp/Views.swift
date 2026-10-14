@@ -334,6 +334,9 @@ struct WorkspaceView: View {
                         .font(.system(size: 15))
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
+                    if message.interrupted {
+                        Text("Interrupted reply").font(.caption).foregroundStyle(.secondary)
+                    }
                     if isUser && message.audio != nil && message.contextText == nil {
                         Text(
                             app.transcribingMessageIDs.contains(message.id)
@@ -407,12 +410,17 @@ struct WorkspaceView: View {
             phraseChips
             HStack(alignment: .bottom, spacing: 12) {
                 Button(action: app.toggleConversationVoice) {
-                    Image(systemName: app.turn.activity == .recording ? "stop.circle.fill" : "mic.fill")
-                        .font(.system(size: 18))
+                    Image(
+                        systemName: app.handsFreeActive || app.handsFreeStarting || app.turn.activity == .recording
+                            ? "stop.circle.fill" : "mic.fill"
+                    )
+                    .font(.system(size: 18))
                 }.buttonStyle(.borderless)
                     .help(app.microphoneLabel)
                     .accessibilityLabel(app.microphoneLabel)
-                    .disabled(app.busy && app.turn.activity != .recording && !app.greetingActive)
+                    .disabled(
+                        !app.handsFreeActive && !app.handsFreeStarting && app.busy && app.turn.activity != .recording
+                            && !app.greetingActive)
                 Button(action: app.startHelp) {
                     Image(systemName: "waveform.badge.plus").font(.system(size: 18))
                 }.buttonStyle(.borderless)
@@ -441,7 +449,7 @@ struct WorkspaceView: View {
             }
             .padding(12)
             .fieldFrame(cornerRadius: 24, focused: composerFocused)
-            if app.turn.activity == .recording { RecordingFeedback(app: app) }
+            if app.turn.activity == .recording && !app.handsFreeActive { RecordingFeedback(app: app) }
             HStack(spacing: 5) {
                 if app.speaking && app.audio.isStreaming {
                     Image(systemName: app.audio.paused ? "pause.fill" : "speaker.wave.2.fill")

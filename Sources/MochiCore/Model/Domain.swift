@@ -53,6 +53,8 @@ public struct Message: Codable, Identifiable, Equatable {
     public var date = Date()
     public var transcriptionState: TranscriptionState?
     public var transcriptionError: String?
+    /// Audio may be replayed in full, but an unheard ending must not enter the next model context.
+    public var interrupted = false
     public init(role: String, text: String, audio: String? = nil, speakerName: String? = nil) {
         self.role = role
         self.text = text
@@ -60,17 +62,19 @@ public struct Message: Codable, Identifiable, Equatable {
         self.speakerName = speakerName
     }
     public var contextText: String? {
+        if interrupted && role == "assistant" { return "[The spoken reply was interrupted. Its ending was not heard.]" }
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
             !(role == "user" && audio != nil && Self.legacyLabels.contains(text))
         else { return nil }
         return text
     }
     public var displayText: String {
-        contextText ?? (role == "user" && audio != nil ? String(localized: "Voice recording") : text)
+        if interrupted && !text.isEmpty { return text }
+        return contextText ?? (role == "user" && audio != nil ? String(localized: "Voice recording") : text)
     }
     private static let legacyLabels = ["Voice message (transcript unavailable)", "Voice message · awaiting transcript"]
     private enum CodingKeys: String, CodingKey {
-        case id, role, text, audio, date, transcriptionState, transcriptionError, speakerName
+        case id, role, text, audio, date, transcriptionState, transcriptionError, speakerName, interrupted
     }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -82,6 +86,7 @@ public struct Message: Codable, Identifiable, Equatable {
         date = try c.decode(Date.self, forKey: .date)
         transcriptionState = try c.decodeIfPresent(TranscriptionState.self, forKey: .transcriptionState)
         transcriptionError = try c.decodeIfPresent(String.self, forKey: .transcriptionError)
+        interrupted = try c.decodeIfPresent(Bool.self, forKey: .interrupted) ?? false
         if role == "user", audio != nil, Self.legacyLabels.contains(text) {
             transcriptionState = text.contains("awaiting") ? .interrupted : .failed
             text = ""

@@ -52,6 +52,12 @@ import Foundation
     }
     private func playbackFailed() {
         guard let app, app.turn.epoch == token else { return }
+        if app.handsFreeActive {
+            app.stop()
+            app.error = String(
+                localized: "Continuous conversation playback stopped. Check your audio devices and start again.")
+            return
+        }
         failed = true
         app.audio.stop()
         app.speaking = false
@@ -69,5 +75,6 @@ import Foundation
         let action = afterPlayback
         afterPlayback = nil
         action?()
+        app.handsFree?.listening()
     }
 }

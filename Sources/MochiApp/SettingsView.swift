@@ -39,12 +39,16 @@ struct SettingsView: View {
                         app.speech.resetConversation()
                     }
                     Toggle("Continuous conversation", isOn: Bindable(app).continuousConversation)
-                        .toggleStyle(.switch).disabled(app.busy)
+                        .toggleStyle(.switch).disabled(app.busy && !app.handsFreeActive && !app.handsFreeStarting)
                         .accessibilityIdentifier("continuous-conversation")
-                    Text("On: keep the connection open between messages. Off: reconnect for each message.")
-                        .font(.callout).foregroundStyle(.secondary)
-                    Text("Recording still starts with the microphone button or your shortcut.")
-                        .font(.caption).foregroundStyle(.secondary)
+                    Text(
+                        "On: start once, speak hands-free, and interrupt Mochi by speaking. Off: record each message manually."
+                    )
+                    .font(.callout).foregroundStyle(.secondary)
+                    Text(
+                        "Press the microphone button or shortcut to start. Press it again, or Stop, to end the conversation."
+                    )
+                    .font(.caption).foregroundStyle(.secondary)
                     LabeledContent("Status") { Text(app.serviceStatus).foregroundStyle(.secondary) }
                     Button("Check Connection", action: app.checkConnection).disabled(app.busy)
                 }
@@ -80,7 +84,7 @@ struct SettingsView: View {
                         "Conversation text, context, and voice messages go to OpenAI through your Codex sign-in. Example text is voiced by OpenAI through the same sign-in. Practice attempts and pitch analysis stay on your Mac."
                     )
                     Text(
-                        "Checking the connection sends a short text request. Recordings are sent only when you finish a voice message or choose to translate a recorded thought."
+                        "Checking the connection sends a short text request. In continuous conversation, the microphone stays on until you stop; detected speech is sent automatically. In manual mode, recordings are sent when you finish a voice message or translate a recorded thought."
                     )
                     Text(
                         "Library backups include conversations and practice audio, not sign-in credentials. Provider processing and retention follow your account settings."

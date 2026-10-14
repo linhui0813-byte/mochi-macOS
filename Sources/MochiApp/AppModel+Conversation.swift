@@ -132,6 +132,7 @@ extension AppModel {
                         guard let self, !Task.isCancelled, turn.epoch == token else { return }
                         task = nil
                         let filename = saveReply(reply, conversationID: conversationID, speakerName: speakerName)
+                        handsFree?.replySaved()
                         if reply.truncated {
                             notice =
                                 "\(speakerName)’s reply reached its length limit and was cut short. Ask a follow-up to continue."
@@ -214,15 +215,20 @@ extension AppModel {
     private func playReplyThenDeferredAction(_ filename: String?) {
         let action = deferredToolAction
         deferredToolAction = nil
-        guard let filename else {
+        let session = handsFree
+        let completed = { [weak session] in
             action?()
+            session?.listening()
+        }
+        guard let filename else {
+            completed()
             return
         }
         if let playReply {
             playReply(filename)
-            action?()
-        } else if let action {
-            play(filename, mochi: true, afterPlayback: action, afterPlaybackFailure: action)
+            completed()
+        } else if action != nil || session != nil {
+            play(filename, mochi: true, afterPlayback: completed, afterPlaybackFailure: action)
         } else {
             play(filename, mochi: true)
         }
@@ -305,9 +311,17 @@ extension AppModel {
             messageID, chatID: chatID, text: clean, state: clean.isEmpty ? .failed : .completed, error: nil)
     }
     func toggleConversationVoice() {
+        if handsFreeActive || handsFreeStarting {
+            _ = stop()
+            return
+        }
         guard !practice, writableConversation, libraryReadable else { return }
         if turn.activity != .recording, !greetingActive, conversation?.characterNameNeedsReview == true {
             error = String(localized: "Review the character name in Conversation Instructions before recording.")
+            return
+        }
+        if continuousConversation {
+            startHandsFreeConversation()
             return
         }
         if greetingActive {

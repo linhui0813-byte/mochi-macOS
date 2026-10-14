@@ -40,15 +40,21 @@ brew upgrade --cask xiaolai/tap/mochi
 Voice replies start playing as audio arrives. You can pause, resume or stop playback while the reply is still
 being generated; the complete reply is saved for later replay.
 
-In **Settings → General → Connection**, **Continuous conversation** chooses how messages connect:
+In **Settings → General → Connection**, **Continuous conversation** chooses how you talk:
 
-- **Off** (default): open a new connection for each message.
-- **On**: reuse the connection for the same conversation, model and voice. An idle connection closes after two
-  minutes; the next message reconnects automatically. Stop, changing conversations or turning the switch off
-  closes it immediately.
+- **Off** (default): record each message with the microphone button or Talk shortcut, then send it manually.
+- **On**: press the microphone button or Talk shortcut once. The microphone stays open, a pause of about one
+  second sends your spoken turn, and Mochi keeps listening after replying. Speak over her to interrupt the reply.
+  Press the button or shortcut again, or use **Stop** / **Escape**, to close the microphone and end the session.
 
-Both modes use your saved conversation history. Recording still starts with the microphone button or your
-shortcut; this switch does not enable a continuously listening microphone.
+Hands-free mode uses the same audio engine for microphone and speaker, with macOS voice processing for echo
+cancellation. It keeps a short local audio prefix so the start of your words is included, sends detected speech
+rather than long silent waits, and reuses the conversation connection where possible. An interrupted request
+may need a new connection. Changing conversations, leaving for practice, an audio-device change, or a connection
+error ends the microphone session. Turning on the setting alone does not start recording.
+
+Existing recordings remain available for replay. An interrupted saved reply is marked in the conversation;
+its unheard ending is excluded from the next model context.
 
 ## What you can use it for
 
