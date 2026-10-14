@@ -48,13 +48,14 @@ import XCTest
     var failed: ((Error) -> Void)?
     var armed = false
     var stops = 0
+    var appended: [Data] = []
     func start(matched: @escaping @MainActor () -> Void, failed: @escaping @MainActor (Error) -> Void) {
         self.matched = matched
         self.failed = failed
     }
     func beginTurn() { armed = true }
     func endTurn() { armed = false }
-    func append(_ pcm: Data) throws {}
+    func append(_ pcm: Data) throws { appended.append(pcm) }
     func stop() {
         stops += 1
         armed = false
@@ -62,6 +63,130 @@ import XCTest
 }
 
 final class HandsFreeConversationTests: XCTestCase {
+    @MainActor func testPhraseStatusUsesTheLiveSessionAndReportsRecognitionFailureWithoutStoppingCapture()
+        async throws
+    {
+        let (app, audio) = appAndDevice()
+        let phrase = EndPhraseTestDevice()
+        app.makeEndPhraseDevice = { _ in phrase }
+        app.toggleConversationVoice()
+        await waitUntil { app.handsFreeActive }
+        app.cancelEndingPhrasePreparation()
+        XCTAssertEqual(app.endingPhraseStatus, String(localized: "Not prepared"))
+        XCTAssertEqual(app.endingPhraseDisplayStatus, String(localized: "Ready"))
+        phrase.failed?(AppFailure("Recognition test failure"))
+        XCTAssertEqual(app.endingPhraseDisplayStatus, String(localized: "Unavailable · pause detection still works"))
+        XCTAssertTrue(app.handsFreeActive)
+        XCTAssertEqual(audio.stops, 0)
+        XCTAssertEqual(phrase.stops, 1)
+        app.stop()
+        XCTAssertEqual(app.endingPhraseDisplayStatus, String(localized: "Not prepared"))
+    }
+    @MainActor func testEndingPhraseIgnoresContinuedSpeechDuringGenerationAndPlaybackThenResumes() async throws {
+        let (app, audio) = appAndDevice()
+        app.settings.endingPhrase = "finished now"
+        let phrase = EndPhraseTestDevice()
+        let generation = TestGate()
+        var requests = 0
+        var now = Date()
+        app.recordingNow = { now }
+        app.makeEndPhraseDevice = { _ in phrase }
+        app.speech.conversationReply = { [weak self] _, input, callbacks in
+            requests += 1
+            if requests == 1 {
+                XCTAssertEqual(input.endingPhrase, "finished now")
+                XCTAssertTrue(input.resolvedInstructions.contains("speech before its first occurrence"))
+                await generation.wait()
+            }
+            try self?.respond(callbacks)
+        }
+        app.toggleConversationVoice()
+        await waitUntil { app.handsFreeActive }
+        let session = try XCTUnwrap(app.handsFree)
+        session.consume(speech)
+        phrase.matched?()
+        await waitUntil { requests == 1 }
+        let reply = try XCTUnwrap(app.currentTask)
+        let replyEpoch = app.turn.epoch
+        now = now.addingTimeInterval(20)
+        for _ in 0..<3 { session.consume(speech + silence) }
+        phrase.matched?()
+        XCTAssertTrue(session.inputPausedForReply)
+        XCTAssertFalse(reply.isCancelled)
+        XCTAssertEqual(app.turn.epoch, replyEpoch)
+        XCTAssertEqual(requests, 1)
+        XCTAssertEqual(app.conversation?.messages.count, 1)
+        XCTAssertEqual(app.status, String(localized: "Thinking · listening paused"))
+        XCTAssertEqual(app.recordingLevel, -80)
+        XCTAssertFalse(app.handsFreeSpeechDetected)
+        XCTAssertFalse(phrase.armed)
+        XCTAssertEqual(phrase.appended.last, Data(repeating: 0, count: speech.count + silence.count))
+        await generation.release()
+        await reply.value
+        await waitUntil { app.turn.activity == .playing }
+        let player = try XCTUnwrap(audio.players.first)
+        session.consume(speech + silence)
+        XCTAssertFalse(player.stopped)
+        XCTAssertEqual(requests, 1)
+        XCTAssertEqual(app.status, String(localized: "Mochi is speaking · listening paused"))
+        XCTAssertFalse(app.conversation?.messages.last?.interrupted == true)
+        app.audio.togglePause()
+        session.consume(speech + silence)
+        XCTAssertTrue(session.inputPausedForReply)
+        XCTAssertEqual(app.status, String(localized: "Playback paused · listening paused"))
+        XCTAssertFalse(player.stopped)
+        app.audio.togglePause()
+        player.drain()
+        XCTAssertFalse(session.inputPausedForReply)
+        XCTAssertEqual(app.status, String(localized: "Listening · speak naturally"))
+        XCTAssertTrue(app.handsFreeActive)
+        // The next ordinary pause-ended turn still permits the user's usual spoken interruption.
+        session.consume(speech + silence)
+        await waitUntil { requests == 2 && app.turn.activity == .playing }
+        let next = try XCTUnwrap(audio.players.last)
+        session.consume(speech)
+        XCTAssertTrue(next.stopped)
+        app.stop()
+    }
+    @MainActor func testExplicitStopOrConversationChangeEndsAnEndingPhraseProtectedReply() async throws {
+        for operation in 0..<3 {
+            let (app, audio) = appAndDevice()
+            let phrase = EndPhraseTestDevice()
+            let generation = TestGate()
+            var requests = 0
+            app.makeEndPhraseDevice = { _ in phrase }
+            app.speech.conversationReply = { [weak self] _, _, callbacks in
+                requests += 1
+                await generation.wait()
+                try self?.respond(callbacks)
+            }
+            app.toggleConversationVoice()
+            await waitUntil { app.handsFreeActive }
+            let session = try XCTUnwrap(app.handsFree)
+            session.consume(speech)
+            phrase.matched?()
+            await waitUntil { requests == 1 }
+            let reply = try XCTUnwrap(app.currentTask)
+            XCTAssertTrue(session.inputPausedForReply)
+            if operation == 0 {
+                app.shortcutTriggered(.talk, pressed: true)
+            } else if operation == 1 {
+                app.newChat()
+            } else {
+                app.continuousConversation = false
+            }
+            await generation.release()
+            await reply.value
+            session.consume(speech + silence)
+            phrase.matched?()
+            XCTAssertFalse(app.handsFreeActive)
+            XCTAssertEqual(audio.stops, 1)
+            XCTAssertEqual(phrase.stops, 1)
+            XCTAssertTrue(audio.players.isEmpty)
+            XCTAssertEqual(app.turn.activity, .idle)
+            XCTAssertEqual(requests, 1)
+        }
+    }
     @MainActor func testSpokenEndingPhraseSendsWithoutQuietKeepsListeningAndRejectsDuplicateResults() async throws {
         let (app, audio) = appAndDevice()
         let phrase = EndPhraseTestDevice()

@@ -1,6 +1,6 @@
 import Foundation
 
-/// A distinctive English control phrase, matched as whole words at the end of local recognition.
+/// A distinctive English control phrase, matched as whole words in local recognition.
 public struct EndTurnPhrase: Equatable {
     public static let defaultValue = "over over"
     public let text: String
@@ -22,6 +22,12 @@ public struct EndTurnPhrase: Equatable {
     public func matchesEnding(in text: String) -> Bool {
         Array(Self.words(in: text).suffix(words.count)) == words
     }
+    func matches(in recognizedWords: [String]) -> Bool {
+        guard recognizedWords.count >= words.count else { return false }
+        return (0...(recognizedWords.count - words.count)).contains { start in
+            Array(recognizedWords[start..<start + words.count]) == words
+        }
+    }
 }
 
 /// Matches partial and finalized blocks without letting a late result finish a newer voice turn.
@@ -41,7 +47,9 @@ public struct EndPhraseRecognitionWindow {
     public mutating func accept(text: String, isFinal: Bool, endingAt time: Double) -> Bool {
         guard let minimumEndTime, time.isFinite, time >= minimumEndTime else { return false }
         let words = finalizedTail + EndTurnPhrase.words(in: text)
-        if Array(words.suffix(phrase.words.count)) == phrase.words {
+        // A volatile result can already include speech after the control phrase. Do not require
+        // silence, a finalized block, or the phrase to remain the last recognized words.
+        if phrase.matches(in: words) {
             end()
             return true
         }

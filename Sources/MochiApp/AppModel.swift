@@ -107,6 +107,14 @@ struct MessageDeletionUndo {
     var handsFreeSpeechDetected = false
     var endingPhrasePreparing = false
     var endingPhraseStatus = String(localized: "Not prepared")
+    var endingPhraseDisplayStatus: String {
+        // Observe status changes too: the session releases a failed recognizer without changing
+        // its own identity, and Settings must refresh when that happens.
+        let preparationStatus = endingPhraseStatus
+        guard let handsFree, settings.effectiveEndingPhrase != nil else { return preparationStatus }
+        return handsFree.endingPhraseReady
+            ? String(localized: "Ready") : String(localized: "Unavailable · pause detection still works")
+    }
     @ObservationIgnored var endingPhrasePreparationTask: Task<Void, Never>?
     @ObservationIgnored var endingPhrasePreparationID = UUID()
     @ObservationIgnored var preparedEndingPhrase: (phrase: EndTurnPhrase, device: any EndPhraseDevice)?
@@ -201,6 +209,14 @@ struct MessageDeletionUndo {
             return String(localized: "Preparing local speech recognition…")
         }
         if handsFreeActive {
+            if handsFree?.inputPausedForReply == true {
+                if speaking {
+                    return audio.paused
+                        ? String(localized: "Playback paused · listening paused")
+                        : String(localized: "\(displayCharacterName) is speaking · listening paused")
+                }
+                return String(localized: "Thinking · listening paused")
+            }
             if speaking {
                 return audio.paused
                     ? String(localized: "Playback paused · microphone stays on")

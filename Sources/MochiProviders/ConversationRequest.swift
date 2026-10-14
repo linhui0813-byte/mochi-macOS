@@ -55,7 +55,7 @@ public struct ConversationRequest {
                     userName: userName, personality: personality)
         guard !reference, !help, let phrase = endingPhrase.flatMap(EndTurnPhrase.init) else { return base }
         return base
-            + "\nThe user's final spoken phrase «\(phrase.text)» is an end-of-turn recording control. Ignore that final control phrase and reply to the preceding speech."
+            + "\nThe spoken phrase «\(phrase.text)» is an end-of-turn recording control. Answer only the user's speech before its first occurrence. Ignore the control phrase and any speech or background voices recorded after it."
     }
 }
 extension ConversationRequest {

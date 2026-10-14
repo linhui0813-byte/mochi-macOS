@@ -10,12 +10,13 @@ import MochiKernel
     private let detector = SpeechTurnDetector()
     private var endPhraseDevice: (any EndPhraseDevice)?
     private let endPhrase: EndTurnPhrase?
-    private var phraseTailUntil = Date.distantPast
+    private(set) var inputPausedForReply = false
     private var inputTask: Task<Void, Never>?
     private let previousPlayerFactory: (@escaping @MainActor (Bool) -> Void) throws -> any StreamingPlaybackPlayer
     private var replyID: UUID?
     private var echoGuardUntil = Date.distantPast
     private var stopped = false
+    var endingPhraseReady: Bool { !stopped && endPhraseDevice != nil }
     init(
         app: AppModel, conversationID: UUID, device: any HandsFreeAudioDevice,
         endPhraseDevice: (any EndPhraseDevice)? = nil
@@ -56,8 +57,11 @@ import MochiKernel
     func consume(_ pcm: Data) {
         guard current, let app else { return }
         let now = app.recordingNow()
-        if now < phraseTailUntil {
-            feedPhraseDetector(pcm)
+        if inputPausedForReply {
+            // Keep the shared audio engine available for playback, but discard microphone speech
+            // until the entire response has played. Silence advances the local recognizer's clock
+            // and settles old blocks without recognizing or retaining anybody's speech.
+            feedPhraseDetector(Data(repeating: 0, count: pcm.count))
             return
         }
         if app.speaking { echoGuardUntil = now.addingTimeInterval(0.6) }
@@ -113,8 +117,10 @@ import MochiKernel
         guard current, let app, let audio = detector.finishSpeech() else { return }
         MochiLog.audio.notice("Spoken ending phrase detected; submitting the current turn")
         endPhraseDevice?.endTurn()
-        // Do not turn the last syllable of the control phrase into a new interruption.
-        phraseTailUntil = app.recordingNow().addingTimeInterval(0.35)
+        // A control phrase yields the floor to Mochi. Noise or continued speech must not cancel
+        // generation or interrupt playback; only explicit Stop can end this protected reply.
+        inputPausedForReply = true
+        app.recordingLevel = -80
         app.handsFreeSpeechDetected = false
         submit(audio, endingPhrase: endPhrase?.text)
     }
@@ -138,10 +144,12 @@ import MochiKernel
     }
     func listening() {
         guard current, let app else { return }
+        inputPausedForReply = false
         replyID = nil
         app.speaking = false
         app.recordingSeconds = 0
         app.recordingWarning = nil
+        app.handsFreeSpeechDetected = false
         _ = app.turn.begin(.recording)
     }
     private func failed(_ error: Error) {

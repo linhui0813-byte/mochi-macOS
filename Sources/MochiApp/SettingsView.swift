@@ -58,7 +58,7 @@ struct SettingsView: View {
                         .accessibilityIdentifier("spoken-ending-phrase")
                         .onChange(of: app.settings.endingPhrase) { app.cancelEndingPhrasePreparation() }
                     Text(
-                        "Say this phrase to send your turn even when background noise continues. Pause detection still works."
+                        "Say this phrase to send your turn even when background noise continues. Listening pauses until the reply finishes, then resumes. Pause detection still works."
                     )
                     .font(.callout).foregroundStyle(.secondary)
                     Text(
@@ -71,7 +71,9 @@ struct SettingsView: View {
                         Text("Use 1–8 English words, up to 64 characters, on one line.")
                             .font(.caption).foregroundStyle(.red)
                     }
-                    LabeledContent("Ending phrase status") { Text(app.endingPhraseStatus).foregroundStyle(.secondary) }
+                    LabeledContent("Ending phrase status") {
+                        Text(app.endingPhraseDisplayStatus).foregroundStyle(.secondary)
+                    }
                     Button("Prepare phrase recognition", action: app.checkEndingPhrase)
                         .disabled(app.busy || app.endingPhrasePreparing || app.settings.effectiveEndingPhrase == nil)
                     Text(

@@ -175,6 +175,34 @@
         }
       }
     },
+    "%@ is speaking · listening paused" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@が話しています · 聞き取りは一時停止中"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@이(가) 말하는 중 · 듣기 일시 중지"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@正在说话 · 聆听已暂停"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@正在說話 · 聆聽已暫停"
+          }
+        }
+      }
+    },
     "%@ is speaking · speak to interrupt" : {
       "localizations" : {
         "zh-Hans" : {
@@ -12700,6 +12728,34 @@
         }
       }
     },
+    "Playback paused · listening paused" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "再生を一時停止中 · 聞き取りは一時停止中"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "재생 일시 중지 · 듣기 일시 중지"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "播放已暂停 · 聆听已暂停"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "播放已暫停 · 聆聽已暫停"
+          }
+        }
+      }
+    },
     "Playback paused · microphone stays on" : {
       "localizations" : {
         "zh-Hans" : {
@@ -15500,30 +15556,30 @@
         }
       }
     },
-    "Say this phrase to send your turn even when background noise continues. Pause detection still works." : {
+    "Say this phrase to send your turn even when background noise continues. Listening pauses until the reply finishes, then resumes. Pause detection still works." : {
       "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "说出此短语，即使背景噪声持续也能发送本轮话语。停顿检测仍可使用。"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "說出此短語，即使背景噪音持續也能傳送本輪話語。停頓偵測仍可使用。"
-          }
-        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "背景音が続いていても、このフレーズを言うと発言を送信できます。間の検出も引き続き利用できます。"
+            "value" : "背景音が続いていても、このフレーズを言うと発言を送信できます。返答が終わるまで聞き取りを一時停止し、その後再開します。間の検出も引き続き利用できます。"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "배경 소음이 계속되어도 이 문구를 말하면 발언을 전송합니다. 멈춤 감지도 계속 작동합니다."
+            "value" : "배경 소음이 계속되어도 이 문구를 말하면 발언을 전송합니다. 답변이 끝날 때까지 듣기를 일시 중지한 다음 다시 시작합니다. 멈춤 감지도 계속 작동합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "说出此短语，即使背景噪声持续也能发送本轮话语。聆听将暂停，直到回复结束后自动恢复。停顿检测仍可使用。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "說出此短語，即使背景噪音持續也能傳送本輪話語。聆聽將暫停，直到回覆結束後自動恢復。停頓偵測仍可使用。"
           }
         }
       }
@@ -18996,6 +19052,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "把想法說出來"
+          }
+        }
+      }
+    },
+    "Thinking · listening paused" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "考えています · 聞き取りは一時停止中"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "생각하는 중 · 듣기 일시 중지"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在思考 · 聆听已暂停"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在思考 · 聆聽已暫停"
           }
         }
       }

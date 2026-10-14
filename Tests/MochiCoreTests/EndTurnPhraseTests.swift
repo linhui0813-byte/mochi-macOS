@@ -3,6 +3,22 @@ import XCTest
 @testable import MochiCore
 
 final class EndTurnPhraseTests: XCTestCase {
+    func testControlPhraseStillMatchesWhenLaterSpeechIsInTheSameRecognitionBlock() throws {
+        let phrase = try XCTUnwrap(EndTurnPhrase("over over"))
+        for final in [true, false] {
+            var window = EndPhraseRecognitionWindow(phrase: phrase)
+            window.begin(at: 0)
+            XCTAssertFalse(window.accept(text: "Moreover overpasses", isFinal: final, endingAt: 1))
+            XCTAssertTrue(
+                window.accept(
+                    text: "My thought. OVER, over! Other people keep speaking.",
+                    isFinal: final, endingAt: 2))
+            XCTAssertFalse(window.accept(text: "over over", isFinal: final, endingAt: 3))
+            window.begin(at: 4)
+            XCTAssertFalse(window.accept(text: "A thought over", isFinal: true, endingAt: 5))
+            XCTAssertTrue(window.accept(text: "over and I keep talking", isFinal: final, endingAt: 6))
+        }
+    }
     func testDefaultWholeWordMatchIgnoresCaseAndRecognitionPunctuation() throws {
         let phrase = try XCTUnwrap(EndTurnPhrase(EndTurnPhrase.defaultValue))
         XCTAssertTrue(phrase.matchesEnding(in: "My thought. Over, over!"))
