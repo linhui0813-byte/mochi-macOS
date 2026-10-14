@@ -116,7 +116,8 @@ public struct RealtimeService {
         onTranscription: (@MainActor (RealtimeAccumulator) -> Void)? = nil,
         onTool: (@MainActor (String, [String: Any], String) throws -> [String: Any])? = nil,
         onAudio: (@MainActor (Data) -> Void)? = nil,
-        existingChannel: RealtimeChannel? = nil, previousItemIDs: [String] = [], retainingConnection: Bool = false
+        existingChannel: RealtimeChannel? = nil, previousItemIDs: [String] = [], retainingConnection: Bool = false,
+        sessionPrepared: Bool = false
     ) async throws -> RealtimeAccumulator {
         guard RealtimeVoice(rawValue: voice) != nil else {
             throw AppFailure("Choose a supported built-in voice in Settings.")
@@ -171,12 +172,9 @@ public struct RealtimeService {
                             }
                             input.voiceTiming?.record(.contextCleared)
                         }
-                        let configuration = try sessionConfiguration(input, toolsEnabled: onTool != nil)
-                        try await send(["type": "session.update", "session": configuration])
-                        while true {
-                            let event = try await receive()
-                            try accumulator.accept(event)
-                            if event["type"] as? String == "session.updated" { break }
+                        if !sessionPrepared {
+                            let configuration = try sessionConfiguration(input, toolsEnabled: onTool != nil)
+                            try await Self.configureSession(configuration, send: send, receive: receive)
                         }
                         input.voiceTiming?.record(.sessionReady)
                         // Only completed chat messages are restored; practice never enters this history.
@@ -229,6 +227,21 @@ public struct RealtimeService {
                     throw Self.replyFailure(error)
                 }
             }, onCancel: channel.close)
+    }
+    /// No input item or response is created by this configuration acknowledgement.
+    static func configureSession(
+        _ configuration: [String: Any], send: ([String: Any]) async throws -> Void,
+        receive: () async throws -> [String: Any]
+    ) async throws {
+        try await send(["type": "session.update", "session": configuration])
+        var events = RealtimeAccumulator()
+        while true {
+            try Task.checkCancellation()
+            let event = try await receive()
+            try Task.checkCancellation()
+            try events.accept(event)
+            if event["type"] as? String == "session.updated" { return }
+        }
     }
     static func replyFailure(_ error: Error) -> AppFailure {
         if error is RealtimeTimeout {

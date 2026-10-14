@@ -11,18 +11,29 @@ import XCTest
     var onClose: (() -> Void)?
     var pingFails = false
     var pingCount = 0
+    var failResponse = false
+    var failSession = false
     var channel: RealtimeChannel {
         RealtimeChannel(
             send: { event in
+                guard !self.closed else { throw URLError(.networkConnectionLost) }
                 self.sent.append(event)
                 switch event["type"] as? String {
-                case "session.update": self.events.append(["type": "session.updated"])
+                case "session.update":
+                    self.events.append(
+                        self.failSession
+                            ? ["type": "error", "error": ["code": "rate_limit_exceeded"]]
+                            : ["type": "session.updated"])
                 case "conversation.item.delete":
                     self.events.append(["type": "conversation.item.deleted", "item_id": event["item_id"]!])
                 case "conversation.item.create":
                     self.nextID += 1
                     self.events.append(["type": "conversation.item.added", "item": ["id": "item-\(self.nextID)"]])
                 case "response.create":
+                    if self.failResponse {
+                        self.events.append(["type": "error", "error": ["code": "rate_limit_exceeded"]])
+                        return
+                    }
                     self.nextID += 1
                     self.events += [
                         ["type": "response.output_audio.delta", "delta": Data([0, 0, 2, 0]).base64EncodedString()],
@@ -125,7 +136,8 @@ final class StreamingConnectionTests: XCTestCase {
                 history: [Message(role: "user", text: "Edited context")], text: "Second", conversationID: id))
         XCTAssertEqual(sockets.count, 1)
         XCTAssertEqual(credentials, 1)
-        XCTAssertEqual(sockets[0].pingCount, 1)
+        XCTAssertEqual(sockets[0].pingCount, 0)
+        XCTAssertEqual(sockets[0].sent.filter { $0["type"] as? String == "session.update" }.count, 2)
         let sent = sockets[0].sent
         XCTAssertEqual(sent.filter { $0["type"] as? String == "conversation.item.delete" }.count, 2)
         let messages = sent.filter { $0["type"] as? String == "conversation.item.create" }
@@ -223,11 +235,87 @@ final class StreamingConnectionTests: XCTestCase {
         _ = try await connection.reply(
             service: service, input: ConversationRequest(history: [], text: "First", conversationID: id))
         let firstTurnEvents = sockets[0].sent.count
-        sockets[0].pingFails = true
+        sockets[0].closed = true
         _ = try await connection.reply(
             service: service, input: ConversationRequest(history: [], text: "Second", conversationID: id))
         XCTAssertEqual(sockets.count, 2)
         XCTAssertEqual(sockets[0].sent.count, firstTurnEvents, "No part of the new turn may enter the dead socket")
         XCTAssertEqual(sockets[1].sent.filter { $0["type"] as? String == "response.create" }.count, 1)
+    }
+    @MainActor func testHealthyIdleSocketReusesSessionWithoutWaitingForAPong() async throws {
+        var sockets: [ConversationSocket] = []
+        let connection = RealtimeConversationConnection(
+            credential: { _ in "test" },
+            connect: { _ in
+                let socket = ConversationSocket()
+                sockets.append(socket)
+                return socket.channel
+            })
+        defer { connection.reset() }
+        let service = RealtimeService(reuseConnection: true)
+        let id = UUID()
+        _ = try await connection.reply(
+            service: service, input: ConversationRequest(history: [], text: "First", conversationID: id))
+        sockets[0].pingFails = true
+        let timing = VoiceReplyTiming()
+        _ = try await connection.reply(
+            service: service,
+            input: ConversationRequest(history: [], text: "Second", conversationID: id, voiceTiming: timing))
+        XCTAssertEqual(sockets.count, 1, "An unavailable pong must not force a reconnect")
+        XCTAssertEqual(sockets[0].pingCount, 0)
+        XCTAssertNotNil(timing.elapsedMilliseconds(at: .sessionProbeReady))
+        XCTAssertNil(timing.elapsedMilliseconds(at: .connectionNew))
+        XCTAssertEqual(
+            sockets[0].sent.filter { $0["type"] as? String == "session.update" }.count, 2,
+            "The probe configures the next turn; do not repeat that round trip")
+    }
+    @MainActor func testFailureAfterSuccessfulProbeDoesNotResubmitTheTurn() async throws {
+        var sockets: [ConversationSocket] = []
+        let connection = RealtimeConversationConnection(
+            credential: { _ in "test" },
+            connect: { _ in
+                let socket = ConversationSocket()
+                sockets.append(socket)
+                return socket.channel
+            })
+        defer { connection.reset() }
+        let service = RealtimeService(reuseConnection: true)
+        let id = UUID()
+        _ = try await connection.reply(
+            service: service, input: ConversationRequest(history: [], text: "First", conversationID: id))
+        sockets[0].failResponse = true
+        do {
+            _ = try await connection.reply(
+                service: service, input: ConversationRequest(history: [], text: "Second", conversationID: id))
+            XCTFail("Expected provider failure")
+        } catch {}
+        XCTAssertEqual(sockets.count, 1)
+        XCTAssertEqual(
+            sockets[0].sent.filter { $0["type"] as? String == "response.create" }.count, 2,
+            "Each submitted turn is requested once")
+    }
+    @MainActor func testProviderRejectingSessionProbeDoesNotReconnectOrSendInput() async throws {
+        var sockets: [ConversationSocket] = []
+        let connection = RealtimeConversationConnection(
+            credential: { _ in "test" },
+            connect: { _ in
+                let socket = ConversationSocket()
+                sockets.append(socket)
+                return socket.channel
+            })
+        defer { connection.reset() }
+        let service = RealtimeService(reuseConnection: true)
+        let id = UUID()
+        _ = try await connection.reply(
+            service: service, input: ConversationRequest(history: [], text: "First", conversationID: id))
+        let firstCount = sockets[0].sent.count
+        sockets[0].failSession = true
+        do {
+            _ = try await connection.reply(
+                service: service, input: ConversationRequest(history: [], text: "Second", conversationID: id))
+            XCTFail("Expected rejected probe")
+        } catch {}
+        XCTAssertEqual(sockets.count, 1, "Provider rejections must not trigger a retry")
+        XCTAssertEqual(sockets[0].sent.dropFirst(firstCount).compactMap { $0["type"] as? String }, ["session.update"])
     }
 }

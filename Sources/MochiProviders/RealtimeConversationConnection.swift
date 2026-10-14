@@ -1,4 +1,5 @@
 import Foundation
+import MochiKernel
 
 /// Reuses only an idle connection belonging to the same local conversation, model and voice.
 /// Only an idle health check can reconnect automatically; a submitted turn is never resent.
@@ -68,10 +69,16 @@ import Foundation
         do {
             if let channel = existing {
                 do {
+                    // Receiving a normal Realtime acknowledgement tests the idle connection
+                    // without blocking on a WebSocket pong or submitting a new audio/history item.
+                    let configuration = try service.sessionConfiguration(input, toolsEnabled: onTool != nil)
                     try await RealtimeDeadline.run(nanoseconds: 3_000_000_000, close: channel.close) {
-                        try await channel.ping()
+                        try await RealtimeService.configureSession(
+                            configuration, send: channel.send, receive: channel.receive)
                     }
+                    input.voiceTiming?.record(.sessionProbeReady)
                 } catch {
+                    if error is AppFailure { throw error }
                     state.close()
                     state.busy = false
                     active[state.id] = nil
@@ -86,13 +93,13 @@ import Foundation
                 }
                 try Task.checkCancellation()
                 guard cached === state, !state.closed else { throw CancellationError() }
-                input.voiceTiming?.record(.pingReady)
             }
             let result = try await service.reply(
                 input, credential: { try await self.credential(service) },
                 connect: { state.install(self.connect($0)) }, onResponse: onResponse,
                 onTranscription: onTranscription, onTool: onTool, onAudio: onAudio,
-                existingChannel: existing, previousItemIDs: state.itemIDs, retainingConnection: true)
+                existingChannel: existing, previousItemIDs: state.itemIDs, retainingConnection: true,
+                sessionPrepared: existing != nil)
             state.busy = false
             active[state.id] = nil
             if cached === state, !state.closed {

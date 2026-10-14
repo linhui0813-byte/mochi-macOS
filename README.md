@@ -238,6 +238,8 @@ Speaking over Mochi stops her reply. If that also interrupts an unfinished trans
 
 Voice reply timing is recorded locally in Console under Mochi's `network` log category. `Voice timing` entries use a random per-turn identifier, fixed stage names and elapsed milliseconds to distinguish connection setup, audio upload, the first received audio chunk, and playback queuing. They contain no recording, transcript, message identifier or credential and are not sent to OpenAI. Timing starts when the detected voice turn is submitted, after the local end-of-speech pause. Playback queuing measures the app's handoff to its audio engine, rather than the instant sound physically leaves the speaker.
 
+An idle conversation connection is checked using its next `session.update` acknowledgement, rather than waiting for a WebSocket pong. This also applies the next turn's settings without a duplicate configuration round trip. A dropped connection can reconnect before new audio, history items or a response request is submitted. A turn that has already been submitted is never automatically resent.
+
 ## Build from source
 
 With Xcode's command-line tools available:

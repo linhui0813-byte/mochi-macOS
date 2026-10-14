@@ -5,7 +5,7 @@ import MochiKernel
 /// No audio, transcript, conversation identifier, credential or request content enters the log.
 public final class VoiceReplyTiming: @unchecked Sendable {
     public enum Stage: String, Sendable {
-        case submitted, connectionNew, connectionReused, pingReady, credentialReady, socketReady
+        case submitted, connectionNew, connectionReused, sessionProbeReady, credentialReady, socketReady
         case contextCleared, sessionReady, audioSent, responseRequested, firstAudio, playbackQueued
         case responseFinished, transcriptionFinished
     }
