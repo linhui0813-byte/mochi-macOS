@@ -4913,6 +4913,34 @@
         }
       }
     },
+    "Could not enable echo cancellation (audio error %@). Check your microphone and speakers in macOS Sound settings, then try again." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法启用回声消除（音频错误 %@）。请在macOS声音设置中检查麦克风和扬声器后重试。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法啟用回音消除（音訊錯誤 %@）。請在macOS聲音設定中檢查麥克風與揚聲器後再試。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "エコーキャンセルを有効にできませんでした（音声エラー %@）。macOSのサウンド設定でマイクとスピーカーを確認して再試行してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "에코 제거를 활성화할 수 없습니다(오디오 오류 %@). macOS 사운드 설정에서 마이크와 스피커를 확인하고 다시 시도하세요."
+          }
+        }
+      }
+    },
     "Could not export the backup because the disk is full." : {
       "localizations" : {
         "ja" : {
@@ -5273,6 +5301,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "無法儲存你的對話。請保持此視窗打開並再試一次。"
+          }
+        }
+      }
+    },
+    "Could not start continuous conversation audio (audio error %@). Check your microphone and speakers in macOS Sound settings, then try again." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法启动连续对话音频（音频错误 %@）。请在macOS声音设置中检查麦克风和扬声器后重试。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法啟動連續對話音訊（音訊錯誤 %@）。請在macOS聲音設定中檢查麥克風與揚聲器後再試。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "連続会話の音声を開始できませんでした（音声エラー %@）。macOSのサウンド設定でマイクとスピーカーを確認して再試行してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "연속 대화 오디오를 시작할 수 없습니다(오디오 오류 %@). macOS 사운드 설정에서 마이크와 스피커를 확인하고 다시 시도하세요."
           }
         }
       }
@@ -9613,6 +9669,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "麥克風取用權限已關閉。請在「系統設定」→「隱私權與安全性」→「麥克風」中啟用 Mochi。"
+          }
+        }
+      }
+    },
+    "Microphone and speaker formats could not be matched for echo cancellation." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法匹配麦克风与扬声器的音频格式，不能启用回声消除。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法匹配麥克風與揚聲器的音訊格式，不能啟用回音消除。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "エコーキャンセルに必要なマイクとスピーカーの音声形式を一致させられませんでした。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "에코 제거에 필요한 마이크와 스피커의 오디오 형식을 일치시킬 수 없습니다."
           }
         }
       }

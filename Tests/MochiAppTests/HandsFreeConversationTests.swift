@@ -44,6 +44,18 @@ import XCTest
 }
 
 final class HandsFreeConversationTests: XCTestCase {
+    @MainActor func testAudioStartupErrorKeepsTheStageAndCodeWithoutExposingSystemDescriptions() {
+        let underlying = NSError(
+            domain: NSOSStatusErrorDomain, code: -10875,
+            userInfo: [NSLocalizedDescriptionKey: "private audio device details"])
+        for echo in [true, false] {
+            let failure = HandsFreeAudio.startupFailure(underlying, enablingEchoCancellation: echo)
+            XCTAssertTrue(failure.message.contains("-10875"))
+            XCTAssertTrue(failure.message.contains(echo ? "echo cancellation" : "continuous conversation audio"))
+            XCTAssertFalse(failure.message.contains("private audio device details"))
+            XCTAssertEqual((failure.underlying as NSError?)?.code, -10875)
+        }
+    }
     private var speech: Data { Data(Array(repeating: [UInt8(0), 32], count: 480 * 20).joined()) }
     private var silence: Data { Data(repeating: 0, count: 960 * 60) }
     @MainActor private func appAndDevice() -> (AppModel, HandsFreeTestDevice) {

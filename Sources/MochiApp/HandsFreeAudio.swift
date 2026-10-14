@@ -22,7 +22,9 @@ import MochiKernel
     func start() throws -> AsyncThrowingStream<Data, Error> {
         let input = engine.inputNode
         // Fail explicitly if echo cancellation is unavailable; never open an unprocessed microphone as a fallback.
-        try input.setVoiceProcessingEnabled(true)
+        do { try input.setVoiceProcessingEnabled(true) } catch {
+            throw Self.startupFailure(error, enablingEchoCancellation: true)
+        }
         guard input.isVoiceProcessingEnabled else {
             throw AppFailure("Echo cancellation is unavailable. Check your audio devices and try again.")
         }
@@ -31,7 +33,20 @@ import MochiKernel
             throw AppFailure("The microphone is unavailable. Check your audio input and try again.")
         }
         engine.attach(node)
-        engine.connect(node, to: engine.mainMixerNode, format: format)
+        let mixer = engine.mainMixerNode
+        engine.connect(node, to: mixer, format: format)
+        // VoiceProcessingIO requires identical client formats on its input and output sides. The
+        // mixer converts model audio (24 kHz) into the microphone's voice-processing format.
+        // Letting the mixer's first source choose its output format can leave the two I/O sides unequal.
+        engine.connect(mixer, to: engine.outputNode, format: inputFormat)
+        let outputFormat = engine.outputNode.inputFormat(forBus: 0)
+        guard inputFormat.sampleRate == outputFormat.sampleRate,
+            inputFormat.channelCount == outputFormat.channelCount,
+            inputFormat.commonFormat == outputFormat.commonFormat,
+            inputFormat.isInterleaved == outputFormat.isInterleaved
+        else {
+            throw AppFailure("Microphone and speaker formats could not be matched for echo cancellation.")
+        }
         var sink: AsyncThrowingStream<Data, Error>.Continuation!
         let stream = AsyncThrowingStream<Data, Error>(bufferingPolicy: .bufferingOldest(100)) { sink = $0 }
         let continuation = sink!
@@ -42,7 +57,7 @@ import MochiKernel
         engine.prepare()
         do { try engine.start() } catch {
             stop()
-            throw error
+            throw Self.startupFailure(error, enablingEchoCancellation: false)
         }
         started = true
         observer = NotificationCenter.default.addObserver(
@@ -55,6 +70,20 @@ import MochiKernel
             }
         }
         return stream
+    }
+    static func startupFailure(_ error: Error, enablingEchoCancellation: Bool) -> AppFailure {
+        let code = String((error as NSError).code)
+        return AppFailure(
+            verbatim: enablingEchoCancellation
+                ? String(
+                    localized:
+                        "Could not enable echo cancellation (audio error \(code)). Check your microphone and speakers in macOS Sound settings, then try again."
+                )
+                : String(
+                    localized:
+                        "Could not start continuous conversation audio (audio error \(code)). Check your microphone and speakers in macOS Sound settings, then try again."
+                ),
+            underlying: error)
     }
     func makePlayer(finished: @escaping @MainActor (Bool) -> Void) throws -> any StreamingPlaybackPlayer {
         guard started, engine.isRunning else { throw AppFailure("Continuous conversation audio is no longer active.") }
