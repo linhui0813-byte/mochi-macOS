@@ -132,7 +132,9 @@ public struct RealtimeService {
         if let existingChannel {
             channel = existingChannel
         } else {
+            input.voiceTiming?.record(.connectionNew)
             let token = try await credential()
+            input.voiceTiming?.record(.credentialReady)
             try Task.checkCancellation()
             channel = connect(realtimeRequest(token: token))
         }
@@ -150,6 +152,7 @@ public struct RealtimeService {
                                 try accumulator.accept(event)
                                 if event["type"] as? String == "session.created" { break }
                             }
+                            input.voiceTiming?.record(.socketReady)
                         } else {
                             // Rebuild the bounded context from the saved library. This also honours edits and
                             // removes old audio/tool items instead of duplicating history on a reused socket.
@@ -166,6 +169,7 @@ public struct RealtimeService {
                                     pending.remove(id)
                                 }
                             }
+                            input.voiceTiming?.record(.contextCleared)
                         }
                         let configuration = try sessionConfiguration(input, toolsEnabled: onTool != nil)
                         try await send(["type": "session.update", "session": configuration])
@@ -174,6 +178,7 @@ public struct RealtimeService {
                             try accumulator.accept(event)
                             if event["type"] as? String == "session.updated" { break }
                         }
+                        input.voiceTiming?.record(.sessionReady)
                         // Only completed chat messages are restored; practice never enters this history.
                         for message in input.history.suffix(30) {
                             if let text = message.contextText {
@@ -190,6 +195,7 @@ public struct RealtimeService {
                                 ])
                             }
                             try await send(["type": "input_audio_buffer.commit"])
+                            input.voiceTiming?.record(.audioSent)
                         } else if !input.reference {
                             try await send(RealtimeEvents.message(role: "user", text: input.text))
                         }
@@ -200,16 +206,23 @@ public struct RealtimeService {
                                 "max_output_tokens": Self.maximumOutputTokens,
                             ],
                         ])
+                        input.voiceTiming?.record(.responseRequested)
                         return try await Self.deliverResponse(
                             accumulator, receive: receive, onResponse: onResponse, onTranscription: onTranscription,
-                            onTool: input.help || input.reference ? nil : onTool, send: send, onAudio: onAudio)
+                            onTool: input.help || input.reference ? nil : onTool, send: send,
+                            onAudio: { data in
+                                input.voiceTiming?.record(.firstAudio)
+                                onAudio?(data)
+                            })
                     }
+                    input.voiceTiming?.record(.responseFinished)
                     // Reply generation and the subsequent ASR grace period have separate deadlines.
                     if input.pcm != nil && accumulator.transcriptionState == .pending {
                         accumulator = try await Self.finishTranscription(
                             accumulator, receive: receive, close: channel.close)
                         if let onTranscription { await onTranscription(accumulator) }
                     }
+                    if input.pcm != nil { input.voiceTiming?.record(.transcriptionFinished) }
                     return accumulator
                 } catch is CancellationError { throw CancellationError() } catch {
                     if Task.isCancelled { throw CancellationError() }

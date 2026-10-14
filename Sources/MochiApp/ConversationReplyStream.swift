@@ -1,10 +1,12 @@
 import Foundation
+import MochiProviders
 
 /// One reply's live playback. Saving the final reply must never replay audio that was already streamed.
 @MainActor final class ConversationReplyStream {
     private weak var app: AppModel?
     private let token: UUID
     private let enabled: Bool
+    private let timing: VoiceReplyTiming?
     private var started = false
     private var failed = false
     private var drained = false
@@ -12,10 +14,11 @@ import Foundation
     private var settled = false
     private var afterPlayback: (() -> Void)?
     private var file: String?
-    init(app: AppModel, token: UUID, enabled: Bool) {
+    init(app: AppModel, token: UUID, enabled: Bool, timing: VoiceReplyTiming? = nil) {
         self.app = app
         self.token = token
         self.enabled = enabled
+        self.timing = timing
     }
     func append(_ data: Data) {
         guard enabled, !data.isEmpty, !failed, !Task.isCancelled, let app, app.turn.epoch == token else { return }
@@ -31,6 +34,7 @@ import Foundation
                 app.speaking = true
             }
             try app.audio.appendStreaming(data)
+            timing?.record(.playbackQueued)
         } catch {
             playbackFailed()
         }

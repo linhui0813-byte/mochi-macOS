@@ -236,6 +236,8 @@ Continuous conversation detects speech locally with the bundled WebRTC voice act
 
 Speaking over Mochi stops her reply. If that also interrupts an unfinished transcript, Mochi makes one transcription-only recovery request using your saved recording, without generating another reply. Stop or a conversation change cancels this work, and editing the transcript takes precedence over a late result. A learned microphone level helps reject faint background sound between turns. For an older recording labelled “Transcript unavailable,” open its message menu and choose **Retry Transcription**; recordings with no clear speech may still require adding text or recording again.
 
+Voice reply timing is recorded locally in Console under Mochi's `network` log category. `Voice timing` entries use a random per-turn identifier, fixed stage names and elapsed milliseconds to distinguish connection setup, audio upload, the first received audio chunk, and playback queuing. They contain no recording, transcript, message identifier or credential and are not sent to OpenAI. Timing starts when the detected voice turn is submitted, after the local end-of-speech pause. Playback queuing measures the app's handoff to its audio engine, rather than the instant sound physically leaves the speaker.
+
 ## Build from source
 
 With Xcode's command-line tools available:

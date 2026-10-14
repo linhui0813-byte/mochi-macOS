@@ -83,8 +83,10 @@ final class StreamingPlaybackTests: XCTestCase {
         let audioArrived = expectation(description: "First audio arrived")
         let gate = TestGate()
         var deferred = 0
+        var timing: VoiceReplyTiming?
         app.speech.conversationReply = { _, request, callbacks in
             XCTAssertEqual(request.conversationID, app.selectedID)
+            timing = request.voiceTiming
             callbacks.audio?(chunk)
             audioArrived.fulfill()
             await gate.wait()
@@ -100,6 +102,9 @@ final class StreamingPlaybackTests: XCTestCase {
         await fulfillment(of: [audioArrived], timeout: 2)
         XCTAssertTrue(fixture.playing)
         XCTAssertTrue(app.speaking)
+        XCTAssertNotNil(timing?.elapsedMilliseconds(at: .submitted))
+        XCTAssertNotNil(timing?.elapsedMilliseconds(at: .playbackQueued))
+        XCTAssertNil(timing?.elapsedMilliseconds(at: .responseFinished))
         XCTAssertEqual(app.turn.activity, .generating)
         XCTAssertEqual(app.quickTalkPlan, .pause)
         XCTAssertEqual(app.conversation?.messages.count, 1, "Playback starts before the complete reply is saved")

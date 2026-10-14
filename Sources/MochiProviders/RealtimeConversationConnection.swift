@@ -64,6 +64,7 @@ import Foundation
         state.busy = true
         active[state.id] = state
         var existing = state.channel
+        input.voiceTiming?.record(existing == nil ? .connectionNew : .connectionReused)
         do {
             if let channel = existing {
                 do {
@@ -85,6 +86,7 @@ import Foundation
                 }
                 try Task.checkCancellation()
                 guard cached === state, !state.closed else { throw CancellationError() }
+                input.voiceTiming?.record(.pingReady)
             }
             let result = try await service.reply(
                 input, credential: { try await self.credential(service) },

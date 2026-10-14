@@ -5,6 +5,8 @@ import MochiKernel
 public struct ConversationRequest {
     /// The local conversation whose connection may be reused; helpers have no conversation connection.
     public var conversationID: UUID?
+    /// Local timing shared with playback; never sent to the provider or saved in the library.
+    public var voiceTiming: VoiceReplyTiming?
     public var history: [Message]
     public var text: String
     public var pcm: Data?
@@ -22,9 +24,10 @@ public struct ConversationRequest {
         history: [Message], text: String, pcm: Data? = nil, spoken: Bool = false, help: Bool = false,
         reference: Bool = false, instructions: String = "", characterName: String? = nil, userName: String? = nil,
         preferences: ConversationPreferences = ConversationPreferences(), personality: String = "",
-        conversationID: UUID? = nil
+        conversationID: UUID? = nil, voiceTiming: VoiceReplyTiming? = nil
     ) {
         self.conversationID = conversationID
+        self.voiceTiming = voiceTiming
         self.personality = personality
         self.characterName = characterName
         self.userName = userName

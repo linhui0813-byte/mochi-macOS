@@ -89,6 +89,8 @@ extension AppModel {
         existingUserID: UUID? = nil
     ) {
         if let existingUserID, transcribingMessageIDs.contains(existingUserID) { return }
+        let timing = pcm == nil ? nil : VoiceReplyTiming()
+        timing?.record(.submitted)
         // Cleared first, so a failure to save the voice message below stays visible.
         error = nil
         var userID = existingUserID
@@ -114,7 +116,8 @@ extension AppModel {
         let userName = settings.effectiveUserName
         let speakerName = chat?.displayCharacterName ?? "Mochi"
         let service = settings.conversationService(for: chat)
-        let stream = ConversationReplyStream(app: self, token: token, enabled: audioFile != nil && playReply == nil)
+        let stream = ConversationReplyStream(
+            app: self, token: token, enabled: audioFile != nil && playReply == nil, timing: timing)
         let voiceID = pcm == nil ? nil : userID
         let handsFreeSession = handsFree
         let reply = speech.conversationReply
@@ -168,7 +171,7 @@ extension AppModel {
                 let request = ConversationRequest(
                     history: history, text: text, pcm: pcm, spoken: audioFile != nil, instructions: instructions,
                     characterName: characterName, userName: userName, preferences: preferences,
-                    personality: personality, conversationID: conversationID)
+                    personality: personality, conversationID: conversationID, voiceTiming: timing)
                 try await reply(service, request, callbacks)
             } catch {
                 // The deferred block marks a still-pending transcript as interrupted.

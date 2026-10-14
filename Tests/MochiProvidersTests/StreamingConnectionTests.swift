@@ -74,6 +74,33 @@ final class StreamingConnectionTests: XCTestCase {
         XCTAssertEqual(received, Data([0, 1, 2, 3]))
         XCTAssertEqual(result.audio, received, "Replay must retain every streamed byte")
     }
+    @MainActor func testTimingDistinguishesFirstAudioFromFullResponseAndTranscription() async throws {
+        let timing = VoiceReplyTiming()
+        timing.record(.submitted)
+        var events: [[String: Any]] = [
+            ["type": "session.created"], ["type": "session.updated"],
+            ["type": "input_audio_buffer.committed", "item_id": "voice"],
+            ["type": "response.output_audio.delta", "delta": Data([0, 0, 1, 0]).base64EncodedString()],
+            ["type": "response.done", "response": ["status": "completed"]],
+            ["type": "conversation.item.input_audio_transcription.completed", "item_id": "voice", "transcript": "Hi"],
+        ]
+        _ = try await RealtimeService().reply(
+            ConversationRequest(
+                history: [], text: "", pcm: Data(repeating: 0, count: 4800), spoken: true, voiceTiming: timing),
+            credential: { "test-session" },
+            connect: { _ in RealtimeChannel(send: { _ in }, receive: { events.removeFirst() }, close: {}) },
+            onAudio: { _ in
+                XCTAssertNotNil(timing.elapsedMilliseconds(at: .firstAudio))
+                XCTAssertNil(timing.elapsedMilliseconds(at: .responseFinished))
+                XCTAssertNil(timing.elapsedMilliseconds(at: .transcriptionFinished))
+            })
+        for stage: VoiceReplyTiming.Stage in [
+            .connectionNew, .credentialReady, .socketReady, .sessionReady, .audioSent, .responseRequested, .firstAudio,
+            .responseFinished, .transcriptionFinished,
+        ] {
+            XCTAssertNotNil(timing.elapsedMilliseconds(at: stage), "Missing timing for \(stage)")
+        }
+    }
     @MainActor func testContinuousModeReusesSocketAndReplacesOldContextWithoutDuplicates() async throws {
         var sockets: [ConversationSocket] = []
         var credentials = 0
