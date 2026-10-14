@@ -92,10 +92,10 @@ final class RealtimePingTests: XCTestCase {
                 close: {
                     fixture.complete(URLError(.networkConnectionLost))
                     fixture.complete(URLError(.cancelled))
-                }
-            ) {
-                try await RealtimeChannel.awaitPing { fixture.install($0) }
-            }
+                },
+                operation: {
+                    try await RealtimeChannel.awaitPing { fixture.install($0) }
+                })
             XCTFail("Expected timeout")
         } catch {
             XCTAssertTrue(error is RealtimeTimeout)
