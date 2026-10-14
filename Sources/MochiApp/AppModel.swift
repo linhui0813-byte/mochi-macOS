@@ -104,6 +104,7 @@ struct MessageDeletionUndo {
     @ObservationIgnored var media: MediaServices
     var handsFree: HandsFreeConversation?
     var handsFreeStarting = false
+    var handsFreeSpeechDetected = false
     @ObservationIgnored var makeHandsFreeAudio: () throws -> any HandsFreeAudioDevice = { HandsFreeAudio() }
     @ObservationIgnored var playReply: ((String) -> Void)?
     /// Writes a reply's audio file; replaceable so a failed audio write can be tested while the library still saves.
@@ -193,9 +194,12 @@ struct MessageDeletionUndo {
                     ? String(localized: "Playback paused · microphone stays on")
                     : String(localized: "\(displayCharacterName) is speaking · speak to interrupt")
             }
-            return turn.activity == .recording
-                ? String(localized: "Listening · speak naturally")
-                : String(localized: "Thinking · microphone stays on")
+            if turn.activity == .recording {
+                return handsFreeSpeechDetected
+                    ? String(localized: "Hearing you · pause to send")
+                    : String(localized: "Listening · speak naturally")
+            }
+            return String(localized: "Thinking · microphone stays on")
         }
         switch turn.activity {
         case .recording:

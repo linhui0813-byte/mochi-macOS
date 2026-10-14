@@ -460,6 +460,12 @@ struct WorkspaceView: View {
                         app.turn.activity == .recording ? .red : .secondary)
                 }
                 Text(app.status).lineLimit(1)
+                if app.handsFreeActive {
+                    ProgressView(value: Double(max(0, min(1, (app.recordingLevel + 80) / 80))))
+                        .frame(width: 64)
+                        .accessibilityLabel("Microphone input level")
+                        .accessibilityValue(Text(verbatim: "\(Int(app.recordingLevel)) dB"))
+                }
                 Spacer(minLength: 4)
                 if app.demo { Text("Preview").foregroundStyle(.secondary) }
             }.font(.caption).foregroundStyle(.secondary)

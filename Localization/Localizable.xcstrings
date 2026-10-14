@@ -7517,6 +7517,34 @@
         }
       }
     },
+    "Hearing you · pause to send" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在听你说话 · 停顿后自动发送"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在聽你說話 · 停頓後自動傳送"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "音声を検出中 · 話し終えると送信"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "말씀을 듣고 있어요 · 잠시 멈추면 전송"
+          }
+        }
+      }
+    },
     "Help Me Say This" : {
       "localizations" : {
         "ja" : {

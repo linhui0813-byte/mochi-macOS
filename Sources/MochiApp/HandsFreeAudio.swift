@@ -11,6 +11,7 @@ import MochiKernel
 @MainActor final class HandsFreeAudio: HandsFreeAudioDevice {
     private let engine = AVAudioEngine()
     private let node = AVAudioPlayerNode()
+    private let captureMixer = AVAudioMixerNode()
     private var observer: NSObjectProtocol?
     private var continuation: AsyncThrowingStream<Data, Error>.Continuation?
     private var tapped = false
@@ -33,7 +34,13 @@ import MochiKernel
             throw AppFailure("The microphone is unavailable. Check your audio input and try again.")
         }
         engine.attach(node)
+        engine.attach(captureMixer)
         let mixer = engine.mainMixerNode
+        // Keep the input in the rendered graph even while the reply player is idle. The tap
+        // observes this live input path; its muted mixer prevents microphone monitoring/feedback.
+        captureMixer.outputVolume = 0
+        engine.connect(input, to: captureMixer, format: inputFormat)
+        engine.connect(captureMixer, to: mixer, format: inputFormat)
         engine.connect(node, to: mixer, format: format)
         // VoiceProcessingIO requires identical client formats on its input and output sides. The
         // mixer converts model audio (24 kHz) into the microphone's voice-processing format.

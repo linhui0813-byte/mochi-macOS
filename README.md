@@ -232,6 +232,8 @@ The library format is **version 4**. Before upgrading an older library, Mochi pr
 
 Practice examples you saved with ElevenLabs before Mochi moved to Codex voices keep playing. A previously saved ElevenLabs key stays in your Keychain until you delete the `ELEVENLABS_API_KEY` item in Keychain Access.
 
+Continuous conversation detects speech locally with the bundled WebRTC voice activity detector (libfvad). Pause for about 1–1.5 seconds after speaking to send a turn automatically. The microphone meter shows incoming sound; “Hearing you” confirms speech detection, and “Thinking” confirms the turn was submitted. The detector adds no cloud service or API key. Its source and license are in `Vendor/libfvad`, and its notices are bundled with the app.
+
 ## Build from source
 
 With Xcode's command-line tools available:

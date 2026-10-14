@@ -7,7 +7,7 @@ import MochiKernel
     private weak var app: AppModel?
     let conversationID: UUID
     private let device: any HandsFreeAudioDevice
-    private var detector = SpeechTurnDetector()
+    private let detector = SpeechTurnDetector()
     private var inputTask: Task<Void, Never>?
     private let previousPlayerFactory: (@escaping @MainActor (Bool) -> Void) throws -> any StreamingPlaybackPlayer
     private var replyID: UUID?
@@ -45,6 +45,7 @@ import MochiKernel
         guard current, let app else { return }
         let events = detector.accept(pcm)
         app.recordingLevel = max(-80, detector.levelDB)
+        app.handsFreeSpeechDetected = detector.speaking
         for event in events {
             guard current else { return }
             switch event {
@@ -142,6 +143,7 @@ extension AppModel {
     }
     func endHandsFreeConversation() {
         handsFreeStarting = false
+        handsFreeSpeechDetected = false
         let session = handsFree
         handsFree = nil
         session?.stop()

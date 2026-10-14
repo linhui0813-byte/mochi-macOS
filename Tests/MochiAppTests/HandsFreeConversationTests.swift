@@ -1,6 +1,7 @@
 import AVFoundation
 import MochiCore
 import MochiKernel
+import MochiTestSupport
 import XCTest
 
 @testable import MochiApp
@@ -56,8 +57,27 @@ final class HandsFreeConversationTests: XCTestCase {
             XCTAssertEqual((failure.underlying as NSError?)?.code, -10875)
         }
     }
-    private var speech: Data { Data(Array(repeating: [UInt8(0), 32], count: 480 * 20).joined()) }
-    private var silence: Data { Data(repeating: 0, count: 960 * 60) }
+    private var speech: Data { SpeechFixture.voiced(frames: 45) }
+    private var silence: Data { Data(repeating: 0, count: 960 * 75) }
+    @MainActor func testSpeechStatusDistinguishesDetectedSpeechFromWaitingAndSending() async throws {
+        let (app, device) = appAndDevice()
+        let gate = TestGate()
+        app.speech.conversationReply = { _, _, _ in await gate.wait() }
+        app.toggleConversationVoice()
+        await waitUntil { app.handsFreeActive }
+        XCTAssertFalse(app.handsFreeSpeechDetected)
+        XCTAssertEqual(app.status, String(localized: "Listening · speak naturally"))
+        device.continuation.yield(speech)
+        await waitUntil { app.handsFreeSpeechDetected }
+        XCTAssertEqual(app.status, String(localized: "Hearing you · pause to send"))
+        device.continuation.yield(silence)
+        await waitUntil { app.turn.activity == .generating }
+        XCTAssertFalse(app.handsFreeSpeechDetected)
+        XCTAssertEqual(app.status, String(localized: "Thinking · microphone stays on"))
+        app.stop()
+        XCTAssertFalse(app.handsFreeSpeechDetected)
+        await gate.release()
+    }
     @MainActor private func appAndDevice() -> (AppModel, HandsFreeTestDevice) {
         let app = makeApp(demo: true)
         app.resume()
