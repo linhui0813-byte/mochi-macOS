@@ -34,9 +34,52 @@ struct SettingsView: View {
                     TextField("Model", text: Bindable(app.settings).modelName).textFieldStyle(.roundedBorder).disabled(
                         app.busy
                     )
-                    .onChange(of: app.settings.modelName) { app.serviceStatus = String(localized: "Not checked") }
+                    .onChange(of: app.settings.modelName) {
+                        app.serviceStatus = String(localized: "Not checked")
+                        app.speech.resetConversation()
+                    }
                     LabeledContent("Status") { Text(app.serviceStatus).foregroundStyle(.secondary) }
                     Button("Check Connection", action: app.checkConnection).disabled(app.busy)
+                }
+                Section("Continuous conversation") {
+                    Toggle("Continuous conversation", isOn: Bindable(app).continuousConversation)
+                        .toggleStyle(.switch).disabled(app.busy && !app.handsFreeActive && !app.handsFreeStarting)
+                        .accessibilityIdentifier("continuous-conversation")
+                    Text(
+                        "On: start once, speak hands-free, and interrupt Mochi by speaking. Off: record each message manually."
+                    )
+                    .font(.callout).foregroundStyle(.secondary)
+                    Text(
+                        "Press the microphone button or shortcut to start. Press it again, or Stop, to end the conversation."
+                    )
+                    .font(.caption).foregroundStyle(.secondary)
+                    TextField("Spoken ending phrase", text: Bindable(app.settings).endingPhrase)
+                        .textFieldStyle(.roundedBorder).disabled(app.busy || app.endingPhrasePreparing)
+                        .accessibilityIdentifier("spoken-ending-phrase")
+                        .onChange(of: app.settings.endingPhrase) { app.cancelEndingPhrasePreparation() }
+                    Text(
+                        "Say this phrase to send your turn even when background noise continues. Listening pauses until the reply finishes, then resumes. Pause detection still works."
+                    )
+                    .font(.callout).foregroundStyle(.secondary)
+                    Text(
+                        "Use a distinctive English phrase of up to eight words, such as “over over”. Leave blank to disable."
+                    )
+                    .font(.caption).foregroundStyle(.secondary)
+                    if !app.settings.endingPhrase.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                        app.settings.effectiveEndingPhrase == nil
+                    {
+                        Text("Use 1–8 English words, up to 64 characters, on one line.")
+                            .font(.caption).foregroundStyle(.red)
+                    }
+                    LabeledContent("Ending phrase status") {
+                        Text(app.endingPhraseDisplayStatus).foregroundStyle(.secondary)
+                    }
+                    Button("Prepare phrase recognition", action: app.checkEndingPhrase)
+                        .disabled(app.busy || app.endingPhrasePreparing || app.settings.effectiveEndingPhrase == nil)
+                    Text(
+                        "Recognition stays on this Mac. Preparing it may download Apple's speech model; it does not turn on the microphone."
+                    )
+                    .font(.caption).foregroundStyle(.secondary)
                 }
                 KeyboardShortcutsSection(app: app)
                 feedback(.general)
@@ -70,11 +113,14 @@ struct SettingsView: View {
                         "Conversation text, context, and voice messages go to OpenAI through your Codex sign-in. Example text is voiced by OpenAI through the same sign-in. Practice attempts and pitch analysis stay on your Mac."
                     )
                     Text(
-                        "Checking the connection sends a short text request. Recordings are sent only when you finish a voice message or choose to translate a recorded thought."
+                        "Checking the connection sends a short text request. In continuous conversation, the microphone stays on until you stop; detected speech is sent automatically. In manual mode, recordings are sent when you finish a voice message or translate a recorded thought."
                     )
                     Text(
                         "Library backups include conversations and practice audio, not sign-in credentials. Provider processing and retention follow your account settings."
                     ).foregroundStyle(.secondary)
+                    Text(
+                        "Spoken ending phrases are detected on this Mac using Apple's local English speech model. Recognition runs only while you have started continuous conversation."
+                    )
                 }
                 feedback(.privacy)
                 if let feedback = app.history.feedback { Text(feedback).font(.callout).foregroundStyle(.secondary) }

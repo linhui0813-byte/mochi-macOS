@@ -86,9 +86,11 @@ extension AppModel {
     }
     func requestReply(
         history: [Message], text: String, pcm: Data?, audioFile: String?, conversationID: UUID,
-        existingUserID: UUID? = nil
+        existingUserID: UUID? = nil, endingPhrase: String? = nil
     ) {
         if let existingUserID, transcribingMessageIDs.contains(existingUserID) { return }
+        let timing = pcm == nil ? nil : VoiceReplyTiming()
+        timing?.record(.submitted)
         // Cleared first, so a failure to save the voice message below stays visible.
         error = nil
         var userID = existingUserID
@@ -114,15 +116,25 @@ extension AppModel {
         let userName = settings.effectiveUserName
         let speakerName = chat?.displayCharacterName ?? "Mochi"
         let service = settings.conversationService(for: chat)
+        let stream = ConversationReplyStream(
+            app: self, token: token, enabled: audioFile != nil && playReply == nil, timing: timing)
         let voiceID = pcm == nil ? nil : userID
+        let handsFreeSession = handsFree
         let reply = speech.conversationReply
         let operation = Task { [weak self] in
             guard let self else { return }
             defer {
                 if turn.epoch == token { task = nil }
                 if let voiceID, transcripts.isCurrent(voiceID, requestID) {
-                    interruptPendingTranscript(voiceID, chatID: conversationID)
+                    // Speaking over a reply closes its socket, including any unfinished input
+                    // transcription. Recover that saved utterance once on an independent job.
+                    // Stop, edits and conversation changes invalidate the job/session instead.
+                    let recover =
+                        Task.isCancelled && handsFreeSession != nil
+                        && handsFree === handsFreeSession && selectedID == conversationID
+                    if !recover { interruptPendingTranscript(voiceID, chatID: conversationID) }
                     transcripts.finish(voiceID, requestID)
+                    if recover { startTranscriptRecovery(voiceID, chatID: conversationID, pendingOnly: true) }
                 }
             }
             do {
@@ -131,12 +143,15 @@ extension AppModel {
                         guard let self, !Task.isCancelled, turn.epoch == token else { return }
                         task = nil
                         let filename = saveReply(reply, conversationID: conversationID, speakerName: speakerName)
-                        _ = turn.finish(token)
+                        handsFree?.replySaved()
                         if reply.truncated {
                             notice =
                                 "\(speakerName)’s reply reached its length limit and was cut short. Ask a follow-up to continue."
                         }
-                        playReplyThenDeferredAction(filename)
+                        if !stream.finish(file: filename) {
+                            _ = turn.finish(token)
+                            playReplyThenDeferredAction(filename)
+                        }
                     },
                     transcription: { [weak self] reply in
                         guard let self, !Task.isCancelled, let voiceID, transcripts.isCurrent(voiceID, requestID) else {
@@ -151,11 +166,13 @@ extension AppModel {
                         guard let self, !Task.isCancelled, self.turn.epoch == token, self.selectedID == conversationID
                         else { throw CancellationError() }
                         return try self.tools.executeVoice(name, arguments: args, operationID: operationID)
-                    })
+                    },
+                    audio: { data in stream.append(data) })
                 let request = ConversationRequest(
                     history: history, text: text, pcm: pcm, spoken: audioFile != nil, instructions: instructions,
                     characterName: characterName, userName: userName, preferences: preferences,
-                    personality: personality)
+                    personality: personality, conversationID: conversationID, voiceTiming: timing,
+                    endingPhrase: endingPhrase)
                 try await reply(service, request, callbacks)
             } catch {
                 // The deferred block marks a still-pending transcript as interrupted.
@@ -210,15 +227,20 @@ extension AppModel {
     private func playReplyThenDeferredAction(_ filename: String?) {
         let action = deferredToolAction
         deferredToolAction = nil
-        guard let filename else {
+        let session = handsFree
+        let completed = { [weak session] in
             action?()
+            session?.listening()
+        }
+        guard let filename else {
+            completed()
             return
         }
         if let playReply {
             playReply(filename)
-            action?()
-        } else if let action {
-            play(filename, mochi: true, afterPlayback: action, afterPlaybackFailure: action)
+            completed()
+        } else if action != nil || session != nil {
+            play(filename, mochi: true, afterPlayback: completed, afterPlaybackFailure: action)
         } else {
             play(filename, mochi: true)
         }
@@ -253,11 +275,21 @@ extension AppModel {
         guard writableConversation, !busy,
             let chat = conversation,
             let message = chat.messages.first(where: { $0.id == messageID && $0.role == "user" }),
+            message.audio != nil,
+            !transcribingMessageIDs.contains(messageID)
+        else { return }
+        startTranscriptRecovery(messageID, chatID: chat.id)
+    }
+    /// A separate, bounded transcription request; never regenerates or replays the assistant reply.
+    private func startTranscriptRecovery(_ messageID: UUID, chatID: UUID, pendingOnly: Bool = false) {
+        guard libraryReadable,
+            let chat = library.conversations.first(where: { $0.id == chatID && !$0.isDeleted && !$0.archived }),
+            let message = chat.messages.first(where: { $0.id == messageID && $0.role == "user" }),
             let file = message.audio,
+            !pendingOnly || message.transcriptionState == .pending,
             !transcribingMessageIDs.contains(messageID)
         else { return }
         let jobID = transcripts.begin(messageID)
-        let chatID = chat.id
         updateTranscript(messageID, chatID: chatID, text: nil, state: .pending, error: nil)
         let transcribe = speech.transcribe
         let model = settings.effectiveModelName
@@ -301,9 +333,17 @@ extension AppModel {
             messageID, chatID: chatID, text: clean, state: clean.isEmpty ? .failed : .completed, error: nil)
     }
     func toggleConversationVoice() {
+        if handsFreeActive || handsFreeStarting {
+            _ = stop()
+            return
+        }
         guard !practice, writableConversation, libraryReadable else { return }
         if turn.activity != .recording, !greetingActive, conversation?.characterNameNeedsReview == true {
             error = String(localized: "Review the character name in Conversation Instructions before recording.")
+            return
+        }
+        if continuousConversation {
+            startHandsFreeConversation()
             return
         }
         if greetingActive {

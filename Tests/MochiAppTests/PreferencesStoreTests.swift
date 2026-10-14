@@ -7,6 +7,19 @@ import XCTest
 @testable import MochiProviders
 
 final class PreferencesStoreTests: XCTestCase {
+    @MainActor func testEndingPhraseDefaultsPersistsAndCanBeDisabled() {
+        let defaults = makePreferences()
+        let settings = PreferencesStore(defaults, importLegacy: false, allowExternalControl: false)
+        XCTAssertEqual(settings.endingPhrase, "over over")
+        settings.endingPhrase = "finished now"
+        XCTAssertEqual(
+            PreferencesStore(defaults, importLegacy: false, allowExternalControl: false).effectiveEndingPhrase?.text,
+            "finished now")
+        settings.endingPhrase = ""
+        let restored = PreferencesStore(defaults, importLegacy: false, allowExternalControl: false)
+        XCTAssertEqual(restored.endingPhrase, "")
+        XCTAssertNil(restored.effectiveEndingPhrase)
+    }
     @MainActor func testPreferencesPersistAndInvalidValuesFallBack() {
         let defaults = makePreferences()
         let first = PreferencesStore(defaults, importLegacy: false, allowExternalControl: true)

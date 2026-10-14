@@ -51,7 +51,23 @@ struct MessageDeletionUndo {
     /// The local control server and the caches that make tool calls safe to retry.
     let automation = AutomationController()
     @ObservationIgnored var allowDemoAutomation = false
-    var selectedID: UUID? { didSet { if oldValue != selectedID { find.close() } } }
+    var selectedID: UUID? {
+        didSet {
+            if oldValue != selectedID {
+                find.close()
+                if handsFreeActive || handsFreeStarting { _ = stop() }
+                speech.resetConversation()
+            }
+        }
+    }
+    var continuousConversation: Bool {
+        get { settings.continuousConversation }
+        set {
+            settings.continuousConversation = newValue
+            if handsFreeActive || handsFreeStarting { _ = stop() }
+            speech.resetConversation()
+        }
+    }
     /// Find in the open conversation.
     let find = ConversationFind()
     var canFindInConversation: Bool {
@@ -86,6 +102,27 @@ struct MessageDeletionUndo {
     var transcribingMessageIDs: Set<UUID> { transcripts.messageIDs }
     @ObservationIgnored var speech: SpeechServices
     @ObservationIgnored var media: MediaServices
+    var handsFree: HandsFreeConversation?
+    var handsFreeStarting = false
+    var handsFreeSpeechDetected = false
+    var endingPhrasePreparing = false
+    var endingPhraseStatus = String(localized: "Not prepared")
+    var endingPhraseDisplayStatus: String {
+        // Observe status changes too: the session releases a failed recognizer without changing
+        // its own identity, and Settings must refresh when that happens.
+        let preparationStatus = endingPhraseStatus
+        guard let handsFree, settings.effectiveEndingPhrase != nil else { return preparationStatus }
+        return handsFree.endingPhraseReady
+            ? String(localized: "Ready") : String(localized: "Unavailable · pause detection still works")
+    }
+    @ObservationIgnored var endingPhrasePreparationTask: Task<Void, Never>?
+    @ObservationIgnored var endingPhrasePreparationID = UUID()
+    @ObservationIgnored var preparedEndingPhrase: (phrase: EndTurnPhrase, device: any EndPhraseDevice)?
+    @ObservationIgnored var makeEndPhraseDevice: (EndTurnPhrase) async throws -> (any EndPhraseDevice)? = { phrase in
+        if #available(macOS 26, *) { return try await LocalEndPhraseDevice.prepare(phrase) }
+        throw AppFailure("Spoken ending phrases require macOS 26 or later. Pause detection still works.")
+    }
+    @ObservationIgnored var makeHandsFreeAudio: () throws -> any HandsFreeAudioDevice = { HandsFreeAudio() }
     @ObservationIgnored var playReply: ((String) -> Void)?
     /// Writes a reply's audio file; replaceable so a failed audio write can be tested while the library still saves.
     @ObservationIgnored var writeReplyAudio: (Data, URL) throws -> Void = { try $0.write(to: $1, options: .atomic) }
@@ -168,6 +205,30 @@ struct MessageDeletionUndo {
     var busy: Bool { turn.activity != .idle }
     var practice: Bool { turn.mode == .practice }
     var status: String {
+        if handsFreeStarting && endingPhrasePreparing {
+            return String(localized: "Preparing local speech recognition…")
+        }
+        if handsFreeActive {
+            if handsFree?.inputPausedForReply == true {
+                if speaking {
+                    return audio.paused
+                        ? String(localized: "Playback paused · listening paused")
+                        : String(localized: "\(displayCharacterName) is speaking · listening paused")
+                }
+                return String(localized: "Thinking · listening paused")
+            }
+            if speaking {
+                return audio.paused
+                    ? String(localized: "Playback paused · microphone stays on")
+                    : String(localized: "\(displayCharacterName) is speaking · speak to interrupt")
+            }
+            if turn.activity == .recording {
+                return handsFreeSpeechDetected
+                    ? String(localized: "Hearing you · pause to send")
+                    : String(localized: "Listening · speak naturally")
+            }
+            return String(localized: "Thinking · microphone stays on")
+        }
         switch turn.activity {
         case .recording:
             if recordingMeaning { return String(localized: "Recording your thought · finish to review") }
@@ -176,6 +237,10 @@ struct MessageDeletionUndo {
                 : String(localized: "Recording · finish to send to \(displayCharacterName)")
         case .requestingPermission: return String(localized: "Waiting for microphone permission")
         case .generating:
+            if speaking {
+                return audio.paused
+                    ? String(localized: "Playback paused") : String(localized: "\(displayCharacterName) is speaking")
+            }
             if greetingActive { return String(localized: "Preparing \(displayCharacterName)’s greeting…") }
             return practice
                 ? String(localized: "Preparing your expression…")
@@ -203,6 +268,7 @@ struct MessageDeletionUndo {
         self.audio = audio
         self.media = media ?? .live(audio)
         self.speech = speech ?? .live
+        if demo || TestEnvironment.active { makeEndPhraseDevice = { _ in nil } }
         settings = PreferencesStore(
             preferences ?? (demo ? UserDefaults(suiteName: AppIdentity.bundleIdentifier + ".preview")! : .standard),
             importLegacy: !demo && libraryRoot == nil, allowExternalControl: !demo)
@@ -297,6 +363,8 @@ struct MessageDeletionUndo {
     }
     /// False when the library could not be saved; the failure is already reported.
     @discardableResult func stop() -> Bool {
+        cancelEndingPhrasePreparation()
+        speech.resetConversation()
         let unfinishedRecording = cancelTurn()
         transcripts.cancelAll()
         for ci in library.conversations.indices {
@@ -328,7 +396,8 @@ struct MessageDeletionUndo {
         removeUnreferencedRecording(recording?.lastPathComponent)
     }
     /// Ends whatever owns the turn and returns the unfinished recording, if any, for the caller to discard.
-    private func cancelTurn() -> URL? {
+    func cancelTurn(preservingHandsFree: Bool = false) -> URL? {
+        if !preservingHandsFree { endHandsFreeConversation() }
         deferredToolAction = nil
         greetingActive = false
         let recording = media.stopRecording()
@@ -412,6 +481,11 @@ struct MessageDeletionUndo {
     }
     func fail(_ failure: Error, token: UUID, context: String = "Operation", settingsTab: SettingsTab? = nil) {
         guard turn.epoch == token else { return }
+        endHandsFreeConversation()
+        if audio.isStreaming {
+            audio.stop()
+            playbackFile = nil
+        }
         _ = turn.finish(token)
         greetingActive = false
         speaking = false

@@ -37,6 +37,25 @@ brew upgrade --cask xiaolai/tap/mochi
 3. Start a blank conversation with **New Conversation** (⌘N), or choose **New Conversation from Template…** (⇧⌘N).
 4. Type a message, or click the microphone to speak and listen to the reply.
 
+Voice replies start playing as audio arrives. You can pause, resume or stop playback while the reply is still
+being generated; the complete reply is saved for later replay.
+
+In **Settings → General → Connection**, **Continuous conversation** chooses how you talk:
+
+- **Off** (default): record each message with the microphone button or Talk shortcut, then send it manually.
+- **On**: press the microphone button or Talk shortcut once. The microphone stays open, a pause of about one
+  second sends your spoken turn, and Mochi keeps listening after replying. Speak over her to interrupt the reply.
+  Press the button or shortcut again, or use **Stop** / **Escape**, to close the microphone and end the session.
+
+Hands-free mode uses the same audio engine for microphone and speaker, with macOS voice processing for echo
+cancellation. It keeps a short local audio prefix so the start of your words is included, sends detected speech
+rather than long silent waits, and reuses the conversation connection where possible. An interrupted request
+may need a new connection. Changing conversations, leaving for practice, an audio-device change, or a connection
+error ends the microphone session. Turning on the setting alone does not start recording.
+
+Existing recordings remain available for replay. An interrupted saved reply is marked in the conversation;
+its unheard ending is excluded from the next model context.
+
 ## What you can use it for
 
 Anything you would rather say than type. Out of the box, Mochi is a warm conversation companion that keeps replies short and leaves you room to think. Built-in [templates](#templates) set her up for things like these, in whatever language you speak:
@@ -212,6 +231,18 @@ Each save keeps the library as it was just before as `library.previous.json` in 
 The library format is **version 4**. Before upgrading an older library, Mochi preserves its original bytes in a private backup in the data folder: `library-before-character-library-v4*.json` for a version 3 library, and `library-before-character-templates-v3*.json` for a library from before Mochi 0.4.0. Mochi 0.7.1 and earlier cannot open a version 4 library or import a version 4 backup. To go back to one of them, quit Mochi and put a backup in place of `library.json` in the data folder: `library-before-character-library-v4.json` if your library was upgraded from version 3, or `library-before-character-templates-v3.json` if it was upgraded straight from an older version. Anything changed since the upgrade exists only in the version 4 library. Mochi 0.6.4 and earlier open every conversation as English and drop a conversation's language when they save it.
 
 Practice examples you saved with ElevenLabs before Mochi moved to Codex voices keep playing. A previously saved ElevenLabs key stays in your Keychain until you delete the `ELEVENLABS_API_KEY` item in Keychain Access.
+
+Continuous conversation detects speech locally with the bundled WebRTC voice activity detector (libfvad). Pause for about 1–1.5 seconds after speaking to send a turn automatically. The microphone meter shows incoming sound; “Hearing you” confirms speech detection, and “Thinking” confirms the turn was submitted. The detector adds no cloud service or API key. Its source and license are in `Vendor/libfvad`, and its notices are bundled with the app.
+
+Speaking over Mochi stops her reply. If that also interrupts an unfinished transcript, Mochi makes one transcription-only recovery request using your saved recording, without generating another reply. Stop or a conversation change cancels this work, and editing the transcript takes precedence over a late result. A learned microphone level helps reject faint background sound between turns. For an older recording labelled “Transcript unavailable,” open its message menu and choose **Retry Transcription**; recordings with no clear speech may still require adding text or recording again.
+
+Voice reply timing is recorded locally in Console under Mochi's `network` log category. `Voice timing` entries use a random per-turn identifier, fixed stage names and elapsed milliseconds to distinguish connection setup, audio upload, the first received audio chunk, and playback queuing. They contain no recording, transcript, message identifier or credential and are not sent to OpenAI. Timing starts when the detected voice turn is submitted, after the local end-of-speech pause. Playback queuing measures the app's handoff to its audio engine, rather than the instant sound physically leaves the speaker.
+
+An idle conversation connection is checked using its next `session.update` acknowledgement, rather than waiting for a WebSocket pong. This also applies the next turn's settings without a duplicate configuration round trip. A dropped connection can reconnect before new audio, history items or a response request is submitted. A turn that has already been submitted is never automatically resent.
+
+In continuous conversation, say **“over over”** to end your current turn when background noise prevents pause detection. Once the phrase is recognized, Mochi sends that utterance and pauses listening throughout reply generation and playback. Continued speech and background voices cannot interrupt this reply. Listening resumes automatically after the reply finishes; the shortcut or Stop still ends the session at any time. Turns ended by an ordinary pause still allow spoken interruptions. Change **Settings → General → Continuous conversation → Spoken ending phrase** to choose a distinctive English phrase of 1–8 words (up to 64 characters), or leave it blank to disable phrase detection. Pause detection continues to work alongside it. The phrase is a recording control; the reply is instructed to answer the speech before it and ignore any words captured after it while recognition was catching up. It remains audible in the saved recording and may appear in its transcript. The shared audio engine stays open for playback and echo cancellation while listening is paused; incoming speech is discarded rather than saved or sent to speech recognition.
+
+Spoken ending phrases use Apple's on-device English `SpeechTranscriber` on macOS 26 or later. **Prepare phrase recognition** downloads/prepares the model without opening the microphone; preparation also runs when you first start continuous conversation. The recognizer receives the same echo-cancelled audio while that user-started microphone session is active. It sends no extra audio to Apple or another provider. If the local model is unavailable, Mochi reports that phrase detection is unavailable and keeps normal pause detection working. Stop, a conversation change, or turning continuous conversation off cancels recognition; late results cannot restart the microphone or submit another recording.
 
 ## Build from source
 

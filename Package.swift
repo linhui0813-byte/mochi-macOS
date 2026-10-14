@@ -9,14 +9,15 @@ let package = Package(
     targets: [
         .target(name: "MochiKernel"),
         .target(name: "MochiAutomation", dependencies: ["MochiKernel"]),
-        .target(name: "MochiCore", dependencies: ["MochiKernel"]),
+        .target(name: "MochiVAD", path: "Vendor/libfvad", sources: ["src"], publicHeadersPath: "include"),
+        .target(name: "MochiCore", dependencies: ["MochiKernel", "MochiVAD"]),
         .target(name: "MochiProviders", dependencies: ["MochiKernel", "MochiAutomation", "MochiCore"]),
         .executableTarget(name: "MochiMCP", dependencies: ["MochiAutomation"]),
         .executableTarget(
             name: "MochiApp", dependencies: ["MochiKernel", "MochiAutomation", "MochiCore", "MochiProviders"],
             resources: [.process("Resources")],
             swiftSettings: [.define("MOCHI_DEVELOPMENT", .when(configuration: .debug))]),
-        .target(name: "MochiTestSupport", path: "Tests/MochiTestSupport"),
+        .target(name: "MochiTestSupport", path: "Tests/MochiTestSupport", resources: [.copy("Resources")]),
         .testTarget(name: "MochiKernelTests", dependencies: ["MochiKernel"]),
         .testTarget(
             name: "MochiAutomationTests", dependencies: ["MochiKernel", "MochiAutomation", "MochiTestSupport"]),

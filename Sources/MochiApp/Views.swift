@@ -131,6 +131,15 @@ struct WorkspaceView: View {
             .navigationTitle("")
             .toolbar {
                 if app.turn.activity == .generating {
+                    if app.audio.isStreaming {
+                        ToolbarItem(placement: .primaryAction) {
+                            Button(action: app.audio.togglePause) {
+                                Label(
+                                    app.audio.paused ? "Resume" : "Pause",
+                                    systemImage: app.audio.paused ? "play.fill" : "pause.fill")
+                            }.labelStyle(.iconOnly)
+                        }
+                    }
                     ToolbarItem(placement: .primaryAction) {
                         Button {
                             app.stop()
@@ -325,6 +334,9 @@ struct WorkspaceView: View {
                         .font(.system(size: 15))
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
+                    if message.interrupted {
+                        Text("Interrupted reply").font(.caption).foregroundStyle(.secondary)
+                    }
                     if isUser && message.audio != nil && message.contextText == nil {
                         Text(
                             app.transcribingMessageIDs.contains(message.id)
@@ -398,12 +410,17 @@ struct WorkspaceView: View {
             phraseChips
             HStack(alignment: .bottom, spacing: 12) {
                 Button(action: app.toggleConversationVoice) {
-                    Image(systemName: app.turn.activity == .recording ? "stop.circle.fill" : "mic.fill")
-                        .font(.system(size: 18))
+                    Image(
+                        systemName: app.handsFreeActive || app.handsFreeStarting || app.turn.activity == .recording
+                            ? "stop.circle.fill" : "mic.fill"
+                    )
+                    .font(.system(size: 18))
                 }.buttonStyle(.borderless)
                     .help(app.microphoneLabel)
                     .accessibilityLabel(app.microphoneLabel)
-                    .disabled(app.busy && app.turn.activity != .recording && !app.greetingActive)
+                    .disabled(
+                        !app.handsFreeActive && !app.handsFreeStarting && app.busy && app.turn.activity != .recording
+                            && !app.greetingActive)
                 Button(action: app.startHelp) {
                     Image(systemName: "waveform.badge.plus").font(.system(size: 18))
                 }.buttonStyle(.borderless)
@@ -432,15 +449,23 @@ struct WorkspaceView: View {
             }
             .padding(12)
             .fieldFrame(cornerRadius: 24, focused: composerFocused)
-            if app.turn.activity == .recording { RecordingFeedback(app: app) }
+            if app.turn.activity == .recording && !app.handsFreeActive { RecordingFeedback(app: app) }
             HStack(spacing: 5) {
-                if app.turn.activity == .generating || app.turn.activity == .requestingPermission {
+                if app.speaking && app.audio.isStreaming {
+                    Image(systemName: app.audio.paused ? "pause.fill" : "speaker.wave.2.fill")
+                } else if app.turn.activity == .generating || app.turn.activity == .requestingPermission {
                     ProgressView().controlSize(.mini)
                 } else {
                     Image(systemName: app.turn.activity == .recording ? "record.circle" : "mic.slash").foregroundStyle(
                         app.turn.activity == .recording ? .red : .secondary)
                 }
                 Text(app.status).lineLimit(1)
+                if app.handsFreeActive {
+                    ProgressView(value: Double(max(0, min(1, (app.recordingLevel + 80) / 80))))
+                        .frame(width: 64)
+                        .accessibilityLabel("Microphone input level")
+                        .accessibilityValue(Text(verbatim: "\(Int(app.recordingLevel)) dB"))
+                }
                 Spacer(minLength: 4)
                 if app.demo { Text("Preview").foregroundStyle(.secondary) }
             }.font(.caption).foregroundStyle(.secondary)

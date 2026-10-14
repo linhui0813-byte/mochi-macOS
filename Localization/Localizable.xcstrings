@@ -175,6 +175,62 @@
         }
       }
     },
+    "%@ is speaking · listening paused" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@が話しています · 聞き取りは一時停止中"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@이(가) 말하는 중 · 듣기 일시 중지"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@正在说话 · 聆听已暂停"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@正在說話 · 聆聽已暫停"
+          }
+        }
+      }
+    },
+    "%@ is speaking · speak to interrupt" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@正在说话 · 开口即可打断"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@正在說話 · 開口即可打斷"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@が話しています · 話しかけると中断します"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@이(가) 말하는 중 · 말하면 중단됩니다"
+          }
+        }
+      }
+    },
     "%@ is thinking…" : {
       "localizations" : {
         "ja" : {
@@ -2113,6 +2169,34 @@
         }
       }
     },
+    "Audio capture fell behind. Start continuous conversation again." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "音频采集跟不上处理速度。请重新开始连续对话。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "音訊擷取跟不上處理速度。請重新開始連續對話。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "音声の取り込みが追いつきません。連続会話を開始し直してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "오디오 캡처가 지연되었습니다. 연속 대화를 다시 시작하세요."
+          }
+        }
+      }
+    },
     "Audio is unavailable for that item." : {
       "localizations" : {
         "ja" : {
@@ -2953,30 +3037,30 @@
         }
       }
     },
-    "Checking the connection sends a short text request. Recordings are sent only when you finish a voice message or choose to translate a recorded thought." : {
+    "Checking the connection sends a short text request. In continuous conversation, the microphone stays on until you stop; detected speech is sent automatically. In manual mode, recordings are sent when you finish a voice message or translate a recorded thought." : {
       "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "接続を確認すると、短いテキストリクエストが送信されます。録音が送信されるのは、音声メッセージを終了したときか、録音した言いたいことの翻訳を選択したときだけです。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "연결을 확인하면 짧은 텍스트 요청이 전송됩니다. 녹음은 음성 메시지를 완료하거나 녹음된 생각을 번역하도록 선택한 경우에만 전송됩니다."
-          }
-        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "检查连接时会发送一条简短的文本请求。只有在你完成语音消息或选择翻译已录制的想法时，才会发送录音。"
+            "value" : "检查连接会发送一条简短的文字请求。在连续对话中，麦克风将保持开启直到你停止；检测到的语音会自动发送。在手动模式下，完成语音消息或翻译录下的想法时才会发送录音。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "檢查連線時會傳送一則簡短的文字要求。只有在你完成語音訊息，或選擇翻譯已錄下的想法時，才會傳送錄音。"
+            "value" : "檢查連線會傳送一則簡短的文字請求。在連續對話中，麥克風將保持開啟直到你停止；偵測到的語音會自動傳送。在手動模式下，完成語音訊息或翻譯錄下的想法時才會傳送錄音。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "接続の確認では短いテキストリクエストを送信します。連続会話では停止するまでマイクがオンになり、検出した発話を自動送信します。手動モードでは音声メッセージの録音終了時や録音した考えの翻訳時に録音を送信します。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "연결 확인 시 짧은 텍스트 요청을 보냅니다. 연속 대화에서는 중지할 때까지 마이크가 켜지고 감지된 발화가 자동으로 전송됩니다. 수동 모드에서는 음성 메시지 녹음을 마치거나 녹음한 생각을 번역할 때 녹음이 전송됩니다."
           }
         }
       }
@@ -3761,6 +3845,118 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "連線"
+          }
+        }
+      }
+    },
+    "Continuous conversation" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连续对话"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "連續對話"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "連続会話"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "연속 대화"
+          }
+        }
+      }
+    },
+    "Continuous conversation audio is no longer active." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连续对话音频已停止。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "連續對話音訊已停止。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "連続会話の音声は停止しています。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "연속 대화 오디오가 중지되었습니다."
+          }
+        }
+      }
+    },
+    "Continuous conversation playback stopped. Check your audio devices and start again." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连续对话播放已停止。请检查音频设备后重新开始。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "連續對話播放已停止。請檢查音訊裝置後重新開始。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "連続会話の再生が停止しました。オーディオ機器を確認して開始し直してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "연속 대화 재생이 중지되었습니다. 오디오 장치를 확인하고 다시 시작하세요."
+          }
+        }
+      }
+    },
+    "Continuous conversation stopped. Check your microphone and connection, then start again." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连续对话已停止。请检查麦克风和网络连接后重新开始。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "連續對話已停止。請檢查麥克風與網路連線後重新開始。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "連続会話が停止しました。マイクと接続を確認して開始し直してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "연속 대화가 중지되었습니다. 마이크와 연결을 확인하고 다시 시작하세요."
           }
         }
       }
@@ -4745,6 +4941,34 @@
         }
       }
     },
+    "Could not enable echo cancellation (audio error %@). Check your microphone and speakers in macOS Sound settings, then try again." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法启用回声消除（音频错误 %@）。请在macOS声音设置中检查麦克风和扬声器后重试。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法啟用回音消除（音訊錯誤 %@）。請在macOS聲音設定中檢查麥克風與揚聲器後再試。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "エコーキャンセルを有効にできませんでした（音声エラー %@）。macOSのサウンド設定でマイクとスピーカーを確認して再試行してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "에코 제거를 활성화할 수 없습니다(오디오 오류 %@). macOS 사운드 설정에서 마이크와 스피커를 확인하고 다시 시도하세요."
+          }
+        }
+      }
+    },
     "Could not export the backup because the disk is full." : {
       "localizations" : {
         "ja" : {
@@ -5105,6 +5329,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "無法儲存你的對話。請保持此視窗打開並再試一次。"
+          }
+        }
+      }
+    },
+    "Could not start continuous conversation audio (audio error %@). Check your microphone and speakers in macOS Sound settings, then try again." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法启动连续对话音频（音频错误 %@）。请在macOS声音设置中检查麦克风和扬声器后重试。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法啟動連續對話音訊（音訊錯誤 %@）。請在macOS聲音設定中檢查麥克風與揚聲器後再試。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "連続会話の音声を開始できませんでした（音声エラー %@）。macOSのサウンド設定でマイクとスピーカーを確認して再試行してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "연속 대화 오디오를 시작할 수 없습니다(오디오 오류 %@). macOS 사운드 설정에서 마이크와 스피커를 확인하고 다시 시도하세요."
           }
         }
       }
@@ -6089,6 +6341,34 @@
         }
       }
     },
+    "Echo cancellation is unavailable. Check your audio devices and try again." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "回声消除不可用。请检查音频设备后重试。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "回音消除無法使用。請檢查音訊裝置後再試。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "エコーキャンセルを利用できません。オーディオ機器を確認して再試行してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "에코 제거를 사용할 수 없습니다. 오디오 장치를 확인하고 다시 시도하세요."
+          }
+        }
+      }
+    },
     "Edit Character" : {
       "localizations" : {
         "ja" : {
@@ -6309,6 +6589,62 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "編碼後的範本太大。請縮短其文字。"
+          }
+        }
+      }
+    },
+    "End Continuous Conversation" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "结束连续对话"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "結束連續對話"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "連続会話を終了"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "연속 대화 종료"
+          }
+        }
+      }
+    },
+    "Ending phrase status" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "结束短语状态"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "結束短語狀態"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "終了フレーズの状態"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "종료 문구 상태"
           }
         }
       }
@@ -7237,6 +7573,34 @@
         }
       }
     },
+    "Hearing you · pause to send" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在听你说话 · 停顿后自动发送"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在聽你說話 · 停頓後自動傳送"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "音声を検出中 · 話し終えると送信"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "말씀을 듣고 있어요 · 잠시 멈추면 전송"
+          }
+        }
+      }
+    },
     "Help Me Say This" : {
       "localizations" : {
         "ja" : {
@@ -7849,6 +8213,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "指示"
+          }
+        }
+      }
+    },
+    "Interrupted reply" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "回复已被打断"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "回覆已被打斷"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "中断された返信"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "중단된 답변"
           }
         }
       }
@@ -8833,6 +9225,90 @@
         }
       }
     },
+    "Listening · speak naturally" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在聆听 · 请自然说话"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在聆聽 · 請自然說話"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "聞いています · 自然に話してください"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "듣는 중 · 자연스럽게 말하세요"
+          }
+        }
+      }
+    },
+    "Live playback stopped. The reply is saved; press Play to hear it again." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "实时播放已停止。回复已保存；点击播放即可重新收听。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "即時播放已停止。回覆已儲存；按下播放即可重新收聽。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "リアルタイム再生が停止しました。返信は保存されています。再生を押すともう一度聞けます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "실시간 재생이 중지되었습니다. 답변이 저장되었으니 재생을 눌러 다시 들으세요."
+          }
+        }
+      }
+    },
+    "Local English speech recognition is unavailable. Pause detection still works." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本地英语语音识别不可用。停顿检测仍可使用。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本機英語語音辨識無法使用。停頓偵測仍可使用。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ローカルの英語音声認識を利用できません。間の検出は引き続き利用できます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "로컬 영어 음성 인식을 사용할 수 없습니다. 멈춤 감지는 계속 작동합니다."
+          }
+        }
+      }
+    },
     "Local control belongs to another user." : {
       "localizations" : {
         "ja" : {
@@ -9305,6 +9781,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "麥克風取用權限已關閉。請在「系統設定」→「隱私權與安全性」→「麥克風」中啟用 Mochi。"
+          }
+        }
+      }
+    },
+    "Microphone and speaker formats could not be matched for echo cancellation." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法匹配麦克风与扬声器的音频格式，不能启用回声消除。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法匹配麥克風與揚聲器的音訊格式，不能啟用回音消除。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "エコーキャンセルに必要なマイクとスピーカーの音声形式を一致させられませんでした。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "에코 제거에 필요한 마이크와 스피커의 오디오 형식을 일치시킬 수 없습니다."
           }
         }
       }
@@ -11272,6 +11776,34 @@
         }
       }
     },
+    "Not prepared" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未准备"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未準備"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未準備"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "준비 안 됨"
+          }
+        }
+      }
+    },
     "Number out of range: %@." : {
       "localizations" : {
         "ja" : {
@@ -11324,6 +11856,62 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "偶爾溫和糾正"
+          }
+        }
+      }
+    },
+    "Off" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "關閉"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "オフ"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "끔"
+          }
+        }
+      }
+    },
+    "On: start once, speak hands-free, and interrupt Mochi by speaking. Off: record each message manually." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "开启：启动一次即可免按键交谈，开口即可打断Mochi。关闭：手动录制每条消息。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "開啟：啟動一次即可免按鍵交談，開口即可打斷Mochi。關閉：手動錄製每則訊息。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "オン：一度開始すればハンズフリーで話せます。話しかけるとMochiを中断できます。オフ：メッセージごとに手動で録音します。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "켜짐: 한 번 시작하면 손을 쓰지 않고 대화하며 말로 Mochi를 중단할 수 있습니다. 꺼짐: 메시지마다 직접 녹음합니다."
           }
         }
       }
@@ -12140,6 +12728,62 @@
         }
       }
     },
+    "Playback paused · listening paused" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "再生を一時停止中 · 聞き取りは一時停止中"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "재생 일시 중지 · 듣기 일시 중지"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "播放已暂停 · 聆听已暂停"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "播放已暫停 · 聆聽已暫停"
+          }
+        }
+      }
+    },
+    "Playback paused · microphone stays on" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "播放已暂停 · 麦克风保持开启"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "播放已暫停 · 麥克風保持開啟"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "再生を一時停止中 · マイクはオンのままです"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "재생 일시 정지 · 마이크는 켜져 있습니다"
+          }
+        }
+      }
+    },
     "Playback speed" : {
       "localizations" : {
         "ja" : {
@@ -12420,6 +13064,34 @@
         }
       }
     },
+    "Prepare phrase recognition" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "准备短语识别"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "準備短語辨識"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "フレーズ認識を準備"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "문구 인식 준비"
+          }
+        }
+      }
+    },
     "Preparing %@’s greeting…" : {
       "localizations" : {
         "ja" : {
@@ -12444,6 +13116,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在準備 %@ 的問候…"
+          }
+        }
+      }
+    },
+    "Preparing local speech recognition…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在准备本地语音识别…"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在準備本機語音辨識…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ローカル音声認識を準備中…"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "로컬 음성 인식 준비 중…"
           }
         }
       }
@@ -12500,6 +13200,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "보조 키와 함께 키를 누르세요."
+          }
+        }
+      }
+    },
+    "Press the microphone button or shortcut to start. Press it again, or Stop, to end the conversation." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "点击麦克风按钮或按下快捷键开始。再次按下，或点击停止，即可结束对话。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按下麥克風按鈕或快速鍵開始。再次按下，或按下停止，即可結束對話。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "マイクボタンまたはショートカットで開始します。もう一度押すか「停止」で会話を終了します。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "마이크 버튼이나 단축키로 시작합니다. 다시 누르거나 중지를 누르면 대화가 끝납니다."
           }
         }
       }
@@ -12812,6 +13540,34 @@
         }
       }
     },
+    "Ready" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "就绪"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "就緒"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "準備完了"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "준비 완료"
+          }
+        }
+      }
+    },
     "Ready when you are · microphone off" : {
       "localizations" : {
         "ja" : {
@@ -12920,6 +13676,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "最近刪除"
+          }
+        }
+      }
+    },
+    "Recognition stays on this Mac. Preparing it may download Apple's speech model; it does not turn on the microphone." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "识别在此 Mac 上进行。准备时可能会下载 Apple 的语音模型，但不会开启麦克风。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "辨識在此 Mac 上進行。準備時可能會下載 Apple 的語音模型，但不會開啟麥克風。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "認識はこの Mac 内で行われます。準備時に Apple の音声モデルをダウンロードする場合がありますが、マイクはオンになりません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "인식은 이 Mac에서 처리됩니다. 준비 과정에서 Apple 음성 모델을 다운로드할 수 있지만 마이크는 켜지지 않습니다."
           }
         }
       }
@@ -14772,6 +15556,34 @@
         }
       }
     },
+    "Say this phrase to send your turn even when background noise continues. Listening pauses until the reply finishes, then resumes. Pause detection still works." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "背景音が続いていても、このフレーズを言うと発言を送信できます。返答が終わるまで聞き取りを一時停止し、その後再開します。間の検出も引き続き利用できます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "배경 소음이 계속되어도 이 문구를 말하면 발언을 전송합니다. 답변이 끝날 때까지 듣기를 일시 중지한 다음 다시 시작합니다. 멈춤 감지도 계속 작동합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "说出此短语，即使背景噪声持续也能发送本轮话语。聆听将暂停，直到回复结束后自动恢复。停顿检测仍可使用。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "說出此短語，即使背景噪音持續也能傳送本輪話語。聆聽將暫停，直到回覆結束後自動恢復。停頓偵測仍可使用。"
+          }
+        }
+      }
+    },
     "Search All Conversations" : {
       "localizations" : {
         "ja" : {
@@ -15836,6 +16648,146 @@
         }
       }
     },
+    "Spoken ending phrase" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "口述结束短语"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "口述結束短語"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "終了フレーズ"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "말하기 종료 문구"
+          }
+        }
+      }
+    },
+    "Spoken ending phrase detection is unavailable. Pause detection still works." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "口述结束短语检测不可用。停顿检测仍可使用。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "口述結束短語偵測無法使用。停頓偵測仍可使用。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "終了フレーズの検出を利用できません。間の検出は引き続き利用できます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "말하기 종료 문구 감지를 사용할 수 없습니다. 멈춤 감지는 계속 작동합니다."
+          }
+        }
+      }
+    },
+    "Spoken ending phrase detection stopped. Pause detection still works." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "口述结束短语检测已停止。停顿检测仍可使用。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "口述結束短語偵測已停止。停頓偵測仍可使用。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "終了フレーズの検出が停止しました。間の検出は引き続き利用できます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "말하기 종료 문구 감지가 중지되었습니다. 멈춤 감지는 계속 작동합니다."
+          }
+        }
+      }
+    },
+    "Spoken ending phrases are detected on this Mac using Apple's local English speech model. Recognition runs only while you have started continuous conversation." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "口述结束短语使用 Apple 的本地英语语音模型在此 Mac 上检测。识别仅在你启动连续对话后运行。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "口述結束短語使用 Apple 的本機英語語音模型在此 Mac 上偵測。辨識僅在你啟動連續對話後執行。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "終了フレーズは Apple のローカル英語音声モデルを使用してこの Mac 内で検出します。認識は連続会話を開始している間のみ動作します。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "말하기 종료 문구는 Apple의 로컬 영어 음성 모델을 사용해 이 Mac에서 감지합니다. 인식은 연속 대화를 시작한 동안에만 실행됩니다."
+          }
+        }
+      }
+    },
+    "Spoken ending phrases require macOS 26 or later. Pause detection still works." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "口述结束短语需要 macOS 26 或更高版本。停顿检测仍可使用。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "口述結束短語需要 macOS 26 或更新版本。停頓偵測仍可使用。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "終了フレーズには macOS 26 以降が必要です。間の検出は引き続き利用できます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "말하기 종료 문구는 macOS 26 이상이 필요합니다. 멈춤 감지는 계속 작동합니다."
+          }
+        }
+      }
+    },
     "Spoken exactly as written when you first start talking. Leave it empty for a standard greeting in the conversation’s language." : {
       "localizations" : {
         "ja" : {
@@ -15860,6 +16812,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "第一次開始說話時，會照原樣念出。留空則用對話語言說一句標準問候。"
+          }
+        }
+      }
+    },
+    "Start Continuous Conversation" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "开始连续对话"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "開始連續對話"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "連続会話を開始"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "연속 대화 시작"
           }
         }
       }
@@ -16056,6 +17036,118 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "儲存空間"
+          }
+        }
+      }
+    },
+    "Streaming audio could not be prepared." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法准备流式音频。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法準備串流音訊。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ストリーミング音声を準備できませんでした。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스트리밍 오디오를 준비할 수 없습니다."
+          }
+        }
+      }
+    },
+    "Streaming audio could not start." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法开始播放流式音频。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法開始播放串流音訊。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ストリーミング音声の再生を開始できませんでした。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스트리밍 오디오 재생을 시작할 수 없습니다."
+          }
+        }
+      }
+    },
+    "Streaming audio has already finished." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "流式音频已经结束。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "串流音訊已經結束。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ストリーミング音声はすでに終了しています。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스트리밍 오디오가 이미 종료되었습니다."
+          }
+        }
+      }
+    },
+    "Streaming audio is no longer active." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "流式音频已停止。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "串流音訊已停止。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ストリーミング音声は停止しています。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "스트리밍 오디오가 중지되었습니다."
           }
         }
       }
@@ -16508,6 +17600,34 @@
         }
       }
     },
+    "The audio device changed. Start continuous conversation again." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "音频设备已更改。请重新开始连续对话。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "音訊裝置已變更。請重新開始連續對話。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "オーディオ機器が変更されました。連続会話を開始し直してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "오디오 장치가 변경되었습니다. 연속 대화를 다시 시작하세요."
+          }
+        }
+      }
+    },
     "The automation path is already in use." : {
       "localizations" : {
         "ja" : {
@@ -16956,6 +18076,34 @@
         }
       }
     },
+    "The interrupted reply could not be saved." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法保存被打断的回复。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法儲存被打斷的回覆。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "中断された返信を保存できませんでした。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "중단된 답변을 저장할 수 없습니다."
+          }
+        }
+      }
+    },
     "The library contains an unsafe recording filename." : {
       "localizations" : {
         "ja" : {
@@ -17232,6 +18380,118 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "本機控制 socket 路徑太長。"
+          }
+        }
+      }
+    },
+    "The microphone audio could not be converted." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法转换麦克风音频。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法轉換麥克風音訊。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "マイクの音声を変換できませんでした。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "마이크 오디오를 변환할 수 없습니다."
+          }
+        }
+      }
+    },
+    "The microphone audio format is unsupported." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不支持此麦克风音频格式。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不支援此麥克風音訊格式。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このマイクの音声形式には対応していません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 마이크의 오디오 형식은 지원되지 않습니다."
+          }
+        }
+      }
+    },
+    "The microphone is unavailable. Check your audio input and try again." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "麦克风不可用。请检查音频输入后重试。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "麥克風無法使用。請檢查音訊輸入後再試。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "マイクを利用できません。音声入力を確認して再試行してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "마이크를 사용할 수 없습니다. 오디오 입력을 확인하고 다시 시도하세요."
+          }
+        }
+      }
+    },
+    "The microphone stopped. Start continuous conversation again." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "麦克风已停止。请重新开始连续对话。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "麥克風已停止。請重新開始連續對話。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "マイクが停止しました。連続会話を開始し直してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "마이크가 중지되었습니다. 연속 대화를 다시 시작하세요."
           }
         }
       }
@@ -17792,6 +19052,62 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "把想法說出來"
+          }
+        }
+      }
+    },
+    "Thinking · listening paused" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "考えています · 聞き取りは一時停止中"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "생각하는 중 · 듣기 일시 중지"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在思考 · 聆听已暂停"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在思考 · 聆聽已暫停"
+          }
+        }
+      }
+    },
+    "Thinking · microphone stays on" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在思考 · 麦克风保持开启"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在思考 · 麥克風保持開啟"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "考えています · マイクはオンのままです"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "생각하는 중 · 마이크는 켜져 있습니다"
           }
         }
       }
@@ -19336,6 +20652,34 @@
         }
       }
     },
+    "Unavailable · pause detection still works" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不可用 · 停顿检测仍可使用"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法使用 · 停頓偵測仍可使用"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "利用不可 · 間の検出は引き続き利用できます"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "사용 불가 · 멈춤 감지는 계속 작동합니다"
+          }
+        }
+      }
+    },
     "Undo" : {
       "localizations" : {
         "ja" : {
@@ -19644,6 +20988,34 @@
         }
       }
     },
+    "Use 1–8 English words, up to 64 characters, on one line." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请在一行内填写 1–8 个英语单词，最多 64 个字符。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "請在一行內填寫 1–8 個英語單字，最多 64 個字元。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 行に 1〜8 個の英単語を 64 文字以内で入力してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "한 줄에 영어 1–8단어를 최대 64자로 입력하세요."
+          }
+        }
+      }
+    },
     "Use Command, Option or Control in the shortcut." : {
       "localizations" : {
         "zh-Hans" : {
@@ -19724,6 +21096,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "使用自訂語速"
+          }
+        }
+      }
+    },
+    "Use a distinctive English phrase of up to eight words, such as “over over”. Leave blank to disable." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请使用最多八个单词的独特英语短语，例如“over over”。留空即可关闭。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "請使用最多八個單字的獨特英語短語，例如「over over」。留空即可關閉。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「over over」など、8 単語以内の特徴的な英語フレーズを指定してください。空欄にすると無効になります。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“over over”처럼 최대 8단어의 구별하기 쉬운 영어 문구를 사용하세요. 비워 두면 끕니다."
           }
         }
       }

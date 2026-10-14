@@ -18,6 +18,13 @@ import MochiProviders
     }
     /// The model services use: the typed name without surrounding spaces, or the default when it is blank.
     var effectiveModelName: String { Self.trimmed(modelName) ?? RealtimeService.defaultModel }
+    var continuousConversation: Bool {
+        didSet { defaults.set(continuousConversation, forKey: "continuousConversation") }
+    }
+    var endingPhrase: String {
+        didSet { defaults.set(endingPhrase, forKey: "endingPhrase") }
+    }
+    var effectiveEndingPhrase: EndTurnPhrase? { EndTurnPhrase(endingPhrase) }
     /// What Mochi calls the user, as typed. Empty until the user gives a name, and a blank name is not stored.
     var userName: String {
         didSet {
@@ -117,6 +124,8 @@ import MochiProviders
             }
         }
         modelName = defaults.string(forKey: "model").flatMap(Self.trimmed) ?? RealtimeService.defaultModel
+        continuousConversation = defaults.bool(forKey: "continuousConversation")
+        endingPhrase = defaults.string(forKey: "endingPhrase") ?? EndTurnPhrase.defaultValue
         userName = defaults.string(forKey: "userName") ?? ""
         defaultLanguage =
             defaults.string(forKey: "defaultLanguage").flatMap(ConversationLanguage.init(rawValue:)) ?? .english
@@ -163,7 +172,9 @@ import MochiProviders
         if voice != nil, supported == nil {
             MochiLog.app.notice("A conversation's voice is not available in this version; using the Settings voice")
         }
-        return RealtimeService(model: effectiveModelName, voice: supported ?? conversationVoice, options: options)
+        return RealtimeService(
+            model: effectiveModelName, voice: supported ?? conversationVoice, options: options,
+            reuseConnection: continuousConversation)
     }
     /// The service that speaks for `chat`: its own speed and voice over the Settings ones.
     func conversationService(for chat: Conversation?) -> RealtimeService {

@@ -16,7 +16,7 @@ struct MessagePlayback: View {
     private var active: Bool { app.playbackFile == file }
     private var length: Double { active ? audio.duration : fileDuration }
     private var position: Double { scrubbing ? scrubPosition : active ? audio.position : 0 }
-    private var unavailable: Bool { app.busy && app.turn.activity != .playing }
+    private var unavailable: Bool { app.handsFreeActive || (app.busy && app.turn.activity != .playing) }
     var body: some View {
         HStack(spacing: 8) {
             Button {
@@ -56,7 +56,7 @@ struct MessagePlayback: View {
             }
             .accessibilityLabel("Recording position")
             .help("Click or drag to jump within this recording")
-            .disabled(length <= 0)
+            .disabled(length <= 0 || (active && app.audio.isStreaming))
             Text("\(timestamp(position)) / \(timestamp(length))")
                 .font(.caption.monospacedDigit()).fixedSize()
                 .opacity(0.8)

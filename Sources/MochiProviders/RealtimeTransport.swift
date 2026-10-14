@@ -59,6 +59,7 @@ struct RealtimeChannel {
     let send: ([String: Any]) async throws -> Void
     let receive: () async throws -> [String: Any]
     let close: @Sendable () -> Void
+    var ping: () async throws -> Void = {}
     static func live(_ request: URLRequest) -> RealtimeChannel {
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = 30
@@ -87,7 +88,58 @@ struct RealtimeChannel {
             close: {
                 socket.cancel(with: .goingAway, reason: nil)
                 session.invalidateAndCancel()
+            },
+            ping: {
+                try await surfacing {
+                    try await awaitPing { socket.sendPing(pongReceiveHandler: $0) }
+                }
             })
+    }
+    /// A socket close can race a pong and deliver another callback. Cancellation and callbacks
+    /// settle the wait through one gate, including cancellation before the continuation is installed.
+    static func awaitPing(_ send: (@escaping @Sendable (Error?) -> Void) -> Void) async throws {
+        let completion = RealtimePingCompletion()
+        try await withTaskCancellationHandler(
+            operation: {
+                try Task.checkCancellation()
+                try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                    guard completion.install(continuation) else { return }
+                    send { error in
+                        completion.finish(error.map { .failure($0) } ?? .success(()))
+                    }
+                }
+                try Task.checkCancellation()
+            },
+            onCancel: { completion.finish(.failure(CancellationError())) })
+    }
+}
+
+private final class RealtimePingCompletion: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<Void, Error>?
+    private var outcome: Result<Void, Error>?
+    func install(_ continuation: CheckedContinuation<Void, Error>) -> Bool {
+        lock.lock()
+        if let outcome {
+            lock.unlock()
+            continuation.resume(with: outcome)
+            return false
+        }
+        self.continuation = continuation
+        lock.unlock()
+        return true
+    }
+    func finish(_ result: Result<Void, Error>) {
+        lock.lock()
+        guard outcome == nil else {
+            lock.unlock()
+            return
+        }
+        outcome = result
+        let continuation = self.continuation
+        self.continuation = nil
+        lock.unlock()
+        continuation?.resume(with: result)
     }
 }
 extension RealtimeChannel {

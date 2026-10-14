@@ -40,7 +40,9 @@ extension AppModel {
 
     /// What quick talk would do now. The click, the menu and the accessibility label all follow this one rule.
     var quickTalkPlan: QuickTalk {
+        if handsFreeActive || handsFreeStarting { return .microphone }
         guard canQuickTalk else { return .workspace }
+        if speaking && audio.isStreaming { return .pause }
         if turn.activity == .recording || greetingActive || !busy { return .microphone }
         return turn.activity == .playing ? .pause : .busy
     }
@@ -75,6 +77,11 @@ extension AppModel {
         case .togglePet:
             if pressed { petVisible.toggle() }
         case .talk:
+            if continuousConversation {
+                talkPress = nil
+                if pressed { _ = quickTalk() }
+                return
+            }
             if pressed {
                 let outcome = quickTalk()
                 // A press that asked for the microphone owns that request, including one that skipped the greeting.

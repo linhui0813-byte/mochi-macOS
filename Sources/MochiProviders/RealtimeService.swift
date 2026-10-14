@@ -10,12 +10,15 @@ public struct RealtimeService {
     public var model: String
     public var voice: String
     public var options: OpenAIVoiceOptions
+    public var reuseConnection: Bool
     public init(
-        model: String = defaultModel, voice: String = defaultVoice, options: OpenAIVoiceOptions = OpenAIVoiceOptions()
+        model: String = defaultModel, voice: String = defaultVoice, options: OpenAIVoiceOptions = OpenAIVoiceOptions(),
+        reuseConnection: Bool = false
     ) {
         self.model = model
         self.voice = voice
         self.options = options
+        self.reuseConnection = reuseConnection
     }
     /// Mochi's per-reply output cap; a reply that reaches it is kept and marked `truncated`.
     static let maximumOutputTokens = 700
@@ -96,11 +99,12 @@ public struct RealtimeService {
         _ input: ConversationRequest,
         onResponse: (@MainActor (RealtimeAccumulator) throws -> Void)? = nil,
         onTranscription: (@MainActor (RealtimeAccumulator) -> Void)? = nil,
-        onTool: (@MainActor (String, [String: Any], String) throws -> [String: Any])? = nil
+        onTool: (@MainActor (String, [String: Any], String) throws -> [String: Any])? = nil,
+        onAudio: (@MainActor (Data) -> Void)? = nil
     ) async throws -> RealtimeAccumulator {
         try await reply(
             input, credential: { try await token() }, connect: RealtimeChannel.live, onResponse: onResponse,
-            onTranscription: onTranscription, onTool: onTool)
+            onTranscription: onTranscription, onTool: onTool, onAudio: onAudio)
     }
     /// Full session lifecycle seam: handshake, history, audio upload, deadlines and cancellation.
     func reply(
@@ -110,7 +114,10 @@ public struct RealtimeService {
         replyTimeout: UInt64 = 90_000_000_000,
         onResponse: (@MainActor (RealtimeAccumulator) throws -> Void)? = nil,
         onTranscription: (@MainActor (RealtimeAccumulator) -> Void)? = nil,
-        onTool: (@MainActor (String, [String: Any], String) throws -> [String: Any])? = nil
+        onTool: (@MainActor (String, [String: Any], String) throws -> [String: Any])? = nil,
+        onAudio: (@MainActor (Data) -> Void)? = nil,
+        existingChannel: RealtimeChannel? = nil, previousItemIDs: [String] = [], retainingConnection: Bool = false,
+        sessionPrepared: Bool = false
     ) async throws -> RealtimeAccumulator {
         guard RealtimeVoice(rawValue: voice) != nil else {
             throw AppFailure("Choose a supported built-in voice in Settings.")
@@ -122,10 +129,17 @@ public struct RealtimeService {
         if let pcm = input.pcm, !Self.isRecordedAudio(pcm) {
             throw AppFailure("Choose a voice message between a moment and 65 seconds long, then send it again.")
         }
-        let token = try await credential()
-        try Task.checkCancellation()
-        let channel = connect(realtimeRequest(token: token))
-        defer { channel.close() }
+        let channel: RealtimeChannel
+        if let existingChannel {
+            channel = existingChannel
+        } else {
+            input.voiceTiming?.record(.connectionNew)
+            let token = try await credential()
+            input.voiceTiming?.record(.credentialReady)
+            try Task.checkCancellation()
+            channel = connect(realtimeRequest(token: token))
+        }
+        defer { if !retainingConnection { channel.close() } }
         return try await withTaskCancellationHandler(
             operation: {
                 let send = channel.send
@@ -133,18 +147,36 @@ public struct RealtimeService {
                 do {
                     var accumulator = try await RealtimeDeadline.run(nanoseconds: replyTimeout, close: channel.close) {
                         var accumulator = RealtimeAccumulator()
-                        while true {
-                            let event = try await receive()
-                            try accumulator.accept(event)
-                            if event["type"] as? String == "session.created" { break }
+                        if existingChannel == nil {
+                            while true {
+                                let event = try await receive()
+                                try accumulator.accept(event)
+                                if event["type"] as? String == "session.created" { break }
+                            }
+                            input.voiceTiming?.record(.socketReady)
+                        } else {
+                            // Rebuild the bounded context from the saved library. This also honours edits and
+                            // removes old audio/tool items instead of duplicating history on a reused socket.
+                            var pending = Set(previousItemIDs)
+                            for id in previousItemIDs {
+                                try await send(["type": "conversation.item.delete", "item_id": id])
+                            }
+                            while !pending.isEmpty {
+                                let event = try await receive()
+                                try accumulator.accept(event)
+                                if event["type"] as? String == "conversation.item.deleted",
+                                    let id = event["item_id"] as? String
+                                {
+                                    pending.remove(id)
+                                }
+                            }
+                            input.voiceTiming?.record(.contextCleared)
                         }
-                        let configuration = try sessionConfiguration(input, toolsEnabled: onTool != nil)
-                        try await send(["type": "session.update", "session": configuration])
-                        while true {
-                            let event = try await receive()
-                            try accumulator.accept(event)
-                            if event["type"] as? String == "session.updated" { break }
+                        if !sessionPrepared {
+                            let configuration = try sessionConfiguration(input, toolsEnabled: onTool != nil)
+                            try await Self.configureSession(configuration, send: send, receive: receive)
                         }
+                        input.voiceTiming?.record(.sessionReady)
                         // Only completed chat messages are restored; practice never enters this history.
                         for message in input.history.suffix(30) {
                             if let text = message.contextText {
@@ -161,6 +193,7 @@ public struct RealtimeService {
                                 ])
                             }
                             try await send(["type": "input_audio_buffer.commit"])
+                            input.voiceTiming?.record(.audioSent)
                         } else if !input.reference {
                             try await send(RealtimeEvents.message(role: "user", text: input.text))
                         }
@@ -171,22 +204,44 @@ public struct RealtimeService {
                                 "max_output_tokens": Self.maximumOutputTokens,
                             ],
                         ])
+                        input.voiceTiming?.record(.responseRequested)
                         return try await Self.deliverResponse(
                             accumulator, receive: receive, onResponse: onResponse, onTranscription: onTranscription,
-                            onTool: input.help || input.reference ? nil : onTool, send: send)
+                            onTool: input.help || input.reference ? nil : onTool, send: send,
+                            onAudio: { data in
+                                input.voiceTiming?.record(.firstAudio)
+                                onAudio?(data)
+                            })
                     }
+                    input.voiceTiming?.record(.responseFinished)
                     // Reply generation and the subsequent ASR grace period have separate deadlines.
                     if input.pcm != nil && accumulator.transcriptionState == .pending {
                         accumulator = try await Self.finishTranscription(
                             accumulator, receive: receive, close: channel.close)
                         if let onTranscription { await onTranscription(accumulator) }
                     }
+                    if input.pcm != nil { input.voiceTiming?.record(.transcriptionFinished) }
                     return accumulator
                 } catch is CancellationError { throw CancellationError() } catch {
                     if Task.isCancelled { throw CancellationError() }
                     throw Self.replyFailure(error)
                 }
             }, onCancel: channel.close)
+    }
+    /// No input item or response is created by this configuration acknowledgement.
+    static func configureSession(
+        _ configuration: [String: Any], send: ([String: Any]) async throws -> Void,
+        receive: () async throws -> [String: Any]
+    ) async throws {
+        try await send(["type": "session.update", "session": configuration])
+        var events = RealtimeAccumulator()
+        while true {
+            try Task.checkCancellation()
+            let event = try await receive()
+            try Task.checkCancellation()
+            try events.accept(event)
+            if event["type"] as? String == "session.updated" { return }
+        }
     }
     static func replyFailure(_ error: Error) -> AppFailure {
         if error is RealtimeTimeout {
@@ -235,7 +290,8 @@ public struct RealtimeService {
         onResponse: (@MainActor (RealtimeAccumulator) throws -> Void)?,
         onTranscription: (@MainActor (RealtimeAccumulator) -> Void)?,
         onTool: (@MainActor (String, [String: Any], String) throws -> [String: Any])? = nil,
-        send: (([String: Any]) async throws -> Void)? = nil
+        send: (([String: Any]) async throws -> Void)? = nil,
+        onAudio: (@MainActor (Data) -> Void)? = nil
     ) async throws -> RealtimeAccumulator {
         var accumulator = initial
         var rounds = 0
@@ -243,9 +299,13 @@ public struct RealtimeService {
         while !accumulator.done {
             try Task.checkCancellation()
             let before = accumulator.transcriptionState
+            let audioBefore = accumulator.audio.count
             let event = try await receive()
             try Task.checkCancellation()
             try accumulator.accept(event)
+            if let onAudio, accumulator.audio.count > audioBefore {
+                await onAudio(accumulator.audio.subdata(in: audioBefore..<accumulator.audio.count))
+            }
             if before != accumulator.transcriptionState, let onTranscription { await onTranscription(accumulator) }
             guard accumulator.done, let response = event["response"] as? [String: Any],
                 let items = response["output"] as? [[String: Any]]
