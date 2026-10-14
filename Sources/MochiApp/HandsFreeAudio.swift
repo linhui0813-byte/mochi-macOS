@@ -143,6 +143,9 @@ final class HandsFreePCMConverter: @unchecked Sendable {
     private let continuation: AsyncThrowingStream<Data, Error>.Continuation
     private let lock = NSLock()
     private var queued = 0
+    private var diagnosticSamples = 0
+    private var inputPeaks: [Float] = []
+    private var outputPeak: Float = -100
     init(format input: AVAudioFormat, continuation: AsyncThrowingStream<Data, Error>.Continuation) throws {
         guard
             let format = AVAudioFormat(
@@ -152,6 +155,13 @@ final class HandsFreePCMConverter: @unchecked Sendable {
         self.format = format
         self.converter = converter
         self.continuation = continuation
+        // VoiceProcessingIO puts the processed microphone on channel zero. Its other channels
+        // are not a speaker mix: the default layout-based mono remap can choose a silent center.
+        converter.channelMap = [0]
+        converter.downmix = false
+        MochiLog.audio.notice(
+            "Hands-free capture: \(input.sampleRate, privacy: .public) Hz, \(input.channelCount, privacy: .public) channels; mono source is channel 0"
+        )
     }
     func receive(_ source: AVAudioPCMBuffer) {
         guard source.frameLength > 0 else { return }
@@ -208,9 +218,42 @@ final class HandsFreePCMConverter: @unchecked Sendable {
             return
         }
         guard output.frameLength > 0, let bytes = output.int16ChannelData?[0] else { return }
+        diagnose(source, output: bytes, frames: Int(output.frameLength))
         if case .dropped = continuation.yield(Data(bytes: bytes, count: Int(output.frameLength) * 2)) {
             continuation.finish(throwing: AppFailure("Audio capture fell behind. Start continuous conversation again."))
         }
+    }
+    /// Numeric signal levels only: no audio, transcripts, device IDs, or user text enter diagnostics.
+    private func diagnose(_ input: AVAudioPCMBuffer, output: UnsafePointer<Int16>, frames: Int) {
+        if let channels = input.floatChannelData {
+            if inputPeaks.count != Int(input.format.channelCount) {
+                inputPeaks = Array(repeating: -100, count: Int(input.format.channelCount))
+            }
+            for channel in inputPeaks.indices {
+                var energy = 0.0
+                for frame in 0..<Int(input.frameLength) {
+                    let sample = Double(channels[channel][frame * input.stride])
+                    energy += sample * sample
+                }
+                let db = Float(10 * log10(max(energy / Double(input.frameLength), 1e-10)))
+                inputPeaks[channel] = max(inputPeaks[channel], db)
+            }
+        }
+        var energy = 0.0
+        for frame in 0..<frames {
+            let sample = Double(output[frame]) / 32768
+            energy += sample * sample
+        }
+        outputPeak = max(outputPeak, Float(10 * log10(max(energy / Double(frames), 1e-10))))
+        diagnosticSamples += Int(input.frameLength)
+        guard Double(diagnosticSamples) >= input.format.sampleRate * 3 else { return }
+        let sourceLevels = inputPeaks.map { String(format: "%.1f", $0) }.joined(separator: ", ")
+        MochiLog.audio.notice(
+            "Hands-free input peak dB [\(sourceLevels, privacy: .public)]; mono peak dB \(self.outputPeak, privacy: .public)"
+        )
+        diagnosticSamples = 0
+        inputPeaks = Array(repeating: -100, count: inputPeaks.count)
+        outputPeak = -100
     }
 }
 
