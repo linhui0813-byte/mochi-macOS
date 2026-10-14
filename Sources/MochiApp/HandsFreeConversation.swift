@@ -8,20 +8,31 @@ import MochiKernel
     let conversationID: UUID
     private let device: any HandsFreeAudioDevice
     private let detector = SpeechTurnDetector()
+    private var endPhraseDevice: (any EndPhraseDevice)?
+    private let endPhrase: EndTurnPhrase?
+    private var phraseTailUntil = Date.distantPast
     private var inputTask: Task<Void, Never>?
     private let previousPlayerFactory: (@escaping @MainActor (Bool) -> Void) throws -> any StreamingPlaybackPlayer
     private var replyID: UUID?
     private var echoGuardUntil = Date.distantPast
     private var stopped = false
-    init(app: AppModel, conversationID: UUID, device: any HandsFreeAudioDevice) {
+    init(
+        app: AppModel, conversationID: UUID, device: any HandsFreeAudioDevice,
+        endPhraseDevice: (any EndPhraseDevice)? = nil
+    ) {
         self.app = app
         self.conversationID = conversationID
         self.device = device
+        self.endPhraseDevice = endPhraseDevice
+        endPhrase = app.settings.effectiveEndingPhrase
         previousPlayerFactory = app.audio.makeStream
     }
     private var current: Bool { !stopped && app?.handsFree === self && app?.selectedID == conversationID }
     func start() throws {
         let input = try device.start()
+        endPhraseDevice?.start(
+            matched: { [weak self] in self?.endingPhraseMatched() },
+            failed: { [weak self] error in self?.endingPhraseFailed(error) })
         app?.audio.makeStream = { [weak self] finished in
             guard let self, self.current else { throw CancellationError() }
             return try self.device.makePlayer(finished: finished)
@@ -45,6 +56,10 @@ import MochiKernel
     func consume(_ pcm: Data) {
         guard current, let app else { return }
         let now = app.recordingNow()
+        if now < phraseTailUntil {
+            feedPhraseDetector(pcm)
+            return
+        }
         if app.speaking { echoGuardUntil = now.addingTimeInterval(0.6) }
         // The speaker can leave a quiet residual even after echo cancellation. Require a voice
         // onset near the user's recorded level while playback is active and for its short tail.
@@ -74,20 +89,48 @@ import MochiKernel
                 replyID = nil
                 _ = app.cancelTurn(preservingHandsFree: true)
                 _ = app.turn.begin(.recording)
+                endPhraseDevice?.beginTurn()
             case .ended(let audio):
-                do {
-                    let name = "recording-\(UUID().uuidString).wav"
-                    try PCM.wav(audio).write(to: app.store.root.appendingPathComponent(name), options: .atomic)
-                    if let ci = app.library.conversations.firstIndex(where: { $0.id == conversationID }) {
-                        app.library.conversations[ci].voiceIntroduced = true
-                    }
-                    app.recordingLevel = -80
-                    app.requestReply(
-                        history: app.conversation?.messages ?? [], text: "", pcm: audio,
-                        audioFile: name, conversationID: conversationID)
-                } catch { failed(error) }
+                endPhraseDevice?.endTurn()
+                submit(audio)
             }
         }
+        feedPhraseDetector(pcm)
+    }
+    private func feedPhraseDetector(_ pcm: Data) {
+        do { try endPhraseDevice?.append(pcm) } catch { endingPhraseFailed(error) }
+    }
+    private func endingPhraseFailed(_ error: Error) {
+        guard current, let app else { return }
+        endPhraseDevice?.stop()
+        endPhraseDevice = nil
+        app.endingPhraseStatus = String(localized: "Unavailable · pause detection still works")
+        app.notice = AppFailure.message(
+            for: error,
+            fallback: "Spoken ending phrase detection stopped. Pause detection still works.")
+    }
+    private func endingPhraseMatched() {
+        guard current, let app, let audio = detector.finishSpeech() else { return }
+        MochiLog.audio.notice("Spoken ending phrase detected; submitting the current turn")
+        endPhraseDevice?.endTurn()
+        // Do not turn the last syllable of the control phrase into a new interruption.
+        phraseTailUntil = app.recordingNow().addingTimeInterval(0.35)
+        app.handsFreeSpeechDetected = false
+        submit(audio, endingPhrase: endPhrase?.text)
+    }
+    private func submit(_ audio: Data, endingPhrase: String? = nil) {
+        guard current, let app else { return }
+        do {
+            let name = "recording-\(UUID().uuidString).wav"
+            try PCM.wav(audio).write(to: app.store.root.appendingPathComponent(name), options: .atomic)
+            if let ci = app.library.conversations.firstIndex(where: { $0.id == conversationID }) {
+                app.library.conversations[ci].voiceIntroduced = true
+            }
+            app.recordingLevel = -80
+            app.requestReply(
+                history: app.conversation?.messages ?? [], text: "", pcm: audio,
+                audioFile: name, conversationID: conversationID, endingPhrase: endingPhrase)
+        } catch { failed(error) }
     }
     func replySaved() {
         guard current else { return }
@@ -113,6 +156,8 @@ import MochiKernel
         stopped = true
         inputTask?.cancel()
         inputTask = nil
+        endPhraseDevice?.stop()
+        endPhraseDevice = nil
         device.stop()
         app?.audio.makeStream = previousPlayerFactory
     }
@@ -121,7 +166,8 @@ import MochiKernel
 extension AppModel {
     var handsFreeActive: Bool { handsFree != nil }
     func startHandsFreeConversation() {
-        guard !busy, !practice, writableConversation, libraryReadable, let id = selectedID else { return }
+        guard !busy, !endingPhrasePreparing, !practice, writableConversation, libraryReadable, let id = selectedID
+        else { return }
         handsFreeStarting = true
         let token = turn.begin(.requestingPermission)
         error = nil
@@ -140,8 +186,48 @@ extension AppModel {
                     throw AppFailure(
                         "Microphone access is off. Enable Mochi in System Settings → Privacy & Security → Microphone.")
                 }
+                var phraseDevice: (any EndPhraseDevice)?
+                if let phrase = settings.effectiveEndingPhrase {
+                    endingPhrasePreparing = true
+                    endingPhraseStatus = String(localized: "Preparing local speech recognition…")
+                    do {
+                        if let prepared = preparedEndingPhrase, prepared.phrase == phrase {
+                            phraseDevice = prepared.device
+                            preparedEndingPhrase = nil
+                        } else {
+                            preparedEndingPhrase?.device.stop()
+                            preparedEndingPhrase = nil
+                            phraseDevice = try await makeEndPhraseDevice(phrase)
+                        }
+                        guard !Task.isCancelled, turn.epoch == token else {
+                            phraseDevice?.stop()
+                            return
+                        }
+                        endingPhraseStatus =
+                            phraseDevice == nil ? String(localized: "Not prepared") : String(localized: "Ready")
+                    } catch {
+                        guard !Task.isCancelled, turn.epoch == token else { return }
+                        endingPhraseStatus = String(localized: "Unavailable · pause detection still works")
+                        notice = AppFailure.message(
+                            for: error,
+                            fallback: "Spoken ending phrase detection is unavailable. Pause detection still works.")
+                    }
+                    endingPhrasePreparing = false
+                }
+                guard !Task.isCancelled, turn.epoch == token, selectedID == id, continuousConversation else {
+                    phraseDevice?.stop()
+                    return
+                }
                 speech.resetConversation()
-                let session = HandsFreeConversation(app: self, conversationID: id, device: try makeHandsFreeAudio())
+                let session: HandsFreeConversation
+                do {
+                    session = HandsFreeConversation(
+                        app: self, conversationID: id, device: try makeHandsFreeAudio(),
+                        endPhraseDevice: phraseDevice)
+                } catch {
+                    phraseDevice?.stop()
+                    throw error
+                }
                 handsFree = session
                 handsFreeStarting = false
                 do { try session.start() } catch {
@@ -155,6 +241,7 @@ extension AppModel {
     func endHandsFreeConversation() {
         handsFreeStarting = false
         handsFreeSpeechDetected = false
+        endingPhrasePreparing = false
         let session = handsFree
         handsFree = nil
         session?.stop()

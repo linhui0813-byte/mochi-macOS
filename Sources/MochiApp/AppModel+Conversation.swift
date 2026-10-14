@@ -86,7 +86,7 @@ extension AppModel {
     }
     func requestReply(
         history: [Message], text: String, pcm: Data?, audioFile: String?, conversationID: UUID,
-        existingUserID: UUID? = nil
+        existingUserID: UUID? = nil, endingPhrase: String? = nil
     ) {
         if let existingUserID, transcribingMessageIDs.contains(existingUserID) { return }
         let timing = pcm == nil ? nil : VoiceReplyTiming()
@@ -171,7 +171,8 @@ extension AppModel {
                 let request = ConversationRequest(
                     history: history, text: text, pcm: pcm, spoken: audioFile != nil, instructions: instructions,
                     characterName: characterName, userName: userName, preferences: preferences,
-                    personality: personality, conversationID: conversationID, voiceTiming: timing)
+                    personality: personality, conversationID: conversationID, voiceTiming: timing,
+                    endingPhrase: endingPhrase)
                 try await reply(service, request, callbacks)
             } catch {
                 // The deferred block marks a still-pending transcript as interrupted.

@@ -240,6 +240,10 @@ Voice reply timing is recorded locally in Console under Mochi's `network` log ca
 
 An idle conversation connection is checked using its next `session.update` acknowledgement, rather than waiting for a WebSocket pong. This also applies the next turn's settings without a duplicate configuration round trip. A dropped connection can reconnect before new audio, history items or a response request is submitted. A turn that has already been submitted is never automatically resent.
 
+In continuous conversation, say **“over over”** to end your current turn when background noise prevents pause detection. Mochi sends that utterance, replies, and keeps listening. Change **Settings → General → Continuous conversation → Spoken ending phrase** to choose a distinctive English phrase of 1–8 words (up to 64 characters), or leave it blank to disable phrase detection. Pause detection continues to work alongside it. The phrase is a recording control; the reply is instructed to answer the preceding speech. It remains audible in the saved recording and may appear in its transcript.
+
+Spoken ending phrases use Apple's on-device English `SpeechTranscriber` on macOS 26 or later. **Prepare phrase recognition** downloads/prepares the model without opening the microphone; preparation also runs when you first start continuous conversation. The recognizer receives the same echo-cancelled audio while that user-started microphone session is active. It sends no extra audio to Apple or another provider. If the local model is unavailable, Mochi reports that phrase detection is unavailable and keeps normal pause detection working. Stop, a conversation change, or turning continuous conversation off cancels recognition; late results cannot restart the microphone or submit another recording.
+
 ## Build from source
 
 With Xcode's command-line tools available:

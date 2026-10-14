@@ -21,6 +21,10 @@ import MochiProviders
     var continuousConversation: Bool {
         didSet { defaults.set(continuousConversation, forKey: "continuousConversation") }
     }
+    var endingPhrase: String {
+        didSet { defaults.set(endingPhrase, forKey: "endingPhrase") }
+    }
+    var effectiveEndingPhrase: EndTurnPhrase? { EndTurnPhrase(endingPhrase) }
     /// What Mochi calls the user, as typed. Empty until the user gives a name, and a blank name is not stored.
     var userName: String {
         didSet {
@@ -121,6 +125,7 @@ import MochiProviders
         }
         modelName = defaults.string(forKey: "model").flatMap(Self.trimmed) ?? RealtimeService.defaultModel
         continuousConversation = defaults.bool(forKey: "continuousConversation")
+        endingPhrase = defaults.string(forKey: "endingPhrase") ?? EndTurnPhrase.defaultValue
         userName = defaults.string(forKey: "userName") ?? ""
         defaultLanguage =
             defaults.string(forKey: "defaultLanguage").flatMap(ConversationLanguage.init(rawValue:)) ?? .english

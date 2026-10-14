@@ -19,6 +19,21 @@ public final class SpeechTurnDetector {
     private var speechPeakDB: Float = -80
     private let classifier = VoiceActivityClassifier()
     public init() {}
+    /// A spoken control phrase can submit a detected utterance without waiting for quiet.
+    public func finishSpeech() -> Data? {
+        guard speaking else { return nil }
+        let audio = take
+        lastSpeechPeakDB = speechPeakDB
+        speaking = false
+        take.removeAll(keepingCapacity: true)
+        prefix.removeAll(keepingCapacity: true)
+        pending.removeAll(keepingCapacity: true)
+        candidateFrames = 0
+        candidatePeakDB = -80
+        quietFrames = 0
+        classifier.reset()
+        return audio
+    }
     public func accept(_ pcm: Data, minimumSpeechLevelDB: Float? = nil) -> [Event] {
         pending.append(pcm)
         var events: [Event] = []
@@ -89,6 +104,12 @@ private final class VoiceActivityClassifier {
         precondition(fvad_set_mode(instance, 1) == 0)
     }
     deinit { fvad_free(instance) }
+    func reset() {
+        fvad_reset(instance)
+        _ = fvad_set_sample_rate(instance, 48000)
+        _ = fvad_set_mode(instance, 1)
+        previous = 0
+    }
     func isSpeech(_ frame: Data) -> Bool {
         // Interpolate 24 -> 48 kHz, a supported WebRTC input rate. Its built-in antialiasing
         // resampler then supplies the narrowband features used by its speech model.

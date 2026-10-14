@@ -6593,6 +6593,34 @@
         }
       }
     },
+    "Ending phrase status" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "结束短语状态"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "結束短語狀態"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "終了フレーズの状態"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "종료 문구 상태"
+          }
+        }
+      }
+    },
     "Example voice" : {
       "localizations" : {
         "ja" : {
@@ -9225,6 +9253,34 @@
         }
       }
     },
+    "Local English speech recognition is unavailable. Pause detection still works." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本地英语语音识别不可用。停顿检测仍可使用。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本機英語語音辨識無法使用。停頓偵測仍可使用。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ローカルの英語音声認識を利用できません。間の検出は引き続き利用できます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "로컬 영어 음성 인식을 사용할 수 없습니다. 멈춤 감지는 계속 작동합니다."
+          }
+        }
+      }
+    },
     "Local control belongs to another user." : {
       "localizations" : {
         "ja" : {
@@ -11692,6 +11748,34 @@
         }
       }
     },
+    "Not prepared" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未准备"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未準備"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未準備"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "준비 안 됨"
+          }
+        }
+      }
+    },
     "Number out of range: %@." : {
       "localizations" : {
         "ja" : {
@@ -11744,6 +11828,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "偶爾溫和糾正"
+          }
+        }
+      }
+    },
+    "Off" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "關閉"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "オフ"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "끔"
           }
         }
       }
@@ -12896,6 +13008,34 @@
         }
       }
     },
+    "Prepare phrase recognition" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "准备短语识别"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "準備短語辨識"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "フレーズ認識を準備"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "문구 인식 준비"
+          }
+        }
+      }
+    },
     "Preparing %@’s greeting…" : {
       "localizations" : {
         "ja" : {
@@ -12920,6 +13060,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在準備 %@ 的問候…"
+          }
+        }
+      }
+    },
+    "Preparing local speech recognition…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在准备本地语音识别…"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在準備本機語音辨識…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ローカル音声認識を準備中…"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "로컬 음성 인식 준비 중…"
           }
         }
       }
@@ -13316,6 +13484,34 @@
         }
       }
     },
+    "Ready" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "就绪"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "就緒"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "準備完了"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "준비 완료"
+          }
+        }
+      }
+    },
     "Ready when you are · microphone off" : {
       "localizations" : {
         "ja" : {
@@ -13424,6 +13620,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "最近刪除"
+          }
+        }
+      }
+    },
+    "Recognition stays on this Mac. Preparing it may download Apple's speech model; it does not turn on the microphone." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "识别在此 Mac 上进行。准备时可能会下载 Apple 的语音模型，但不会开启麦克风。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "辨識在此 Mac 上進行。準備時可能會下載 Apple 的語音模型，但不會開啟麥克風。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "認識はこの Mac 内で行われます。準備時に Apple の音声モデルをダウンロードする場合がありますが、マイクはオンになりません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "인식은 이 Mac에서 처리됩니다. 준비 과정에서 Apple 음성 모델을 다운로드할 수 있지만 마이크는 켜지지 않습니다."
           }
         }
       }
@@ -15276,6 +15500,34 @@
         }
       }
     },
+    "Say this phrase to send your turn even when background noise continues. Pause detection still works." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "说出此短语，即使背景噪声持续也能发送本轮话语。停顿检测仍可使用。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "說出此短語，即使背景噪音持續也能傳送本輪話語。停頓偵測仍可使用。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "背景音が続いていても、このフレーズを言うと発言を送信できます。間の検出も引き続き利用できます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "배경 소음이 계속되어도 이 문구를 말하면 발언을 전송합니다. 멈춤 감지도 계속 작동합니다."
+          }
+        }
+      }
+    },
     "Search All Conversations" : {
       "localizations" : {
         "ja" : {
@@ -16336,6 +16588,146 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "速度"
+          }
+        }
+      }
+    },
+    "Spoken ending phrase" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "口述结束短语"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "口述結束短語"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "終了フレーズ"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "말하기 종료 문구"
+          }
+        }
+      }
+    },
+    "Spoken ending phrase detection is unavailable. Pause detection still works." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "口述结束短语检测不可用。停顿检测仍可使用。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "口述結束短語偵測無法使用。停頓偵測仍可使用。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "終了フレーズの検出を利用できません。間の検出は引き続き利用できます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "말하기 종료 문구 감지를 사용할 수 없습니다. 멈춤 감지는 계속 작동합니다."
+          }
+        }
+      }
+    },
+    "Spoken ending phrase detection stopped. Pause detection still works." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "口述结束短语检测已停止。停顿检测仍可使用。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "口述結束短語偵測已停止。停頓偵測仍可使用。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "終了フレーズの検出が停止しました。間の検出は引き続き利用できます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "말하기 종료 문구 감지가 중지되었습니다. 멈춤 감지는 계속 작동합니다."
+          }
+        }
+      }
+    },
+    "Spoken ending phrases are detected on this Mac using Apple's local English speech model. Recognition runs only while you have started continuous conversation." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "口述结束短语使用 Apple 的本地英语语音模型在此 Mac 上检测。识别仅在你启动连续对话后运行。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "口述結束短語使用 Apple 的本機英語語音模型在此 Mac 上偵測。辨識僅在你啟動連續對話後執行。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "終了フレーズは Apple のローカル英語音声モデルを使用してこの Mac 内で検出します。認識は連続会話を開始している間のみ動作します。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "말하기 종료 문구는 Apple의 로컬 영어 음성 모델을 사용해 이 Mac에서 감지합니다. 인식은 연속 대화를 시작한 동안에만 실행됩니다."
+          }
+        }
+      }
+    },
+    "Spoken ending phrases require macOS 26 or later. Pause detection still works." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "口述结束短语需要 macOS 26 或更高版本。停顿检测仍可使用。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "口述結束短語需要 macOS 26 或更新版本。停頓偵測仍可使用。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "終了フレーズには macOS 26 以降が必要です。間の検出は引き続き利用できます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "말하기 종료 문구는 macOS 26 이상이 필요합니다. 멈춤 감지는 계속 작동합니다."
           }
         }
       }
@@ -20176,6 +20568,34 @@
         }
       }
     },
+    "Unavailable · pause detection still works" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不可用 · 停顿检测仍可使用"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法使用 · 停頓偵測仍可使用"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "利用不可 · 間の検出は引き続き利用できます"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "사용 불가 · 멈춤 감지는 계속 작동합니다"
+          }
+        }
+      }
+    },
     "Undo" : {
       "localizations" : {
         "ja" : {
@@ -20484,6 +20904,34 @@
         }
       }
     },
+    "Use 1–8 English words, up to 64 characters, on one line." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请在一行内填写 1–8 个英语单词，最多 64 个字符。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "請在一行內填寫 1–8 個英語單字，最多 64 個字元。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 行に 1〜8 個の英単語を 64 文字以内で入力してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "한 줄에 영어 1–8단어를 최대 64자로 입력하세요."
+          }
+        }
+      }
+    },
     "Use Command, Option or Control in the shortcut." : {
       "localizations" : {
         "zh-Hans" : {
@@ -20564,6 +21012,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "使用自訂語速"
+          }
+        }
+      }
+    },
+    "Use a distinctive English phrase of up to eight words, such as “over over”. Leave blank to disable." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请使用最多八个单词的独特英语短语，例如“over over”。留空即可关闭。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "請使用最多八個單字的獨特英語短語，例如「over over」。留空即可關閉。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「over over」など、8 単語以内の特徴的な英語フレーズを指定してください。空欄にすると無効になります。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“over over”처럼 최대 8단어의 구별하기 쉬운 영어 문구를 사용하세요. 비워 두면 끕니다."
           }
         }
       }

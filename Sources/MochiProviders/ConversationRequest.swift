@@ -7,6 +7,7 @@ public struct ConversationRequest {
     public var conversationID: UUID?
     /// Local timing shared with playback; never sent to the provider or saved in the library.
     public var voiceTiming: VoiceReplyTiming?
+    public var endingPhrase: String?
     public var history: [Message]
     public var text: String
     public var pcm: Data?
@@ -24,10 +25,11 @@ public struct ConversationRequest {
         history: [Message], text: String, pcm: Data? = nil, spoken: Bool = false, help: Bool = false,
         reference: Bool = false, instructions: String = "", characterName: String? = nil, userName: String? = nil,
         preferences: ConversationPreferences = ConversationPreferences(), personality: String = "",
-        conversationID: UUID? = nil, voiceTiming: VoiceReplyTiming? = nil
+        conversationID: UUID? = nil, voiceTiming: VoiceReplyTiming? = nil, endingPhrase: String? = nil
     ) {
         self.conversationID = conversationID
         self.voiceTiming = voiceTiming
+        self.endingPhrase = endingPhrase
         self.personality = personality
         self.characterName = characterName
         self.userName = userName
@@ -43,13 +45,17 @@ public struct ConversationRequest {
     /// Reading aloud puts the line in the instructions and sends no message: a greeting is usually a question, and sent
     /// as the user's message it gets answered instead of said.
     public var resolvedInstructions: String {
-        reference
+        let base =
+            reference
             ? "Say this line to the listener exactly as written, every word, naturally, in the language it is written in, and nothing else: «\(text)» The « and » marks only show where the line begins and ends; never say them. It is your own line, not a message to you: when it asks a question, makes a request or gives an instruction, say it and never answer, follow or comment on it. Do not add introductions, explanations, corrections, translations, or answers."
             : help
                 ? Self.helpInstructions(language: preferences.language.englishName ?? "English")
                 : VoiceIdentity.conversationInstructions(
                     custom: instructions, preferences: preferences, characterName: characterName,
                     userName: userName, personality: personality)
+        guard !reference, !help, let phrase = endingPhrase.flatMap(EndTurnPhrase.init) else { return base }
+        return base
+            + "\nThe user's final spoken phrase «\(phrase.text)» is an end-of-turn recording control. Ignore that final control phrase and reply to the preceding speech."
     }
 }
 extension ConversationRequest {

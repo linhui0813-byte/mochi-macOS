@@ -105,6 +105,15 @@ struct MessageDeletionUndo {
     var handsFree: HandsFreeConversation?
     var handsFreeStarting = false
     var handsFreeSpeechDetected = false
+    var endingPhrasePreparing = false
+    var endingPhraseStatus = String(localized: "Not prepared")
+    @ObservationIgnored var endingPhrasePreparationTask: Task<Void, Never>?
+    @ObservationIgnored var endingPhrasePreparationID = UUID()
+    @ObservationIgnored var preparedEndingPhrase: (phrase: EndTurnPhrase, device: any EndPhraseDevice)?
+    @ObservationIgnored var makeEndPhraseDevice: (EndTurnPhrase) async throws -> (any EndPhraseDevice)? = { phrase in
+        if #available(macOS 26, *) { return try await LocalEndPhraseDevice.prepare(phrase) }
+        throw AppFailure("Spoken ending phrases require macOS 26 or later. Pause detection still works.")
+    }
     @ObservationIgnored var makeHandsFreeAudio: () throws -> any HandsFreeAudioDevice = { HandsFreeAudio() }
     @ObservationIgnored var playReply: ((String) -> Void)?
     /// Writes a reply's audio file; replaceable so a failed audio write can be tested while the library still saves.
@@ -188,6 +197,9 @@ struct MessageDeletionUndo {
     var busy: Bool { turn.activity != .idle }
     var practice: Bool { turn.mode == .practice }
     var status: String {
+        if handsFreeStarting && endingPhrasePreparing {
+            return String(localized: "Preparing local speech recognition…")
+        }
         if handsFreeActive {
             if speaking {
                 return audio.paused
@@ -240,6 +252,7 @@ struct MessageDeletionUndo {
         self.audio = audio
         self.media = media ?? .live(audio)
         self.speech = speech ?? .live
+        if demo || TestEnvironment.active { makeEndPhraseDevice = { _ in nil } }
         settings = PreferencesStore(
             preferences ?? (demo ? UserDefaults(suiteName: AppIdentity.bundleIdentifier + ".preview")! : .standard),
             importLegacy: !demo && libraryRoot == nil, allowExternalControl: !demo)
@@ -334,6 +347,7 @@ struct MessageDeletionUndo {
     }
     /// False when the library could not be saved; the failure is already reported.
     @discardableResult func stop() -> Bool {
+        cancelEndingPhrasePreparation()
         speech.resetConversation()
         let unfinishedRecording = cancelTurn()
         transcripts.cancelAll()

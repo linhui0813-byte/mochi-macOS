@@ -4,6 +4,17 @@ import XCTest
 @testable import MochiCore
 
 final class SpeechTurnDetectorTests: XCTestCase {
+    func testExplicitFinishSubmitsSpeechWithoutQuietAndResetsForTheNextTurn() throws {
+        let detector = SpeechTurnDetector()
+        XCTAssertNil(detector.finishSpeech(), "An idle microphone must not submit an empty recording")
+        XCTAssertEqual(detector.accept(SpeechFixture.voiced(frames: 100)), [.started])
+        let audio = try XCTUnwrap(detector.finishSpeech())
+        XCTAssertGreaterThan(audio.count, 4800)
+        XCTAssertFalse(detector.speaking)
+        XCTAssertNil(detector.finishSpeech(), "Repeated phrase results must not resubmit a turn")
+        XCTAssertEqual(detector.accept(Data(repeating: 0, count: 960 * 90)), [])
+        XCTAssertEqual(detector.accept(SpeechFixture.voiced(frames: 45)), [.started])
+    }
     private func voiced(_ frames: Int) -> Data { SpeechFixture.voiced(frames: frames) }
     private func quiet(_ frames: Int) -> Data { Data(repeating: 0, count: frames * 960) }
     private func scaled(_ data: Data, gain: Double) -> Data {
